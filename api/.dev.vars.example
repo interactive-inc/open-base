@@ -1,0 +1,33 @@
+# このファイルは公開リポジトリに入るため、実際に使える秘密値を書かない。
+# `bun run setup:dev-vars` を実行すると .dev.vars がランダムな秘密値付きで生成される。
+# 手で用意する場合は `openssl rand -base64 32` の出力を使う。
+#
+# api は「未設定」「16 文字未満」「-change-me で終わる値」を実行時に拒否する。
+JWT_SECRET=
+AUDIT_HMAC_SECRET=
+# パスワード用pepper。環境ごとにランダムsecretを設定する。
+PEPPER_SECRET=
+# 添付の DEK を包む KEK。{"version": "base64 32 バイト"} 形式で、最大 version が現行鍵。
+# ローテーション中は旧 version も残す。未設定なら添付 API は 503 を返す。
+ATTACHMENT_KEKS=
+# "true" なら Worker の定期起動で保持期限を過ぎた未紐付け添付を掃除する。未設定なら掃除しない。
+ATTACHMENT_PURGE_SCHEDULE_ENABLED=
+# "true" なら Worker の定期起動で添付行と本体の実在を照合する。未設定なら照合しない。
+ATTACHMENT_RECONCILE_SCHEDULE_ENABLED=
+COMPANY_TIME_ZONE="Asia/Tokyo"
+# 外部identity同期にはSystem機械credentialとproviderごとの権限を使用する。
+IDENTITY_JWKS=
+IDENTITY_ISSUER=
+IDENTITY_AUDIENCE="https://app.base.localhost"
+IDENTITY_LOGIN_URL=
+API_ORIGIN="https://base.localhost"
+# identityログインと異なる発行者のAPI access tokenを受理する場合に設定する。
+# 未設定ならIDENTITY_ISSUERを使う。
+IDENTITY_ACCESS_TOKEN_ISSUER=
+# API access tokenを直接受理するときだけ、そのaudienceを設定する。
+# 署名鍵はIDENTITY_JWKS、未設定ならaccess token issuerのOpenID Connect discoveryから取得する。
+IDENTITY_ACCESS_TOKEN_AUDIENCE=
+# 初期 ROOT の作成時だけ設定し、作成後は削除する。未設定なら POST /system/bootstrap は 404。
+BOOTSTRAP_TOKEN=
+# 有効化する opt-in App 機能。"all" か機能キーのカンマ区切り。正本は .docs/feature-tiers.md。
+ENABLED_OPT_IN_APPS="all"

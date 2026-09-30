@@ -1,0 +1,3 @@
+DROP INDEX company_resource_revisions_org_revision_idx;
+CREATE INDEX company_resource_revisions_org_revision_idx
+  ON company_resource_revisions (organization_id, organization_revision, resource_type, resource_id);

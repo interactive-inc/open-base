@@ -1,0 +1,113 @@
+{
+  "version": 2,
+  "groups": [
+    {
+      "routePrefix": "company.account-directory",
+      "participants": ["company", "system"],
+      "routes": ["company.account-directory"],
+      "reason": "System Account・IdentityとCompany従業員プロフィールをアカウントディレクトリwireへ合成する"
+    },
+    {
+      "routePrefix": "company.application-requests",
+      "participants": ["company", "system"],
+      "routes": [
+        "company.application-requests",
+        "company.application-requests.$id",
+        "company.application-requests.$id.approve",
+        "company.application-requests.$id.reassign-workflow-step",
+        "company.application-requests.$id.reject",
+        "company.application-requests.$id.resubmit",
+        "company.application-requests.admin",
+        "company.application-requests.inbox",
+        "company.application-requests.me",
+        "company.application-requests.workflow-repairs"
+      ],
+      "reason": "System procedure workflowとCompanyの従業員資格・表示情報を申請wireへ合成する"
+    },
+    {
+      "routePrefix": "company.application-templates",
+      "participants": ["company", "system"],
+      "routes": [
+        "company.application-templates",
+        "company.application-templates.$code",
+        "company.application-templates.$code.workflow"
+      ],
+      "reason": "System procedure definitionとCompany組織上の参照制約を申請テンプレートwireへ合成する"
+    },
+    {
+      "routePrefix": "company.approval-delegations",
+      "participants": ["company", "system"],
+      "routes": ["company.approval-delegations", "company.approval-delegations.$id"],
+      "reason": "System delegationとCompany従業員資格・表示情報を承認委任wireへ合成する"
+    },
+    {
+      "routePrefix": "company.audit-event-exports",
+      "participants": ["company", "system"],
+      "routes": ["company.audit-event-exports"],
+      "reason": "System監査イベントとCompany可視範囲・CSV表現を監査出力wireへ合成する"
+    },
+    {
+      "routePrefix": "company.audit-events",
+      "participants": ["company", "system"],
+      "routes": ["company.audit-events", "company.audit-events.$eventId"],
+      "reason": "System監査イベントとCompany可視範囲・表示情報を監査閲覧wireへ合成する"
+    },
+    {
+      "routePrefix": "company.current-profile",
+      "participants": ["company", "system"],
+      "routes": ["company.current-profile"],
+      "reason": "System SessionとCompany従業員情報を現在利用者の表示profileへ合成する"
+    },
+    {
+      "routePrefix": "company.dashboard",
+      "participants": ["company", "system"],
+      "routes": ["company.dashboard", "company.dashboard.management"],
+      "reason": "System workflowとCompany・評価・Surveyの集計を製品ダッシュボードへ合成する"
+    },
+    {
+      "routePrefix": "company.employee-registrations",
+      "participants": ["company", "system"],
+      "routes": ["company.employee-registrations"],
+      "reason": "Company従業員・入社発令とSystem Account・Identity・Roleを一つの登録transactionへ合成する"
+    },
+    {
+      "routePrefix": "company.features",
+      "participants": ["company", "system"],
+      "routes": ["company.features"],
+      "reason": "System capabilityとCompany製品設定をfeature responseへ合成する"
+    },
+    {
+      "routePrefix": "company.inbox",
+      "participants": ["company", "system"],
+      "routes": ["company.inbox.counts"],
+      "reason": "SystemとCompanyの参照情報をAPI応答へ合成する"
+    },
+    {
+      "routePrefix": "company.notifications",
+      "participants": ["company", "system"],
+      "routes": ["company.notifications"],
+      "reason": "System通知配送とCompany宛先資格・製品payloadを通知送信wireへ合成する"
+    },
+    {
+      "routePrefix": "company.personal-data-erasure-requests",
+      "participants": ["company", "system"],
+      "routes": [
+        "company.personal-data-erasure-requests",
+        "company.personal-data-erasure-requests.$id.execute"
+      ],
+      "reason": "Companyの従業員とAccountの対応、承認経路とSystemの鍵破棄手続を合成する"
+    },
+    {
+      "routePrefix": "company.personnel-action-requests",
+      "participants": ["company", "system"],
+      "routes": ["company.personnel-action-requests"],
+      "reason": "Company人事変更申請とSystem判断手続を同じtransactionへ合成する"
+    },
+    {
+      "routePrefix": "system.permission-definitions",
+      "participants": ["company", "system"],
+      "routes": ["system.permission-definitions"],
+      "reason": "System権限とCompany権限を権限カタログへ合成する"
+    }
+  ]
+}

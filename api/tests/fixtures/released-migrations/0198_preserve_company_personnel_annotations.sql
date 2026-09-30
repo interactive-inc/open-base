@@ -1,0 +1,5 @@
+ALTER TABLE company_employee_events RENAME TO company_personnel_annotations;
+DROP INDEX IF EXISTS idx_company_employee_events_employee;
+DROP INDEX IF EXISTS idx_company_employee_events_kind;
+CREATE INDEX idx_company_personnel_annotations_employee ON company_personnel_annotations(employee_id);
+CREATE INDEX idx_company_personnel_annotations_kind ON company_personnel_annotations(kind);

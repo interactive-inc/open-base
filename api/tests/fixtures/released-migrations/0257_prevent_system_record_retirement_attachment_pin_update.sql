@@ -1,0 +1,4 @@
+CREATE TRIGGER system_record_retirement_attachment_pins_update BEFORE UPDATE ON system_record_retirement_attachment_pins
+BEGIN
+  SELECT RAISE(ABORT,'record_retirement_attachment_pin_immutable');
+END;

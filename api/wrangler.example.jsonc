@@ -1,0 +1,35 @@
+{
+  "name": "base-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-05-24",
+  "compatibility_flags": ["nodejs_compat"],
+  "dev": {
+    "port": 18787,
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "base",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "ATTACHMENTS",
+      "bucket_name": "base-attachments",
+    },
+  ],
+  "vars": {
+    "CORS_ORIGIN": "https://app.base.localhost",
+  },
+  "ratelimits": [
+    {
+      "name": "API_RATE_LIMITER",
+      "namespace_id": "1000",
+      "simple": {
+        "limit": 120,
+        "period": 60,
+      },
+    },
+  ],
+}

@@ -1,0 +1,21 @@
+{
+  "companyAreasByLayer": {
+    "domain": ["catalogs", "definitions", "entities", "policies", "values"],
+    "application": [
+      "account-employee-links",
+      "account-profile",
+      "definitions",
+      "employee-lifecycle",
+      "employees",
+      "employments",
+      "external-identities",
+      "organization",
+      "people",
+      "profile"
+    ],
+    "infrastructure": ["adapters", "repositories", "schema"],
+    "interface": ["capabilities", "operations", "request-environment", "routes"]
+  },
+  "businessAreaOwners": {},
+  "routeOwners": {}
+}

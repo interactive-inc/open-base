@@ -1,0 +1,117 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`公開 resource を正本とする初回雇用が書く行を固定する 1`] = `
+{
+  "actions": [
+    {
+      "corrects_action_id": null,
+      "employee_id": "8d0f7b9e-3c4a-4f1b-9e2d-6a5b4c3d2e10",
+      "event_on": "2026-09-01",
+      "id": "7ca50e79-a651-815b-adea-78e93bdc807f",
+      "kind": "initial_state",
+      "legacy_id": null,
+      "operation_id": "83db9b6a-0a4a-4d6f-8188-437800b466a1",
+      "payload_fingerprint": "3d547fcd54f59a574a40f1812aa43f3904e8be086bda73f6ad35796433fe2920",
+      "recorded_at": 1785542400,
+      "recorded_by_account_id": "5b3d7ccc-33e7-4afb-935e-d89535c31674",
+      "requested_by_employee_id": null,
+      "source_application_id": null,
+      "source_type": "system",
+      "summary_json": "{"actorAccountId":"5b3d7ccc-33e7-4afb-935e-d89535c31674","department":null,"employeeId":"8d0f7b9e-3c4a-4f1b-9e2d-6a5b4c3d2e10","employmentId":"3e7a1c5d-9b2f-4d6e-8a1c-0f9e8d7c6b52","eventOn":"2026-09-01","kind":"initial_state","managerEmployeeCode":null,"positionTitle":null,"reason":"Confirmed new employment","status":"leave"}",
+    },
+  ],
+  "bindings": [
+    {
+      "last_action_id": "7ca50e79-a651-815b-adea-78e93bdc807f",
+      "lifecycle_revision": 0,
+      "resource_id": "8d0f7b9e-3c4a-4f1b-9e2d-6a5b4c3d2e10",
+      "resource_revision": 1,
+      "resource_type": "employee",
+    },
+    {
+      "last_action_id": "7ca50e79-a651-815b-adea-78e93bdc807f",
+      "lifecycle_revision": 0,
+      "resource_id": "3e7a1c5d-9b2f-4d6e-8a1c-0f9e8d7c6b52",
+      "resource_revision": 1,
+      "resource_type": "employment",
+    },
+  ],
+  "employees": [
+    {
+      "email": "you@example.com",
+      "employee_code": "one",
+      "id": "8d0f7b9e-3c4a-4f1b-9e2d-6a5b4c3d2e10",
+      "official_name": "Example Person",
+      "phone": null,
+    },
+  ],
+  "employments": [
+    {
+      "contract_name": "Example Person",
+      "employee_id": "8d0f7b9e-3c4a-4f1b-9e2d-6a5b4c3d2e10",
+      "employment_type": "PART_TIME",
+      "hire_date": "2026-09-01",
+      "id": "3e7a1c5d-9b2f-4d6e-8a1c-0f9e8d7c6b52",
+      "status": "ON_LEAVE",
+      "termination_date": null,
+    },
+  ],
+  "lifecycle": [
+    {
+      "employee_id": "8d0f7b9e-3c4a-4f1b-9e2d-6a5b4c3d2e10",
+      "revision": 0,
+    },
+  ],
+  "organization": [
+    {
+      "revision": 1,
+    },
+  ],
+  "periods": [
+    {
+      "ends_on": null,
+      "is_void": 0,
+      "period_id": "3e7a1c5d-9b2f-4d6e-8a1c-0f9e8d7c6b52",
+      "recorded_by_action_id": "7ca50e79-a651-815b-adea-78e93bdc807f",
+      "revision": 1,
+      "starts_on": "2026-09-01",
+    },
+  ],
+  "resources": [
+    {
+      "attributes_json": "{"employeeCode":"one","personId":"6345a482-58ba-8d1d-a36c-47bd0d0c1155"}",
+      "effective_from": "2026-09-01",
+      "resource_id": "8d0f7b9e-3c4a-4f1b-9e2d-6a5b4c3d2e10",
+      "resource_type": "employee",
+      "revision": 1,
+      "state": "active",
+    },
+    {
+      "attributes_json": "{"employeeId":"8d0f7b9e-3c4a-4f1b-9e2d-6a5b4c3d2e10","employmentType":"PART_TIME","status":"ON_LEAVE"}",
+      "effective_from": "2026-09-01",
+      "resource_id": "3e7a1c5d-9b2f-4d6e-8a1c-0f9e8d7c6b52",
+      "resource_type": "employment",
+      "revision": 1,
+      "state": "active",
+    },
+    {
+      "attributes_json": "{"email":"you@example.com","officialName":"Example Person","phone":null}",
+      "effective_from": "2026-09-01",
+      "resource_id": "6345a482-58ba-8d1d-a36c-47bd0d0c1155",
+      "resource_type": "person",
+      "revision": 1,
+      "state": "active",
+    },
+  ],
+  "statuses": [
+    {
+      "ends_on": null,
+      "is_void": 0,
+      "recorded_by_action_id": "7ca50e79-a651-815b-adea-78e93bdc807f",
+      "revision": 1,
+      "starts_on": "2026-09-01",
+      "status": "leave",
+    },
+  ],
+}
+`;

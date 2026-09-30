@@ -1,0 +1,2 @@
+[test]
+preload = ["./tests/d1/support/stop-local-d1.preload.ts"]

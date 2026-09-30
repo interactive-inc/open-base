@@ -1,0 +1,687 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`休職、復職、退職、再入社が雇用の台帳へ書く行を固定する 1`] = `
+{
+  "initial": {
+    "actions": [
+      {
+        "corrects": 0,
+        "event_on": "2026-01-01",
+        "kind": "employment_revised",
+        "source_type": "system",
+      },
+    ],
+    "bindings": [
+      {
+        "has_action": 0,
+        "lifecycle_revision": 1,
+        "resource_revision": 2,
+        "resource_type": "employee",
+      },
+      {
+        "has_action": 1,
+        "lifecycle_revision": 1,
+        "resource_revision": 1,
+        "resource_type": "employment",
+      },
+    ],
+    "employmentPeriods": [
+      {
+        "ends_on": null,
+        "is_void": 0,
+        "revision": 1,
+        "starts_on": "2026-01-01",
+      },
+    ],
+    "employments": [
+      {
+        "employment_type": "PART_TIME",
+        "hire_date": "2026-01-01",
+        "status": "ACTIVE",
+        "termination_date": null,
+      },
+    ],
+    "lifecycle": [
+      {
+        "revision": 1,
+      },
+    ],
+    "publishedEmployments": [
+      {
+        "effective_from": "2026-01-01",
+        "effective_to": null,
+        "employment_type": "PART_TIME",
+        "revision": 1,
+        "state": "active",
+        "status": "ACTIVE",
+      },
+    ],
+    "statusPeriods": [
+      {
+        "ends_on": null,
+        "is_void": 0,
+        "revision": 1,
+        "starts_on": "2026-01-01",
+        "status": "active",
+      },
+    ],
+  },
+  "leave": {
+    "actions": [
+      {
+        "corrects": 0,
+        "event_on": "2026-01-01",
+        "kind": "employment_revised",
+        "source_type": "system",
+      },
+      {
+        "corrects": 0,
+        "event_on": "2030-02-01",
+        "kind": "leave_started",
+        "source_type": "direct",
+      },
+    ],
+    "bindings": [
+      {
+        "has_action": 0,
+        "lifecycle_revision": 2,
+        "resource_revision": 2,
+        "resource_type": "employee",
+      },
+      {
+        "has_action": 1,
+        "lifecycle_revision": 2,
+        "resource_revision": 3,
+        "resource_type": "employment",
+      },
+    ],
+    "employmentPeriods": [
+      {
+        "ends_on": null,
+        "is_void": 0,
+        "revision": 1,
+        "starts_on": "2026-01-01",
+      },
+    ],
+    "employments": [
+      {
+        "employment_type": "PART_TIME",
+        "hire_date": "2026-01-01",
+        "status": "ON_LEAVE",
+        "termination_date": null,
+      },
+    ],
+    "lifecycle": [
+      {
+        "revision": 2,
+      },
+    ],
+    "publishedEmployments": [
+      {
+        "effective_from": "2026-01-01",
+        "effective_to": null,
+        "employment_type": "PART_TIME",
+        "revision": 1,
+        "state": "active",
+        "status": "ACTIVE",
+      },
+      {
+        "effective_from": "2026-01-01",
+        "effective_to": "2030-02-01",
+        "employment_type": "PART_TIME",
+        "revision": 2,
+        "state": "active",
+        "status": "ACTIVE",
+      },
+      {
+        "effective_from": "2030-02-01",
+        "effective_to": null,
+        "employment_type": "PART_TIME",
+        "revision": 3,
+        "state": "active",
+        "status": "ON_LEAVE",
+      },
+    ],
+    "statusPeriods": [
+      {
+        "ends_on": null,
+        "is_void": 0,
+        "revision": 1,
+        "starts_on": "2026-01-01",
+        "status": "active",
+      },
+      {
+        "ends_on": "2030-02-01",
+        "is_void": 0,
+        "revision": 2,
+        "starts_on": "2026-01-01",
+        "status": "active",
+      },
+      {
+        "ends_on": null,
+        "is_void": 0,
+        "revision": 1,
+        "starts_on": "2030-02-01",
+        "status": "leave",
+      },
+    ],
+  },
+  "rehire": {
+    "actions": [
+      {
+        "corrects": 0,
+        "event_on": "2026-01-01",
+        "kind": "employment_revised",
+        "source_type": "system",
+      },
+      {
+        "corrects": 0,
+        "event_on": "2030-02-01",
+        "kind": "leave_started",
+        "source_type": "direct",
+      },
+      {
+        "corrects": 0,
+        "event_on": "2030-03-01",
+        "kind": "returned",
+        "source_type": "direct",
+      },
+      {
+        "corrects": 0,
+        "event_on": "2030-04-30",
+        "kind": "retired",
+        "source_type": "direct",
+      },
+      {
+        "corrects": 0,
+        "event_on": "2030-05-15",
+        "kind": "rehire",
+        "source_type": "direct",
+      },
+    ],
+    "bindings": [
+      {
+        "has_action": 0,
+        "lifecycle_revision": 5,
+        "resource_revision": 2,
+        "resource_type": "employee",
+      },
+      {
+        "has_action": 1,
+        "lifecycle_revision": 5,
+        "resource_revision": 1,
+        "resource_type": "employment",
+      },
+      {
+        "has_action": 1,
+        "lifecycle_revision": 5,
+        "resource_revision": 7,
+        "resource_type": "employment",
+      },
+    ],
+    "employmentPeriods": [
+      {
+        "ends_on": null,
+        "is_void": 0,
+        "revision": 1,
+        "starts_on": "2026-01-01",
+      },
+      {
+        "ends_on": "2030-05-01",
+        "is_void": 0,
+        "revision": 2,
+        "starts_on": "2026-01-01",
+      },
+      {
+        "ends_on": null,
+        "is_void": 0,
+        "revision": 1,
+        "starts_on": "2030-05-15",
+      },
+    ],
+    "employments": [
+      {
+        "employment_type": "PART_TIME",
+        "hire_date": "2026-01-01",
+        "status": "TERMINATED",
+        "termination_date": "2030-04-30",
+      },
+      {
+        "employment_type": "PART_TIME",
+        "hire_date": "2030-05-15",
+        "status": "ACTIVE",
+        "termination_date": null,
+      },
+    ],
+    "lifecycle": [
+      {
+        "revision": 5,
+      },
+    ],
+    "publishedEmployments": [
+      {
+        "effective_from": "2026-01-01",
+        "effective_to": null,
+        "employment_type": "PART_TIME",
+        "revision": 1,
+        "state": "active",
+        "status": "ACTIVE",
+      },
+      {
+        "effective_from": "2026-01-01",
+        "effective_to": "2030-02-01",
+        "employment_type": "PART_TIME",
+        "revision": 2,
+        "state": "active",
+        "status": "ACTIVE",
+      },
+      {
+        "effective_from": "2030-02-01",
+        "effective_to": null,
+        "employment_type": "PART_TIME",
+        "revision": 3,
+        "state": "active",
+        "status": "ON_LEAVE",
+      },
+      {
+        "effective_from": "2030-02-01",
+        "effective_to": "2030-03-01",
+        "employment_type": "PART_TIME",
+        "revision": 4,
+        "state": "active",
+        "status": "ON_LEAVE",
+      },
+      {
+        "effective_from": "2030-03-01",
+        "effective_to": null,
+        "employment_type": "PART_TIME",
+        "revision": 5,
+        "state": "active",
+        "status": "ACTIVE",
+      },
+      {
+        "effective_from": "2030-03-01",
+        "effective_to": "2030-05-01",
+        "employment_type": "PART_TIME",
+        "revision": 6,
+        "state": "active",
+        "status": "ACTIVE",
+      },
+      {
+        "effective_from": "2030-05-01",
+        "effective_to": null,
+        "employment_type": "PART_TIME",
+        "revision": 7,
+        "state": "active",
+        "status": "TERMINATED",
+      },
+      {
+        "effective_from": "2030-05-15",
+        "effective_to": null,
+        "employment_type": "PART_TIME",
+        "revision": 1,
+        "state": "active",
+        "status": "ACTIVE",
+      },
+    ],
+    "statusPeriods": [
+      {
+        "ends_on": null,
+        "is_void": 0,
+        "revision": 1,
+        "starts_on": "2026-01-01",
+        "status": "active",
+      },
+      {
+        "ends_on": "2030-02-01",
+        "is_void": 0,
+        "revision": 2,
+        "starts_on": "2026-01-01",
+        "status": "active",
+      },
+      {
+        "ends_on": null,
+        "is_void": 0,
+        "revision": 1,
+        "starts_on": "2030-02-01",
+        "status": "leave",
+      },
+      {
+        "ends_on": "2030-03-01",
+        "is_void": 0,
+        "revision": 2,
+        "starts_on": "2030-02-01",
+        "status": "leave",
+      },
+      {
+        "ends_on": null,
+        "is_void": 0,
+        "revision": 1,
+        "starts_on": "2030-03-01",
+        "status": "active",
+      },
+      {
+        "ends_on": "2030-05-01",
+        "is_void": 0,
+        "revision": 2,
+        "starts_on": "2030-03-01",
+        "status": "active",
+      },
+      {
+        "ends_on": null,
+        "is_void": 0,
+        "revision": 1,
+        "starts_on": "2030-05-15",
+        "status": "active",
+      },
+    ],
+  },
+  "retire": {
+    "actions": [
+      {
+        "corrects": 0,
+        "event_on": "2026-01-01",
+        "kind": "employment_revised",
+        "source_type": "system",
+      },
+      {
+        "corrects": 0,
+        "event_on": "2030-02-01",
+        "kind": "leave_started",
+        "source_type": "direct",
+      },
+      {
+        "corrects": 0,
+        "event_on": "2030-03-01",
+        "kind": "returned",
+        "source_type": "direct",
+      },
+      {
+        "corrects": 0,
+        "event_on": "2030-04-30",
+        "kind": "retired",
+        "source_type": "direct",
+      },
+    ],
+    "bindings": [
+      {
+        "has_action": 0,
+        "lifecycle_revision": 4,
+        "resource_revision": 2,
+        "resource_type": "employee",
+      },
+      {
+        "has_action": 1,
+        "lifecycle_revision": 4,
+        "resource_revision": 7,
+        "resource_type": "employment",
+      },
+    ],
+    "employmentPeriods": [
+      {
+        "ends_on": null,
+        "is_void": 0,
+        "revision": 1,
+        "starts_on": "2026-01-01",
+      },
+      {
+        "ends_on": "2030-05-01",
+        "is_void": 0,
+        "revision": 2,
+        "starts_on": "2026-01-01",
+      },
+    ],
+    "employments": [
+      {
+        "employment_type": "PART_TIME",
+        "hire_date": "2026-01-01",
+        "status": "TERMINATED",
+        "termination_date": "2030-04-30",
+      },
+    ],
+    "lifecycle": [
+      {
+        "revision": 4,
+      },
+    ],
+    "publishedEmployments": [
+      {
+        "effective_from": "2026-01-01",
+        "effective_to": null,
+        "employment_type": "PART_TIME",
+        "revision": 1,
+        "state": "active",
+        "status": "ACTIVE",
+      },
+      {
+        "effective_from": "2026-01-01",
+        "effective_to": "2030-02-01",
+        "employment_type": "PART_TIME",
+        "revision": 2,
+        "state": "active",
+        "status": "ACTIVE",
+      },
+      {
+        "effective_from": "2030-02-01",
+        "effective_to": null,
+        "employment_type": "PART_TIME",
+        "revision": 3,
+        "state": "active",
+        "status": "ON_LEAVE",
+      },
+      {
+        "effective_from": "2030-02-01",
+        "effective_to": "2030-03-01",
+        "employment_type": "PART_TIME",
+        "revision": 4,
+        "state": "active",
+        "status": "ON_LEAVE",
+      },
+      {
+        "effective_from": "2030-03-01",
+        "effective_to": null,
+        "employment_type": "PART_TIME",
+        "revision": 5,
+        "state": "active",
+        "status": "ACTIVE",
+      },
+      {
+        "effective_from": "2030-03-01",
+        "effective_to": "2030-05-01",
+        "employment_type": "PART_TIME",
+        "revision": 6,
+        "state": "active",
+        "status": "ACTIVE",
+      },
+      {
+        "effective_from": "2030-05-01",
+        "effective_to": null,
+        "employment_type": "PART_TIME",
+        "revision": 7,
+        "state": "active",
+        "status": "TERMINATED",
+      },
+    ],
+    "statusPeriods": [
+      {
+        "ends_on": null,
+        "is_void": 0,
+        "revision": 1,
+        "starts_on": "2026-01-01",
+        "status": "active",
+      },
+      {
+        "ends_on": "2030-02-01",
+        "is_void": 0,
+        "revision": 2,
+        "starts_on": "2026-01-01",
+        "status": "active",
+      },
+      {
+        "ends_on": null,
+        "is_void": 0,
+        "revision": 1,
+        "starts_on": "2030-02-01",
+        "status": "leave",
+      },
+      {
+        "ends_on": "2030-03-01",
+        "is_void": 0,
+        "revision": 2,
+        "starts_on": "2030-02-01",
+        "status": "leave",
+      },
+      {
+        "ends_on": null,
+        "is_void": 0,
+        "revision": 1,
+        "starts_on": "2030-03-01",
+        "status": "active",
+      },
+      {
+        "ends_on": "2030-05-01",
+        "is_void": 0,
+        "revision": 2,
+        "starts_on": "2030-03-01",
+        "status": "active",
+      },
+    ],
+  },
+  "return": {
+    "actions": [
+      {
+        "corrects": 0,
+        "event_on": "2026-01-01",
+        "kind": "employment_revised",
+        "source_type": "system",
+      },
+      {
+        "corrects": 0,
+        "event_on": "2030-02-01",
+        "kind": "leave_started",
+        "source_type": "direct",
+      },
+      {
+        "corrects": 0,
+        "event_on": "2030-03-01",
+        "kind": "returned",
+        "source_type": "direct",
+      },
+    ],
+    "bindings": [
+      {
+        "has_action": 0,
+        "lifecycle_revision": 3,
+        "resource_revision": 2,
+        "resource_type": "employee",
+      },
+      {
+        "has_action": 1,
+        "lifecycle_revision": 3,
+        "resource_revision": 5,
+        "resource_type": "employment",
+      },
+    ],
+    "employmentPeriods": [
+      {
+        "ends_on": null,
+        "is_void": 0,
+        "revision": 1,
+        "starts_on": "2026-01-01",
+      },
+    ],
+    "employments": [
+      {
+        "employment_type": "PART_TIME",
+        "hire_date": "2026-01-01",
+        "status": "ACTIVE",
+        "termination_date": null,
+      },
+    ],
+    "lifecycle": [
+      {
+        "revision": 3,
+      },
+    ],
+    "publishedEmployments": [
+      {
+        "effective_from": "2026-01-01",
+        "effective_to": null,
+        "employment_type": "PART_TIME",
+        "revision": 1,
+        "state": "active",
+        "status": "ACTIVE",
+      },
+      {
+        "effective_from": "2026-01-01",
+        "effective_to": "2030-02-01",
+        "employment_type": "PART_TIME",
+        "revision": 2,
+        "state": "active",
+        "status": "ACTIVE",
+      },
+      {
+        "effective_from": "2030-02-01",
+        "effective_to": null,
+        "employment_type": "PART_TIME",
+        "revision": 3,
+        "state": "active",
+        "status": "ON_LEAVE",
+      },
+      {
+        "effective_from": "2030-02-01",
+        "effective_to": "2030-03-01",
+        "employment_type": "PART_TIME",
+        "revision": 4,
+        "state": "active",
+        "status": "ON_LEAVE",
+      },
+      {
+        "effective_from": "2030-03-01",
+        "effective_to": null,
+        "employment_type": "PART_TIME",
+        "revision": 5,
+        "state": "active",
+        "status": "ACTIVE",
+      },
+    ],
+    "statusPeriods": [
+      {
+        "ends_on": null,
+        "is_void": 0,
+        "revision": 1,
+        "starts_on": "2026-01-01",
+        "status": "active",
+      },
+      {
+        "ends_on": "2030-02-01",
+        "is_void": 0,
+        "revision": 2,
+        "starts_on": "2026-01-01",
+        "status": "active",
+      },
+      {
+        "ends_on": null,
+        "is_void": 0,
+        "revision": 1,
+        "starts_on": "2030-02-01",
+        "status": "leave",
+      },
+      {
+        "ends_on": "2030-03-01",
+        "is_void": 0,
+        "revision": 2,
+        "starts_on": "2030-02-01",
+        "status": "leave",
+      },
+      {
+        "ends_on": null,
+        "is_void": 0,
+        "revision": 1,
+        "starts_on": "2030-03-01",
+        "status": "active",
+      },
+    ],
+  },
+}
+`;

@@ -1,0 +1,28 @@
+import type { CompanyResourceType } from "@/contexts/company/domain/catalogs/company-resource-type.catalog"
+
+export const companyResourceRequiredAttributes = {
+  "legal-entity": ["officialName", "jurisdictionCountryCode", "defaultCurrencyCode"],
+  "company-profile": ["displayName", "locale", "timeZone"],
+  site: ["code", "officialName", "legalEntityId", "kind", "timeZone", "countryCode"],
+  workplace: ["code", "officialName", "siteId", "kind"],
+  person: ["officialName"],
+  employee: ["personId"],
+  employment: ["employeeId", "status"],
+  "organization-unit": ["code", "officialName", "kind"],
+  assignment: ["employeeId", "employmentId", "organizationUnitId", "assignmentType"],
+  "reporting-relation": ["employeeId", "managerEmployeeId"],
+  job: ["code", "officialName"],
+  position: ["code", "officialName"],
+  grade: ["code", "officialName"],
+  "grade-assignment": ["employeeId", "employmentId", "gradeId"],
+  "organizational-office": ["code", "officialName", "organizationUnitId", "positionId"],
+  "office-assignment": ["employeeId", "employmentId", "organizationalOfficeId"],
+  responsibility: ["code", "officialName"],
+  "authority-scope": ["scopeType"],
+  "responsibility-assignment": ["responsibilityId", "holderType", "holderId"],
+  "collective-body": ["code", "officialName", "quorumType", "decisionRule"],
+  "collective-body-membership": ["collectiveBodyId", "employeeId", "role"],
+  "organizational-authority": ["employeeId", "scopeType", "authority"],
+  "account-employee-link": ["accountId", "employeeId"],
+  "personnel-action": ["actionType"],
+} as const satisfies Readonly<Record<CompanyResourceType, ReadonlyArray<string>>>

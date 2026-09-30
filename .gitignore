@@ -1,0 +1,44 @@
+# Claude
+/.claude/scheduled_tasks.lock
+/.claude/agent-memory-local
+/.claude/worktrees
+/.superpowers/
+
+# Env
+.env.local
+
+# Node.js
+node_modules/
+dist/
+
+# Storybook
+storybook-static/
+
+# Cloudflare
+.wrangler/
+
+# Logs
+*.log
+
+# macOS
+.DS_Store
+.funnel
+
+# Playwright MCP（ブラウザ検証時の生成物。コンソールログ等）
+.playwright-mcp/
+
+# 検証時のスクリーンショット（リポジトリ直下に出力される一時生成物）
+/*.png
+
+# Obsidian
+.obsidian
+.worktrees/
+
+# Local credentials and environment configuration
+.env*
+!.env.example
+!.env.local.example
+.dev.vars*
+!.dev.vars.example
+*.pem
+*.key

@@ -1,0 +1,11 @@
+{
+  "apps": {
+    "web": {
+      "name": "app.base"
+    },
+    "api": {
+      "name": "base",
+      "appPort": 18787
+    }
+  }
+}

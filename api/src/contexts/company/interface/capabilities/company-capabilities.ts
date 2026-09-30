@@ -1,0 +1,26 @@
+export const COMPANY_API_VERSION = "company/v1" as const
+
+export const COMPANY_CORE_CAPABILITIES = [
+  "account-employee-link",
+  "authority-scope",
+  "collective-body",
+  "collective-body-membership",
+  "company-profile",
+  "employee",
+  "employment",
+  "grade",
+  "grade-assignment",
+  "job",
+  "legal-entity",
+  "organization",
+  "organizational-office",
+  "organizational-authority",
+  "office-assignment",
+  "person",
+  "personnel-action",
+  "position",
+  "responsibility",
+  "responsibility-assignment",
+  "site",
+  "workplace",
+] as const

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "base": {
+      "command": "bun",
+      "args": ["mcp/index.ts"]
+    }
+  }
+}
