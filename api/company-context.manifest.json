@@ -434,6 +434,7 @@
     "src/contexts/company/infrastructure/repositories/account-profile/d1-company-account-profile.repository.ts",
     "src/contexts/company/infrastructure/repositories/core/company-change-feed.repository.ts",
     "src/contexts/company/infrastructure/repositories/core/company-resource-history.repository.ts",
+    "src/contexts/company/infrastructure/repositories/core/d1-company-resource.attribute-lookup.d1.test.ts",
     "src/contexts/company/infrastructure/repositories/core/d1-company-resource.repository.d1.test.ts",
     "src/contexts/company/infrastructure/repositories/core/d1-company-resource.repository.ts",
     "src/contexts/company/infrastructure/repositories/definitions/grade-assignment-history.repository.ts",

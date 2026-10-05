@@ -75,8 +75,39 @@ type CompanyCommandReceiptRow = Readonly<{
   organization_revision: number
 }>
 
+type CompanyResourceCandidateFilter = Readonly<{ condition: string; binds: ReadonlyArray<string> }>
+
 function placeholders(values: ReadonlyArray<unknown>): string {
   return values.map(() => "?").join(", ")
+}
+
+/**
+ * 属性で絞る照会は、版を選ぶ前にその値を一度でも持った resource へ候補を狭める。
+ * 版の選択は resource ごとに閉じるので、選ばれた版が条件を満たす resource は必ず候補に残り、結果は変わらない。
+ * 種別と JSON path を文字列のまま書くのは、部分式索引（company_resource_revisions_*_lookup_idx）に一致させるため。
+ */
+function toCandidateFilters(
+  query: CompanyResourceQuery,
+): ReadonlyArray<CompanyResourceCandidateFilter> {
+  const lookups = [
+    { type: "account-employee-link", path: "$.accountId", values: query.accountLinkAccountIds },
+    { type: "account-employee-link", path: "$.employeeId", values: query.accountLinkEmployeeIds },
+    { type: "employment", path: "$.employeeId", values: query.employmentEmployeeIds },
+  ]
+  const filters: CompanyResourceCandidateFilter[] = []
+  for (const lookup of lookups) {
+    if (lookup.values === undefined) continue
+    filters.push({
+      condition: `AND resource.resource_id IN (
+        SELECT candidate.resource_id FROM company_resource_revisions AS candidate
+         WHERE candidate.organization_id = ?
+           AND candidate.resource_type = '${lookup.type}'
+           AND json_extract(candidate.attributes_json, '${lookup.path}') IN (SELECT value FROM json_each(?))
+      )`,
+      binds: [query.organizationId, JSON.stringify(lookup.values)],
+    })
+  }
+  return filters
 }
 
 function toCompanyResource(row: CompanyResourceRow): CompanyResourceEntity | Error {
@@ -179,6 +210,15 @@ export class D1CompanyResourceRepository implements CompanyResourceRepository {
           : [JSON.stringify(query.accountLinkAccountIds)]
       const effectiveEndCondition =
         query.includeEnded === true ? "" : "AND (effective_to IS NULL OR effective_to > ?)"
+      const candidateFilters = toCandidateFilters(query)
+      const candidateCondition = candidateFilters.map((filter) => filter.condition).join("\n")
+      const candidateBinds = candidateFilters.flatMap((filter) => filter.binds)
+      // 候補で絞るときは、単項 + で会社版の範囲条件を索引に使わせない。統計の無いDBでは、会社版の範囲で
+      // 組織の全版を読む索引が、候補の resource を一意索引で引く計画より先に選ばれるため。
+      const revisionColumn =
+        candidateFilters.length === 0
+          ? "resource.organization_revision"
+          : "+resource.organization_revision"
 
       const resourceStatement =
         query.organizationRevision !== undefined
@@ -194,9 +234,10 @@ export class D1CompanyResourceRepository implements CompanyResourceRepository {
                         ) AS date_rank
                    FROM company_resource_revisions resource
                   WHERE resource.organization_id = ?
-                    AND resource.organization_revision <= ?
+                    AND ${revisionColumn} <= ?
                     AND (? IS NULL OR resource.resource_type = 'organization-unit' OR resource.effective_from <= ?)
                     AND ${conditions.map((condition) => `resource.${condition}`).join(" AND ")}
+                    ${candidateCondition}
                ), ranked_resources AS (
                  SELECT date_ranked.*,
                         row_number() OVER (
@@ -232,6 +273,7 @@ export class D1CompanyResourceRepository implements CompanyResourceRepository {
                 query.effectiveOn ?? null,
                 query.effectiveOn ?? null,
                 ...binds,
+                ...candidateBinds,
                 query.effectiveOn ?? null,
                 query.organizationRevision,
                 query.effectiveOn ?? null,
@@ -287,9 +329,10 @@ export class D1CompanyResourceRepository implements CompanyResourceRepository {
                      FROM company_resource_revisions AS resource
                      CROSS JOIN snapshot
                     WHERE resource.organization_id = ?
-                      AND resource.organization_revision <= snapshot.revision
+                      AND ${revisionColumn} <= snapshot.revision
                       AND (resource.resource_type = 'organization-unit' OR resource.effective_from <= ?)
                       AND ${conditions.map((condition) => `resource.${condition}`).join(" AND ")}
+                    ${candidateCondition}
                  ), ranked_resources AS (
                    SELECT date_ranked.*,
                           row_number() OVER (
@@ -324,6 +367,7 @@ export class D1CompanyResourceRepository implements CompanyResourceRepository {
                   query.organizationId,
                   query.effectiveOn,
                   ...binds,
+                  ...candidateBinds,
                   query.effectiveOn,
                   ...(query.includeEnded === true ? [] : [query.effectiveOn]),
                   ...codeBinds,

@@ -112,6 +112,24 @@ CREATE INDEX company_resource_revisions_account_link_idx
   ON company_resource_revisions (organization_id, resource_id)
   WHERE resource_type = 'account-employee-link';
 
+CREATE INDEX company_resource_revisions_link_account_lookup_idx
+  ON company_resource_revisions (organization_id, json_extract(attributes_json, '$.accountId'))
+  WHERE resource_type = 'account-employee-link';
+
+CREATE INDEX company_resource_revisions_link_employee_lookup_idx
+  ON company_resource_revisions (organization_id, json_extract(attributes_json, '$.employeeId'))
+  WHERE resource_type = 'account-employee-link';
+
+CREATE INDEX company_resource_revisions_employment_employee_lookup_idx
+  ON company_resource_revisions (organization_id, json_extract(attributes_json, '$.employeeId'))
+  WHERE resource_type = 'employment';
+
+CREATE INDEX company_resource_revisions_correction_idx
+  ON company_resource_revisions (
+    organization_id, resource_type, resource_id, corrects_revision, organization_revision
+  )
+  WHERE corrects_revision IS NOT NULL;
+
 CREATE TABLE company_command_receipts (
   -- 旧来の主キーで行を足す書込みが残るため、主キーは列の既定値でも採番する。
   id TEXT PRIMARY KEY NOT NULL DEFAULT (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-' || substr('89ab', 1 + (random() & 3), 1) || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6)))),

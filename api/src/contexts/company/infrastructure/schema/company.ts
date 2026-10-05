@@ -157,6 +157,28 @@ export const companyResourceRevisions = sqliteTable(
     index("company_resource_revisions_account_link_idx")
       .on(table.organizationId, table.resourceId)
       .where(sql`${table.resourceType} = 'account-employee-link'`),
+    /**
+     * 属性で絞る照会が版を選ぶ前に候補の resource を引く部分式索引。種別の述語が一致しない照会からは使われない。
+     */
+    index("company_resource_revisions_link_account_lookup_idx")
+      .on(table.organizationId, sql`json_extract(${table.attributesJson}, '$.accountId')`)
+      .where(sql`${table.resourceType} = 'account-employee-link'`),
+    index("company_resource_revisions_link_employee_lookup_idx")
+      .on(table.organizationId, sql`json_extract(${table.attributesJson}, '$.employeeId')`)
+      .where(sql`${table.resourceType} = 'account-employee-link'`),
+    index("company_resource_revisions_employment_employee_lookup_idx")
+      .on(table.organizationId, sql`json_extract(${table.attributesJson}, '$.employeeId')`)
+      .where(sql`${table.resourceType} = 'employment'`),
+    /** 訂正版の照合を resource ごとに閉じる部分索引。訂正を持つ版だけを対象にする。 */
+    index("company_resource_revisions_correction_idx")
+      .on(
+        table.organizationId,
+        table.resourceType,
+        table.resourceId,
+        table.correctsRevision,
+        table.organizationRevision,
+      )
+      .where(sql`${table.correctsRevision} IS NOT NULL`),
     check("company_resource_revisions_revision_positive", sql`${table.revision} >= 1`),
     check(
       "company_resource_revisions_correction_target_valid",
