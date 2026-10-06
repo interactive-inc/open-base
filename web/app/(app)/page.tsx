@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/page-header"
 export default function HomePage() {
   return (
     <>
-      <PageHeader title="Open Base" />
+      <PageHeader title={process.env.NEXT_PUBLIC_APP_NAME ?? "Open Base"} />
       <p>System と Company の共通基盤</p>
       <nav className="flex gap-6">
         <Link href="/company/employees">従業員</Link>
