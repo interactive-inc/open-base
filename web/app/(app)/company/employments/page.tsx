@@ -3,7 +3,6 @@ import { CompanyEmploymentFilterForm } from "@/app/(app)/company/employments/_co
 import { CompanyEmploymentSection } from "@/app/(app)/company/employments/_components/company-employment-section"
 import { ListSkeleton } from "@/components/list-skeleton"
 import { PageHeader } from "@/components/page-header"
-import { ReadOnlyNotice } from "@/components/read-only-notice"
 import { requireAnyPermission } from "@/lib/auth/require-any-permission"
 
 export const metadata = { title: "雇用" }
@@ -26,8 +25,6 @@ export default async function CompanyEmploymentsPage(props: Props) {
   return (
     <div className="flex flex-col gap-8">
       <PageHeader title="雇用" />
-
-      <ReadOnlyNotice command={null} />
 
       <CompanyEmploymentFilterForm status={status} />
 

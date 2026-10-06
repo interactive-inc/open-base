@@ -2,7 +2,6 @@ import { Suspense } from "react"
 import { SystemDeadLetterSection } from "@/app/(app)/system/dead-letters/_components/system-dead-letter-section"
 import { ListSkeleton } from "@/components/list-skeleton"
 import { PageHeader } from "@/components/page-header"
-import { ReadOnlyNotice } from "@/components/read-only-notice"
 import { requirePermission } from "@/lib/auth/require-permission"
 
 export const metadata = { title: "dead letter" }
@@ -17,8 +16,6 @@ export default async function SystemDeadLettersPage() {
   return (
     <div className="flex flex-col gap-8">
       <PageHeader title="dead letter" />
-
-      <ReadOnlyNotice command={null} />
 
       <Suspense fallback={<ListSkeleton rows={5} />}>
         <SystemDeadLetterSection />

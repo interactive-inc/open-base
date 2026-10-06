@@ -3,7 +3,6 @@ import { Suspense } from "react"
 import { SystemConnectorDetailSection } from "@/app/(app)/system/connectors/[connectorId]/_components/system-connector-detail-section"
 import { ListSkeleton } from "@/components/list-skeleton"
 import { PageHeader } from "@/components/page-header"
-import { ReadOnlyNotice } from "@/components/read-only-notice"
 import { requirePermission } from "@/lib/auth/require-permission"
 
 export const metadata = { title: "コネクタの詳細" }
@@ -24,8 +23,6 @@ export default async function SystemConnectorPage(props: Props) {
   return (
     <div className="flex flex-col gap-8">
       <PageHeader title="コネクタの詳細" />
-
-      <ReadOnlyNotice command={null} />
 
       <Link className="text-sm underline" href="/system/connectors">
         コネクタの一覧へ戻る

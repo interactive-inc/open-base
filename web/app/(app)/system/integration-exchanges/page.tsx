@@ -4,7 +4,6 @@ import { SystemIntegrationExchangeSection } from "@/app/(app)/system/integration
 import { EmptyState } from "@/components/empty-state"
 import { ListSkeleton } from "@/components/list-skeleton"
 import { PageHeader } from "@/components/page-header"
-import { ReadOnlyNotice } from "@/components/read-only-notice"
 import { requirePermission } from "@/lib/auth/require-permission"
 
 export const metadata = { title: "外部交換" }
@@ -28,8 +27,6 @@ export default async function SystemIntegrationExchangesPage(props: Props) {
   return (
     <div className="flex flex-col gap-8">
       <PageHeader title="外部交換" />
-
-      <ReadOnlyNotice command={null} />
 
       <Suspense fallback={<ListSkeleton rows={1} />}>
         <SystemExchangeConnectorForm connectorId={connectorId} />
