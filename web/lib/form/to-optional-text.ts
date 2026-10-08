@@ -15,7 +15,7 @@ export function toOptionalText(
   }
 
   if (text.length > options.max) {
-    return new Error(`${options.label}は${options.max}文字以内で入力してください`)
+    return new Error(`${options.label}は${options.max}文字以内で入力してください。`)
   }
 
   return text

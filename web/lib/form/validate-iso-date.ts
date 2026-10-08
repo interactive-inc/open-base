@@ -11,7 +11,7 @@ function isRealCalendarDate(value: string): boolean {
 
 export function validateIsoDate(value: string, label: string): string | Error {
   if (/^\d{4}-\d{2}-\d{2}$/.test(value) === false || isRealCalendarDate(value) === false) {
-    return new Error(`${label}はYYYY-MM-DD形式の実在する日付で入力してください`)
+    return new Error(`${label}は正しい日付をYYYY-MM-DD形式で入力してください。`)
   }
 
   return value

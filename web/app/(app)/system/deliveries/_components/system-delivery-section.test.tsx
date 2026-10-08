@@ -40,7 +40,7 @@ describe("SystemDeliverySection", () => {
     render(await SystemDeliverySection({ kind: "job", status: null }))
 
     expect(screen.getByRole("cell", { name: "notification.send" })).toBeDefined()
-    expect(screen.getByRole("cell", { name: "待機" })).toBeDefined()
+    expect(screen.getByRole("cell", { name: "待機中" })).toBeDefined()
     expect(screen.getByRole("cell", { name: "1 / 5" })).toBeDefined()
   })
 
@@ -69,7 +69,7 @@ describe("SystemDeliverySection", () => {
 
     render(await SystemDeliverySection({ kind: "job", status: null }))
 
-    expect(screen.getByText("配信の取得に失敗しました")).toBeDefined()
+    expect(screen.getByText("配信を読み込めませんでした。")).toBeDefined()
     expect(screen.queryByRole("table")).toBeNull()
   })
 })

@@ -123,10 +123,10 @@ export function SidebarUserMenu(props: Props) {
       <AlertDialog open={logoutOpen} onOpenChange={setLogoutOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>ログアウトしますか?</AlertDialogTitle>
+            <AlertDialogTitle>ログアウトしますか？</AlertDialogTitle>
 
             <AlertDialogDescription>
-              もう一度ログインするにはパスワードが必要です。
+              続けて使うには、もう一度ログインが必要です。
             </AlertDialogDescription>
           </AlertDialogHeader>
 

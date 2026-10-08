@@ -78,7 +78,7 @@ function UpdateTemplateDialog(props: { template: ManagedTemplate }) {
         <DialogHeader>
           <DialogTitle>テンプレートを変更</DialogTitle>
 
-          <DialogDescription>コードは変更されません。</DialogDescription>
+          <DialogDescription>コードは変更できません。</DialogDescription>
         </DialogHeader>
 
         <form action={formAction} className="flex flex-col gap-4">
@@ -151,7 +151,7 @@ function DeleteTemplateButton(props: { code: string }) {
         action={formAction}
         triggerLabel="削除"
         title="この申請テンプレートを削除しますか？"
-        description="テンプレートは元に戻せません。既存の申請記録は削除されません。"
+        description="削除したテンプレートは元に戻せません。提出済みの申請は残ります。"
         confirmLabel="テンプレートを削除"
         pending={pending}
       >

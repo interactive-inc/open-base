@@ -7,6 +7,6 @@ export async function deleteApprovalDelegation(id: EntityId) {
     await createClient()
   ).company["approval-delegations"][":id"].$delete({ param: { id: String(id) } })
   if (response.status >= 400)
-    return toResponseError(response, { fallback: "代理承認設定の削除に失敗しました" })
+    return toResponseError(response, { fallback: "代理承認を解除できませんでした" })
   return null
 }

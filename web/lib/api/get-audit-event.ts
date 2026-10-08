@@ -11,7 +11,7 @@ export async function getAuditEvent(eventId: string): Promise<AuditEventDetail |
   )
 
   if (response.status >= 400) {
-    return toApiResponseError(response, "監査イベントを取得できませんでした")
+    return toApiResponseError(response, "監査イベントを読み込めませんでした。")
   }
 
   return response.json()

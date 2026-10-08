@@ -18,7 +18,7 @@ export async function reassignWorkflowStepAction(
   const currentUser = await getMe()
 
   if (currentUser instanceof Error || canManageWorkflowRepairs(currentUser.permissions) === false) {
-    return { ok: false, error: "承認フローを修復する権限がありません" }
+    return { ok: false, error: "承認フローを修復する権限がありません。" }
   }
 
   const applicationId = toEntityId(formData.get("application_id"))
@@ -27,11 +27,11 @@ export async function reassignWorkflowStepAction(
   const rawReason = formData.get("reason")
 
   if (applicationId === null) {
-    return { ok: false, error: "修復対象の申請を特定できません" }
+    return { ok: false, error: "修復対象の申請を特定できませんでした。" }
   }
 
   if (typeof rawCandidates !== "string") {
-    return { ok: false, error: "候補従業員 ID を入力してください" }
+    return { ok: false, error: "候補者の従業員IDを入力してください。" }
   }
 
   const candidateEmployeeIds = parseCandidateEmployeeIds(rawCandidates)
@@ -39,7 +39,7 @@ export async function reassignWorkflowStepAction(
   if (candidateEmployeeIds === null) {
     return {
       ok: false,
-      error: "候補従業員 ID はカンマ区切りで 1〜20 件入力してください",
+      error: "候補者の従業員IDはカンマ区切りで1〜20件入力してください。",
     }
   }
 
@@ -49,17 +49,17 @@ export async function reassignWorkflowStepAction(
       : toPositiveIntId(rawRequiredApprovals)
 
   if (requiredApprovals === null || (requiredApprovals ?? 0) > 20) {
-    return { ok: false, error: "必要承認数は 1〜20 の整数で入力してください" }
+    return { ok: false, error: "必要承認数は1〜20の整数で入力してください。" }
   }
 
   if (typeof rawReason !== "string" || rawReason.trim() === "") {
-    return { ok: false, error: "再割当理由を入力してください" }
+    return { ok: false, error: "再割り当ての理由を入力してください。" }
   }
 
   const reason = rawReason.trim()
 
   if (reason.length > 1_000) {
-    return { ok: false, error: "再割当理由は 1000 文字以内で入力してください" }
+    return { ok: false, error: "再割り当ての理由は1000文字以内で入力してください。" }
   }
 
   const result = await reassignWorkflowStep(applicationId, {
@@ -82,29 +82,29 @@ export async function reassignWorkflowStepAction(
 function toRepairErrorMessage(error: Error): string {
   if (error instanceof ApiResponseError) {
     if (error.code === "invalid_candidate") {
-      return "申請者自身または操作している本人は承認候補にできません"
+      return "申請者本人と操作者本人は承認候補にできません。"
     }
 
     if (error.code === "workflow_unresolvable") {
-      return "有効なアカウントを持ち、必要な承認数を満たす候補者を指定してください"
+      return "有効なアカウントを持つ候補者を、必要承認数以上指定してください。"
     }
 
     if (error.code === "workflow_quorum_required") {
-      return "全員承認のスナップショットがないため、候補者数と同じ必要承認数を入力してください"
+      return "全員承認の承認者記録がないため、候補者数と同じ必要承認数を入力してください。"
     }
 
     if (error.code === "workflow_quorum_mismatch") {
-      return "必要承認数は候補者数または保存済みの承認数と一致させてください"
+      return "必要承認数は候補者数または保存済みの承認数と同じにしてください。"
     }
 
     if (error.code === "workflow_not_repairable") {
-      return "この承認ステップは現在修復を必要としていません"
+      return "この承認ステップは修復の必要がありません。"
     }
 
     if (error.code === "already_decided") {
-      return "申請の状態が変わりました。画面を更新して確認してください"
+      return "申請の状態が変わりました。画面を再読み込みして確認してください。"
     }
   }
 
-  return "承認候補者を再割当できませんでした"
+  return "承認候補者を再割り当てできませんでした。"
 }

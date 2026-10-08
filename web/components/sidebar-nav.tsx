@@ -292,7 +292,7 @@ export function SidebarNav(props: Props) {
           (badgeMap[item.href] > 0 || (item.href === "/inbox" && inboxSummary.hasMore)) ? (
             <Badge
               className="ml-auto"
-              aria-label={`未処理 ${badgeMap[item.href]}${item.href === "/inbox" && inboxSummary.hasMore ? "+" : ""} 件`}
+              aria-label={`対応待ち ${badgeMap[item.href]}${item.href === "/inbox" && inboxSummary.hasMore ? "+" : ""} 件`}
             >
               {badgeMap[item.href]}
               {item.href === "/inbox" && inboxSummary.hasMore ? "+" : ""}
@@ -309,7 +309,7 @@ export function SidebarNav(props: Props) {
         <SidebarGroupContent>
           <Tabs value={currentSpace?.key} onValueChange={handleSpaceChange} className="gap-0">
             <TabsList
-              aria-label="メニューの空間"
+              aria-label="メニューの切り替え"
               className={cn("grid w-full", spaceGridColumns[visibleSpaces.length] ?? "grid-cols-4")}
             >
               {visibleSpaces.map((space) => {

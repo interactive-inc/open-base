@@ -38,7 +38,7 @@ export function SubmitApplicationForm(props: Props) {
 
       <div className="flex gap-2">
         <Button type="submit" disabled={isPending || props.schema.fields.length === 0}>
-          {isPending ? "提出中..." : "提出する"}
+          {isPending ? "提出中…" : "提出する"}
         </Button>
       </div>
     </form>

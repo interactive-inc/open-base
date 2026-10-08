@@ -37,8 +37,8 @@ export function DynamicFormFields(props: Props) {
   if (props.schema.fields.length === 0) {
     return (
       <EmptyState
-        title="このテンプレートには入力項目がありません"
-        description="管理者がテンプレートに項目を追加すると、ここから入力できるようになります。"
+        title="この申請には入力項目がありません"
+        description="管理者が項目を追加すると入力できるようになります。"
       />
     )
   }

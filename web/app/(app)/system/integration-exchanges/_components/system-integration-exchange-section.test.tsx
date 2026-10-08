@@ -54,7 +54,7 @@ describe("SystemIntegrationExchangeSection", () => {
 
     render(await SystemIntegrationExchangeSection({ connectorId: "connector-1" }))
 
-    expect(screen.getByText("外部交換がありません")).toBeDefined()
+    expect(screen.getByText("連携履歴がありません")).toBeDefined()
     expect(screen.queryByRole("table")).toBeNull()
   })
 
@@ -63,7 +63,7 @@ describe("SystemIntegrationExchangeSection", () => {
 
     render(await SystemIntegrationExchangeSection({ connectorId: "connector-1" }))
 
-    expect(screen.getByText("外部交換の取得に失敗しました")).toBeDefined()
+    expect(screen.getByText("連携履歴を読み込めませんでした。")).toBeDefined()
     expect(screen.queryByRole("table")).toBeNull()
   })
 })

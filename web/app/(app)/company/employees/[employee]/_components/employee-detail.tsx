@@ -37,7 +37,7 @@ export async function EmployeeDetail(props: Props) {
     ])
 
   if (employee instanceof Error) {
-    return <FetchError message="従業員情報の取得に失敗しました" />
+    return <FetchError message="従業員情報を読み込めませんでした。" />
   }
 
   if (employee === null) {
@@ -95,25 +95,25 @@ export async function EmployeeDetail(props: Props) {
 
         <CardContent>
           <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <DetailField label="コード">{employee.code}</DetailField>
+            <DetailField label="従業員コード">{employee.code}</DetailField>
 
             <DetailField label="部署">{employee.deptName ?? "-"}</DetailField>
 
             <DetailField label="役職">{employee.position ?? "-"}</DetailField>
 
-            <DetailField label="メール">{employee.email}</DetailField>
+            <DetailField label="メールアドレス">{employee.email}</DetailField>
           </dl>
         </CardContent>
       </Card>
 
       {lifecycleState instanceof Error ? (
-        <FetchError message="現在の人事状態の取得に失敗しました" />
+        <FetchError message="現在の人事情報を読み込めませんでした。" />
       ) : (
         <EmployeeLifecycleSummary state={lifecycleState} />
       )}
 
       {lifecycleEvents instanceof Error ? (
-        <FetchError message="人事タイムラインの取得に失敗しました" />
+        <FetchError message="人事発令の履歴を読み込めませんでした。" />
       ) : (
         <EmployeeLifecycleTimeline code={employee.code} events={lifecycleEvents} />
       )}

@@ -19,14 +19,14 @@ function buildAction(form: FormData): Record<string, unknown> | Error {
   const kind = text(form, "kind")
   const employeeCode = text(form, "employee_code")
   const eventOn = toRequiredIsoDate(form.get("event_on"), "発令日")
-  if (!kind || !employeeCode) return new Error("種別と対象者が必要です")
+  if (!kind || !employeeCode) return new Error("発令の種類と対象者を指定してください")
   if (eventOn instanceof Error) return eventOn
   if (kind === "retired") return { kind, employeeCode, retirementOn: eventOn }
   const base = { kind, employeeCode, eventOn }
   if (kind === "rehire") {
     const employmentType = text(form, "employment_type")
     if (employmentType !== "FULL_TIME" && employmentType !== "PART_TIME")
-      return new Error("雇用区分を選択してください")
+      return new Error("雇用形態を選択してください")
     return {
       ...base,
       employmentType,
@@ -37,7 +37,7 @@ function buildAction(form: FormData): Record<string, unknown> | Error {
   }
   if (["leave_started", "returned"].includes(kind)) return base
   const departmentCode = text(form, "department_code")
-  if (!departmentCode) return new Error("この発令種別には部署コードが必要です")
+  if (!departmentCode) return new Error("部署コードを入力してください")
   if (
     ["primary_assignment_started", "transferred", "concurrent_assignment_started"].includes(kind)
   ) {
@@ -53,7 +53,7 @@ function buildAction(form: FormData): Record<string, unknown> | Error {
   }
   const assignmentType = text(form, "assignment_type")
   if (assignmentType !== "primary" && assignmentType !== "concurrent") {
-    return new Error("所属区分が必要です")
+    return new Error("所属区分を選択してください")
   }
   if (kind === "assignment_ended") return { ...base, departmentCode, assignmentType }
   if (kind === "manager_changed") {
@@ -67,10 +67,10 @@ function buildAction(form: FormData): Record<string, unknown> | Error {
   if (kind === "position_changed") {
     const positionCode = text(form, "position_code")
     const changeType = text(form, "change_type")
-    if (!positionCode || !changeType) return new Error("役職と変更区分が必要です")
+    if (!positionCode || !changeType) return new Error("役職と変更の種類を選択してください")
     return { ...base, departmentCode, assignmentType, positionCode, changeType }
   }
-  return new Error("人事発令種別が不正です")
+  return new Error("発令の種類が正しくありません")
 }
 
 export async function submitPersonnelAction(
@@ -82,7 +82,7 @@ export async function submitPersonnelAction(
   const requiredPermission =
     mode === "apply" ? "employee:lifecycle:apply" : "employee:lifecycle:request"
   if (!me.permissions.includes(requiredPermission)) {
-    return { ok: false, error: "この人事変更を実行する権限がありません" }
+    return { ok: false, error: "この人事発令を行う権限がありません" }
   }
   const companyRevision = readCompanyRevision(form)
   if (companyRevision instanceof Error) return { ok: false, error: companyRevision.message }
@@ -100,7 +100,7 @@ export async function submitPersonnelAction(
     !Number.isInteger(organizationRevision) ||
     organizationRevision < 0
   ) {
-    return { ok: false, error: "画面を再読み込みして最新の人事情報を取得してください" }
+    return { ok: false, error: "画面を再読み込みしてから、もう一度お試しください" }
   }
   const result =
     mode === "apply"

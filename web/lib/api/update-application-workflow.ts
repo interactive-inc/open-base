@@ -13,7 +13,7 @@ export async function updateApplicationWorkflow(
     json: { ...workflow, expected_revision: expectedRevision },
   })
   if (response.status >= 400) {
-    return toApiResponseError(response, "承認フローの保存に失敗しました")
+    return toApiResponseError(response, "承認フローを保存できませんでした。")
   }
   return response.json()
 }

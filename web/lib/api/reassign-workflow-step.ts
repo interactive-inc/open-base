@@ -26,7 +26,7 @@ export async function reassignWorkflowStep(
   })
 
   if (response.status >= 400) {
-    return toApiResponseError(response, "承認候補者を再割当できませんでした")
+    return toApiResponseError(response, "承認者を割り当て直せませんでした。")
   }
 
   return response.json()

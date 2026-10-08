@@ -20,7 +20,7 @@ import {
   type CompanyPersonnelActionQuery,
 } from "@/lib/api/get-company-personnel-actions"
 
-const sourceLabels = { direct: "直接発令", application: "承認申請", system: "システム記録" }
+const sourceLabels = { direct: "直接発令", application: "承認申請", system: "自動記録" }
 
 /** 発令の対象、発効日、記録日時と訂正のつながりを表示する。 */
 export async function CompanyPersonnelActionSection(
@@ -28,7 +28,7 @@ export async function CompanyPersonnelActionSection(
 ) {
   const query = props.query ?? {}
   const actions = await getCompanyPersonnelActions(query)
-  if (actions instanceof Error) return <FetchError message="人事発令の取得に失敗しました" />
+  if (actions instanceof Error) return <FetchError message="人事発令を読み込めませんでした。" />
 
   return (
     <div className="flex flex-col gap-4">
@@ -40,11 +40,11 @@ export async function CompanyPersonnelActionSection(
       ) : (
         <Table>
           <TableCaption>
-            人事発令の一覧。記録の新しい順。従業員名とコードは現在の情報です。
+            人事発令の一覧（記録の新しい順）。従業員名と従業員コードは現在のものです。
           </TableCaption>
           <TableHeader>
             <TableRow>
-              {["従業員", "発令・発効日", "記録・来歴", "訂正"].map((heading) => (
+              {["従業員", "発令・発効日", "記録日時・経路", "訂正"].map((heading) => (
                 <TableHead key={heading} scope="col">
                   {heading}
                 </TableHead>
@@ -62,7 +62,7 @@ export async function CompanyPersonnelActionSection(
                     >
                       {action.current_employee?.name ?? action.employee_id}
                     </Link>
-                    <span>{action.current_employee?.code ?? "コード未設定"}</span>
+                    <span>{action.current_employee?.code ?? "従業員コード未設定"}</span>
                     <span className="text-xs text-muted-foreground break-all">
                       {action.employee_id}
                     </span>
@@ -92,9 +92,9 @@ export async function CompanyPersonnelActionSection(
                       <dl className="flex flex-col gap-2">
                         <dt>発令ID</dt>
                         <dd className="break-all">{action.id}</dd>
-                        <dt>記録者Account ID</dt>
+                        <dt>記録したアカウントのID</dt>
                         <dd className="break-all">{action.recorded_by_account_id ?? "未記録"}</dd>
-                        <dt>申請者Employee ID</dt>
+                        <dt>申請者の従業員ID</dt>
                         <dd className="break-all">{action.requested_by_employee_id ?? "未記録"}</dd>
                         {action.source_application_id !== null ? (
                           <>
@@ -121,7 +121,7 @@ export async function CompanyPersonnelActionSection(
                         href={personnelActionHistoryHref({ id: action.corrected_by_action_id })}
                         prefetch={false}
                       >
-                        訂正後の記録
+                        訂正後の発令
                       </Link>
                     ) : null}
                     {action.corrects_action_id === null && action.corrected_by_action_id === null
@@ -134,13 +134,13 @@ export async function CompanyPersonnelActionSection(
           </TableBody>
         </Table>
       )}
-      <nav aria-label="人事発令履歴のページ" className="flex flex-wrap gap-4">
+      <nav aria-label="人事発令のページ送り" className="flex flex-wrap gap-4">
         {query.cursor !== undefined ? (
           <TextLink
             href={personnelActionHistoryHref({ ...query, cursor: undefined })}
             prefetch={false}
           >
-            この条件の最新の履歴
+            最新の記録に戻る
           </TextLink>
         ) : null}
         {actions.next_cursor !== null ? (

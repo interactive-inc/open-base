@@ -45,7 +45,7 @@ describe("loginAction", () => {
 
     expect(result).toEqual({
       ok: false,
-      error: "メールアドレスとパスワードを入力してください",
+      error: "メールアドレスとパスワードを入力してください。",
     })
     expect(mocks.postLogin).not.toHaveBeenCalled()
   })

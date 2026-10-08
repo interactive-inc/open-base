@@ -18,12 +18,13 @@ export default async function NewPositionPage() {
   }
 
   const snapshot = await getPositionCreationContext()
-  if (snapshot instanceof Error) return <FetchError message="会社情報を取得できませんでした" />
+  if (snapshot instanceof Error)
+    return <FetchError message="役職の作成に必要な情報を読み込めませんでした。" />
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader title="新規役職">
-        <BackButton href="/company/positions" label="役職に戻る" />
+      <PageHeader title="役職の作成">
+        <BackButton href="/company/positions" label="一覧に戻る" />
       </PageHeader>
 
       <Card>

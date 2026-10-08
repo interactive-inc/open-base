@@ -27,9 +27,9 @@ const actions = [
   ["concurrent_assignment_started", "兼務開始"],
   ["assignment_ended", "所属終了"],
   ["position_changed", "役職変更"],
-  ["manager_changed", "上司変更"],
-  ["department_responsibility_started", "部署責任者就任"],
-  ["department_responsibility_ended", "部署責任者退任"],
+  ["manager_changed", "上長変更"],
+  ["department_responsibility_started", "部署長就任"],
+  ["department_responsibility_ended", "部署長退任"],
   ["leave_started", "休職"],
   ["returned", "復職"],
   ["retired", "退職"],
@@ -67,11 +67,12 @@ export function PersonnelActionForm(props: {
     "rehire",
   ].includes(kind)
   async function reduce(previous: PersonnelActionFormState, form: FormData) {
-    if (!positionSnapshot.isReady) return { ok: false, error: "有効日の会社情報を確認してください" }
+    if (!positionSnapshot.isReady)
+      return { ok: false, error: "発令日時点の役職を読み込めていません。発令日を確認してください" }
     const result = await submitPersonnelAction(previous, form)
     if (result.ok) {
       toast.success(
-        form.get("mode") === "apply" ? "人事発令を確定しました" : "人事変更を申請しました",
+        form.get("mode") === "apply" ? "人事発令を確定しました" : "人事発令を申請しました",
       )
       setOpen(false)
     } else if (result.error) toast.error(result.error)
@@ -80,11 +81,11 @@ export function PersonnelActionForm(props: {
   const [state, action, pending] = useActionState(reduce, initialState)
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button size="sm" />}>人事変更</DialogTrigger>
+      <DialogTrigger render={<Button size="sm" />}>人事発令</DialogTrigger>
       <DialogContent className="max-h-[90dvh] overscroll-contain overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>人事変更</DialogTitle>
-          <DialogDescription>有効日付きの発令として、申請または直接確定します。</DialogDescription>
+          <DialogTitle>人事発令</DialogTitle>
+          <DialogDescription>発令日を指定して、承認を申請するか直接確定します。</DialogDescription>
         </DialogHeader>
         <form action={action}>
           <input type="hidden" name="company_revision" value={props.companyRevision} />
@@ -115,7 +116,7 @@ export function PersonnelActionForm(props: {
             </Field>
             <Field>
               <FieldLabel id="personnel-kind-label" htmlFor="personnel-kind">
-                変更種別
+                発令の種類
               </FieldLabel>
               <NativeSelect
                 id="personnel-kind"
@@ -160,7 +161,7 @@ export function PersonnelActionForm(props: {
                   spellCheck={false}
                   required={kind !== "rehire"}
                 />
-                <FieldDescription>組織図の変更されない部署コードを指定します。</FieldDescription>
+                <FieldDescription>部署名ではなく部署コードを入力します。</FieldDescription>
               </Field>
             ) : null}
             {needsAssignment ? (
@@ -175,7 +176,7 @@ export function PersonnelActionForm(props: {
                   className="w-full"
                   defaultValue="primary"
                 >
-                  <NativeSelectOption value="primary">主所属</NativeSelectOption>
+                  <NativeSelectOption value="primary">主務</NativeSelectOption>
                   <NativeSelectOption value="concurrent">兼務</NativeSelectOption>
                 </NativeSelect>
               </Field>
@@ -202,12 +203,12 @@ export function PersonnelActionForm(props: {
                     </NativeSelectOption>
                   ))}
                 </NativeSelect>
-                <FieldDescription>役職マスタから選びます。</FieldDescription>
+                <FieldDescription>発令日時点の役職から選びます。</FieldDescription>
               </Field>
             ) : null}
             {needsManager ? (
               <Field>
-                <FieldLabel htmlFor="personnel-manager">直属上司コード（任意）</FieldLabel>
+                <FieldLabel htmlFor="personnel-manager">上長の従業員コード（任意）</FieldLabel>
                 <Input
                   id="personnel-manager"
                   name="manager_employee_code"
@@ -216,14 +217,14 @@ export function PersonnelActionForm(props: {
                   spellCheck={false}
                 />
                 {kind === "manager_changed" ? (
-                  <FieldDescription>空欄のまま確定すると直属上司を解除します。</FieldDescription>
+                  <FieldDescription>空欄にすると上長を解除します。</FieldDescription>
                 ) : null}
               </Field>
             ) : null}
             {kind === "position_changed" ? (
               <Field>
                 <FieldLabel id="personnel-change-type-label" htmlFor="personnel-change-type">
-                  役職変更区分
+                  変更の種類
                 </FieldLabel>
                 <NativeSelect
                   id="personnel-change-type"
@@ -234,7 +235,7 @@ export function PersonnelActionForm(props: {
                 >
                   <NativeSelectOption value="promotion">昇格</NativeSelectOption>
                   <NativeSelectOption value="demotion">降格</NativeSelectOption>
-                  <NativeSelectOption value="lateral">横移動</NativeSelectOption>
+                  <NativeSelectOption value="lateral">同格の変更</NativeSelectOption>
                   <NativeSelectOption value="other">その他</NativeSelectOption>
                 </NativeSelect>
               </Field>

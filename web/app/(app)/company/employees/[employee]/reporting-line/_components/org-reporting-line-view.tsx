@@ -13,7 +13,7 @@ export async function OrgReportingLineView(props: Props) {
   const nodes = await getOrgReportingLine(props.code)
 
   if (nodes instanceof Error) {
-    return <FetchError message="レポートラインの取得に失敗しました" />
+    return <FetchError message="レポートラインを読み込めませんでした。" />
   }
 
   if (nodes.length === 0) {
@@ -26,7 +26,7 @@ export async function OrgReportingLineView(props: Props) {
         <li key={node.employee_id} style={{ paddingInlineStart: `${node.depth * 1.5}rem` }}>
           <Card className="gap-0">
             <div className="flex items-center gap-4 p-4">
-              <span className="text-xs text-muted-foreground">Lv.{node.depth}</span>
+              <span className="text-xs text-muted-foreground">階層 {node.depth}</span>
 
               <span className="text-sm font-medium">{node.employee_name}</span>
 

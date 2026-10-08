@@ -16,7 +16,7 @@ export async function EmployeeListSection(props: Props) {
   const result = await getEmployeeList(props.filter, { limit: props.limit, offset: props.offset })
 
   if (result instanceof Error) {
-    return <FetchError message="従業員一覧の取得に失敗しました" />
+    return <FetchError message="従業員を読み込めませんでした。" />
   }
 
   const filterParams: Record<string, string | undefined> = {

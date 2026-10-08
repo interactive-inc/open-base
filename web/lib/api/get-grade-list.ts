@@ -15,7 +15,7 @@ export async function getGradeList() {
       (attributes.rank != null && typeof attributes.rank !== "number") ||
       (attributes.description != null && typeof attributes.description !== "string")
     )
-      return new Error("公開等級の属性を読み取れませんでした")
+      return new Error("等級の情報を読み込めませんでした。")
     grades.push({
       id: resource.id,
       revision: resource.revision,

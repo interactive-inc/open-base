@@ -4,7 +4,7 @@ import { ListSkeleton } from "@/components/list-skeleton"
 import { PageHeader } from "@/components/page-header"
 import { requirePermission } from "@/lib/auth/require-permission"
 
-export const metadata = { title: "Principal" }
+export const metadata = { title: "主体" }
 
 /**
  * Principal 一覧。Account と独立した主体の分類（人・エージェント・
@@ -15,7 +15,7 @@ export default async function SystemPrincipalsPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader title="Principal" />
+      <PageHeader title="主体" />
 
       <Suspense fallback={<ListSkeleton rows={5} />}>
         <SystemPrincipalSection />

@@ -53,7 +53,7 @@ describe("CompanyPeopleSection", () => {
 
     render(await CompanyPeopleSection())
 
-    expect(screen.getByText("人が登録されていません")).toBeDefined()
+    expect(screen.getByText("人物が登録されていません")).toBeDefined()
     expect(screen.queryByRole("table")).toBeNull()
   })
 
@@ -62,7 +62,7 @@ describe("CompanyPeopleSection", () => {
 
     render(await CompanyPeopleSection())
 
-    expect(screen.getByText("人の取得に失敗しました")).toBeDefined()
+    expect(screen.getByText("人物を読み込めませんでした。")).toBeDefined()
     expect(screen.queryByRole("table")).toBeNull()
   })
 })

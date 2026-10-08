@@ -77,7 +77,11 @@ export function parseAuditExportSearchParams(
   }
   const fromEpoch = exactSecondEpoch(from)
   if (fromEpoch === null) {
-    return { ok: false, field: "from", message: "開始日時をオフセット付き形式で入力してください。" }
+    return {
+      ok: false,
+      field: "from",
+      message: "開始日時をタイムゾーン付きの形式で入力してください。",
+    }
   }
 
   const to = values.get("to")
@@ -86,7 +90,11 @@ export function parseAuditExportSearchParams(
   }
   const toEpoch = exactSecondEpoch(to)
   if (toEpoch === null) {
-    return { ok: false, field: "to", message: "終了日時をオフセット付き形式で入力してください。" }
+    return {
+      ok: false,
+      field: "to",
+      message: "終了日時をタイムゾーン付きの形式で入力してください。",
+    }
   }
   if (fromEpoch >= toEpoch) {
     return { ok: false, field: "to", message: "終了日時は開始日時より後にしてください。" }

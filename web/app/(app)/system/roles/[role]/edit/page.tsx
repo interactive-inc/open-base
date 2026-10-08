@@ -6,7 +6,7 @@ import { getPermissions } from "@/lib/api/get-permissions"
 import { getRole } from "@/lib/api/get-role"
 import { notFound } from "next/navigation"
 
-export const metadata = { title: "ロール編集" }
+export const metadata = { title: "ロールの編集" }
 
 type Props = {
   params: Promise<{ role: string }>
@@ -38,9 +38,9 @@ export default async function AdminRoleEditPage(props: Props) {
   if (role instanceof Error || permissions instanceof Error) {
     return (
       <div className="flex flex-col gap-8">
-        <PageHeader title="ロール編集" />
+        <PageHeader title="ロールの編集" />
 
-        <FetchError message="ロール情報の取得に失敗しました" />
+        <FetchError message="ロールを読み込めませんでした。" />
       </div>
     )
   }
@@ -58,7 +58,7 @@ export default async function AdminRoleEditPage(props: Props) {
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader title={`ロール編集: ${role.name}`} />
+      <PageHeader title={`ロールの編集：${role.name}`} />
 
       <RoleEditForm
         roleId={role.id}

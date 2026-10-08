@@ -98,7 +98,12 @@ export function NotificationCreateForm(props: Props) {
         <Field>
           <FieldLabel htmlFor="notification-title">タイトル</FieldLabel>
 
-          <Input id="notification-title" name="title" placeholder="お知らせ" required />
+          <Input
+            id="notification-title"
+            name="title"
+            placeholder="例：年末年始休業のお知らせ"
+            required
+          />
         </Field>
 
         <Field>
@@ -111,7 +116,7 @@ export function NotificationCreateForm(props: Props) {
 
         <Field orientation="horizontal">
           <Button type="submit" disabled={isPending}>
-            {isPending ? "作成中..." : "通知を作成"}
+            {isPending ? "作成中…" : "通知を作成"}
           </Button>
         </Field>
       </FieldGroup>

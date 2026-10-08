@@ -60,7 +60,7 @@ describe("CompanyPersonnelActionSection", () => {
       limit: "10",
     })
     expect(
-      screen.getByRole("link", { name: "この条件の最新の履歴" }).getAttribute("href"),
+      screen.getByRole("link", { name: "最新の記録に戻る" }).getAttribute("href"),
     ).not.toContain("cursor")
   })
   test("現在の従業員名がない記録もIDで表示し、訂正先をたどれる", async () => {
@@ -79,7 +79,7 @@ describe("CompanyPersonnelActionSection", () => {
     })
     render(await CompanyPersonnelActionSection())
     expect(screen.getByRole("link", { name: "employee:1" })).toBeDefined()
-    expect(screen.getByRole("link", { name: "訂正後の記録" }).getAttribute("href")).toBe(
+    expect(screen.getByRole("link", { name: "訂正後の発令" }).getAttribute("href")).toBe(
       "/company/personnel-actions?id=action%3Alater",
     )
     expect(screen.queryByRole("link", { name: "以前の記録を表示" })).toBeNull()
@@ -93,7 +93,7 @@ describe("CompanyPersonnelActionSection", () => {
   test("取得に失敗したときは行を出さない", async () => {
     mocks.getCompanyPersonnelActions.mockResolvedValue(new Error("failed"))
     render(await CompanyPersonnelActionSection())
-    expect(screen.getByText("人事発令の取得に失敗しました")).toBeDefined()
+    expect(screen.getByText("人事発令を読み込めませんでした。")).toBeDefined()
     expect(screen.queryByRole("table")).toBeNull()
   })
 })

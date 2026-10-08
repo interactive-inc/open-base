@@ -15,9 +15,9 @@ export async function withdrawApplication(id: EntityId): Promise<null | Error> {
 
   if (response.status >= 400) {
     return toResponseError(response, {
-      fallback: "申請の取り下げに失敗しました",
+      fallback: "申請を取り下げられませんでした",
       conflictMessages: {
-        "application is already decided": "この申請は既に審査済みのため取り下げできません",
+        "application is already decided": "この申請は審査済みのため取り下げできません。",
       },
     })
   }

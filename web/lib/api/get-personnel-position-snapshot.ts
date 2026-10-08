@@ -14,7 +14,7 @@ export async function getPersonnelPositionSnapshot(snapshot?: {
     snapshot !== undefined &&
     definitions.organizationRevision !== snapshot.organizationRevision
   ) {
-    return new Error("確認した会社版と役職情報の版が一致しません")
+    return new Error("役職情報が会社情報と一致しません。再読み込みしてください。")
   }
 
   const positions: PersonnelPositionOption[] = []
@@ -24,7 +24,7 @@ export async function getPersonnelPositionSnapshot(snapshot?: {
     const code = resource.attributes.code
     const name = resource.attributes.officialName
     if (typeof code !== "string" || typeof name !== "string") {
-      return new Error("会社の役職情報を取得できませんでした")
+      return new Error("役職情報を読み込めませんでした。")
     }
     positions.push({ id: resource.id, code, name })
   }

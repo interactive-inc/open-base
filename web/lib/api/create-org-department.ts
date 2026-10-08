@@ -18,9 +18,9 @@ export async function createOrgDepartment(
 
   if (response.status >= 400) {
     return toResponseError(response, {
-      fallback: "部署の作成に失敗しました",
+      fallback: "部署を作成できませんでした",
       conflictMessages: {
-        "department code already exists": "この部署コードは既に存在します",
+        "department code already exists": "この部署コードはすでに使われています。",
       },
     })
   }

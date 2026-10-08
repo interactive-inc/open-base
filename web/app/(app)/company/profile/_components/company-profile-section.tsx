@@ -5,14 +5,14 @@ import { filterResourcesByType } from "@/lib/company/filter-resources-by-type"
 import { readResourceNumber } from "@/lib/company/read-resource-number"
 import { readResourceText } from "@/lib/company/read-resource-text"
 
-const emptyDescription = "会社の正本は API と CLI が持ちます。まだ登録がありません。"
+const emptyDescription = "API または CLI で登録します。"
 
 /** 法人（LegalEntity）と会社 profile を読み取り専用で並べる。 */
 export async function CompanyProfileSection() {
   const profile = await getCompanyProfileResources()
 
   if (profile instanceof Error) {
-    return <FetchError message="会社と法人の取得に失敗しました" />
+    return <FetchError message="会社と法人を読み込めませんでした。" />
   }
 
   const legalEntities = filterResourcesByType(profile.resources, "legal-entity")
@@ -35,7 +35,7 @@ export async function CompanyProfileSection() {
               toValue: (resource) => readResourceText(resource, "officialName") ?? "-",
             },
             {
-              header: "法域",
+              header: "国・地域",
               toValue: (resource) => readResourceText(resource, "jurisdictionCountryCode") ?? "-",
             },
             {
@@ -43,7 +43,7 @@ export async function CompanyProfileSection() {
               toValue: (resource) => readResourceText(resource, "registrationNumber") ?? "-",
             },
             {
-              header: "既定通貨",
+              header: "基本通貨",
               toValue: (resource) => readResourceText(resource, "defaultCurrencyCode") ?? "-",
             },
           ]}
@@ -51,12 +51,12 @@ export async function CompanyProfileSection() {
       </section>
 
       <section className="flex flex-col gap-4">
-        <h2 className="text-lg font-semibold">会社プロフィール</h2>
+        <h2 className="text-lg font-semibold">会社情報</h2>
 
         <CompanyResourceTable
-          caption="会社プロフィールの一覧"
+          caption="会社情報の一覧"
           resources={companyProfiles}
-          emptyTitle="会社プロフィールが登録されていません"
+          emptyTitle="会社情報が登録されていません"
           emptyDescription={emptyDescription}
           columns={[
             {
@@ -64,7 +64,7 @@ export async function CompanyProfileSection() {
               toValue: (resource) => readResourceText(resource, "displayName") ?? "-",
             },
             {
-              header: "ロケール",
+              header: "言語・地域",
               toValue: (resource) => readResourceText(resource, "locale") ?? "-",
             },
             {

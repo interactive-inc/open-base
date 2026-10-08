@@ -11,13 +11,11 @@ export async function BatchJobList() {
   const jobs = await getBatchJobList()
 
   if (jobs instanceof Error) {
-    return (
-      <FetchError message="バッチジョブ一覧の取得に失敗しました（権限が必要な場合があります）" />
-    )
+    return <FetchError message="バッチの一覧を読み込めませんでした。" />
   }
 
   if (jobs.length === 0) {
-    return <EmptyState title="バッチジョブがありません" />
+    return <EmptyState title="バッチがありません" />
   }
 
   return <BatchJobTable jobs={jobs} />

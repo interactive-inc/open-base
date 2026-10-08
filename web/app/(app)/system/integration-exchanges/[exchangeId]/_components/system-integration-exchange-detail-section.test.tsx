@@ -55,7 +55,7 @@ describe("SystemIntegrationExchangeDetailSection", () => {
 
     render(await SystemIntegrationExchangeDetailSection({ exchangeId: "exchange-1" }))
 
-    expect(screen.getByText("外部交換の取得に失敗しました")).toBeDefined()
+    expect(screen.getByText("連携履歴を読み込めませんでした。")).toBeDefined()
     expect(screen.queryByText("attendance.import")).toBeNull()
   })
 })

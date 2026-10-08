@@ -37,12 +37,12 @@ export default async function WorkflowRepairsPage(props: Props) {
           nativeButton={false}
           render={<Link href="/system/applications" />}
         >
-          申請管理へ
+          全社の申請へ
         </Button>
       </PageHeader>
 
       {result instanceof Error ? (
-        <FetchError message="承認フローの修復対象を取得できませんでした" />
+        <FetchError message="修復対象の申請を読み込めませんでした。" />
       ) : (
         <>
           <WorkflowRepairList repairs={result.data} />

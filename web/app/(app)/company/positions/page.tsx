@@ -44,7 +44,7 @@ async function Positions(props: { canManage: boolean }) {
   const positions = await getPositionList()
 
   if (positions instanceof Error) {
-    return <FetchError message="役職の取得に失敗しました" />
+    return <FetchError message="役職を読み込めませんでした。" />
   }
 
   return <PositionList positions={positions.positions} canManage={props.canManage} />

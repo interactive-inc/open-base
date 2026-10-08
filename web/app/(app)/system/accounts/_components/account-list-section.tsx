@@ -28,7 +28,7 @@ export async function AccountListSection(props: {
   const [accounts, roles] = await Promise.all([getAccounts(), props.canWrite ? getRoles() : []])
 
   if (accounts instanceof Error) {
-    return <FetchError message="アカウント一覧の取得に失敗しました" />
+    return <FetchError message="アカウントを読み込めませんでした。" />
   }
 
   const assignableRoles =
@@ -46,13 +46,13 @@ export async function AccountListSection(props: {
     <div className="flex flex-col gap-2">
       <p className="text-sm text-muted-foreground">{accounts.length} 件</p>
 
-      <Table aria-label="一覧">
+      <Table aria-label="アカウント一覧">
         <TableHeader>
           <TableRow>
-            <TableHead>Account ID</TableHead>
+            <TableHead>アカウントID</TableHead>
             <TableHead>状態</TableHead>
             <TableHead>ロール</TableHead>
-            <TableHead>ロール付与</TableHead>
+            <TableHead>ロールの付与</TableHead>
             <TableHead>操作</TableHead>
           </TableRow>
         </TableHeader>

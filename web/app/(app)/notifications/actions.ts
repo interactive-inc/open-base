@@ -26,13 +26,13 @@ export async function markNotificationReadAction(
   const notificationId = typeof notificationIdValue === "string" ? notificationIdValue.trim() : ""
 
   if (notificationId === "") {
-    return { ok: false, error: "通知 ID が不正です" }
+    return { ok: false, error: "通知を特定できませんでした。" }
   }
 
   const result = await markNotificationRead(notificationId)
 
   if (result instanceof Error) {
-    return { ok: false, error: "既読化に失敗しました" }
+    return { ok: false, error: "既読にできませんでした。" }
   }
 
   revalidatePath("/notifications")
@@ -49,7 +49,7 @@ export async function markAllNotificationsReadAction(
   const result = await markAllNotificationsRead()
 
   if (result instanceof Error) {
-    return { ok: false, error: "全件既読化に失敗しました" }
+    return { ok: false, error: "すべて既読にできませんでした。" }
   }
 
   revalidatePath("/notifications")
@@ -89,7 +89,7 @@ export async function createNotificationAction(
   const currentUser = await getMe()
 
   if (currentUser instanceof Error || canManageNotifications(currentUser.permissions) === false) {
-    return { ok: false, error: "通知を送信する権限がありません" }
+    return { ok: false, error: "通知を送信する権限がありません。" }
   }
 
   const recipientCodeValue = formData.get("recipient_employee_code")
@@ -98,7 +98,7 @@ export async function createNotificationAction(
     typeof recipientCodeValue === "string" ? recipientCodeValue.trim() : ""
 
   if (recipientEmployeeCode === "") {
-    return { ok: false, error: "宛先の社員コードを入力してください" }
+    return { ok: false, error: "宛先を選択してください。" }
   }
 
   const kind = toNotificationKind(formData.get("kind"))
@@ -108,7 +108,7 @@ export async function createNotificationAction(
   const title = typeof titleValue === "string" ? titleValue.trim() : ""
 
   if (title === "") {
-    return { ok: false, error: "タイトルを入力してください" }
+    return { ok: false, error: "タイトルを入力してください。" }
   }
 
   const bodyValue = formData.get("body")
@@ -124,7 +124,7 @@ export async function createNotificationAction(
   })
 
   if (created instanceof Error) {
-    return { ok: false, error: "通知の作成に失敗しました" }
+    return { ok: false, error: "通知を作成できませんでした。" }
   }
 
   revalidatePath("/notifications")

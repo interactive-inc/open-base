@@ -28,7 +28,7 @@ export async function setLocaleAction(
   const result = zLocale.safeParse(formData.get("locale"))
 
   if (!result.success) {
-    return { ok: false, error: "不正な言語コードです" }
+    return { ok: false, error: "表示言語を選び直してください。" }
   }
 
   const cookieStore = await cookies()
@@ -52,7 +52,8 @@ export async function updatePhoneAction(
 
   const rawPhone = formData.get("phone")
 
-  if (typeof rawPhone !== "string") return { ok: false, error: "電話番号の入力を確認してください" }
+  if (typeof rawPhone !== "string")
+    return { ok: false, error: "電話番号の入力を確認してください。" }
 
   const phone = rawPhone.trim() === "" ? null : rawPhone.trim()
 

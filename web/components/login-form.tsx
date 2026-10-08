@@ -88,7 +88,7 @@ export function LoginForm(props: Props) {
 
         <Field orientation="horizontal">
           <Button type="submit" disabled={isPending}>
-            {isPending ? t("サインイン中...") : t("サインイン")}
+            {isPending ? t("ログイン中…") : t("ログイン")}
           </Button>
         </Field>
       </FieldGroup>

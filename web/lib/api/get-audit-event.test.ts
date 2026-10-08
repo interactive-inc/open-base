@@ -59,7 +59,7 @@ describe("getAuditEvent", () => {
     await expect(getAuditEvent("42345678-1234-4abc-8def-1234567890ab")).resolves.toBe(expected)
     expect(mocks.toApiResponseError).toHaveBeenCalledWith(
       response,
-      "監査イベントを取得できませんでした",
+      "監査イベントを読み込めませんでした。",
     )
   })
 })

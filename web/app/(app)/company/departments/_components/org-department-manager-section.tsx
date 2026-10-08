@@ -7,7 +7,7 @@ export async function OrgDepartmentManagerSection() {
   const departments = await listOrgDepartments()
 
   if (departments instanceof Error) {
-    return <FetchError message="部署ノードの取得に失敗しました" />
+    return <FetchError message="部署を読み込めませんでした。" />
   }
 
   return <OrgDepartmentManagerList departments={departments} />

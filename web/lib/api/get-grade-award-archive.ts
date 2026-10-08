@@ -7,6 +7,6 @@ export async function getGradeAwardArchive(employeeId: string) {
     param: { employeeId },
   })
   if (Number(response.status) === 404) return null
-  if (response.status >= 400) return new Error("保全済みの等級付与原記録を取得できませんでした")
+  if (response.status >= 400) return new Error("過去の等級付与記録を読み込めませんでした。")
   return response.json()
 }

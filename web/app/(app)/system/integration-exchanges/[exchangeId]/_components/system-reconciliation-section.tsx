@@ -15,33 +15,33 @@ export async function SystemReconciliationSection(props: Props) {
   const runs = await getSystemReconciliationRuns(props.exchangeId)
 
   if (runs instanceof Error) {
-    return <FetchError message="照合の取得に失敗しました" />
+    return <FetchError message="照合結果を読み込めませんでした。" />
   }
 
   return (
     <section className="flex flex-col gap-4">
-      <h2 className="text-lg font-semibold">照合</h2>
+      <h2 className="text-lg font-semibold">照合結果</h2>
 
       <SystemResourceTable
-        caption="照合の一覧"
+        caption="照合結果の一覧"
         resources={runs}
         toKey={(run) => run.id}
-        emptyTitle="照合がありません"
-        emptyDescription="この交換ではまだ照合が記録されていません。"
+        emptyTitle="照合結果がありません"
+        emptyDescription="この連携はまだ照合されていません。"
         columns={[
           {
-            header: "識別子",
+            header: "ID",
             toValue: (run) => <span className="font-mono text-xs">{run.id}</span>,
           },
           { header: "状態", toValue: (run) => run.status },
           {
-            header: "外部の主張",
+            header: "外部の照合ID",
             toValue: (run) => <span className="font-mono text-xs">{run.assertion_id}</span>,
           },
-          { header: "こちらの版", toValue: (run) => run.local_version },
+          { header: "自システムのバージョン", toValue: (run) => run.local_version },
           { header: "項目数", toValue: (run) => run.item_count },
           {
-            header: "記録",
+            header: "記録日時",
             toValue: (run) => formatEpochMilliseconds(run.created_at),
           },
         ]}

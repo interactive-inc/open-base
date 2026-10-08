@@ -23,7 +23,7 @@ async function ReportsGrid() {
   const result = await getMyReports()
 
   if (result instanceof Error) {
-    return <FetchError message="直属部下の取得に失敗しました" />
+    return <FetchError message="マイチームを読み込めませんでした。" />
   }
 
   if (result.data.length === 0) {
@@ -31,7 +31,7 @@ async function ReportsGrid() {
       <EmptyState
         icon={Users}
         title="直属の部下はいません"
-        description="あなたを管理者とする在籍中の従業員がここに表示されます。"
+        description="あなたが上司に設定されている在籍中の従業員が表示されます。"
       />
     )
   }

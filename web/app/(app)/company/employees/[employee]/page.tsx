@@ -10,7 +10,7 @@ import { getMe } from "@/lib/api/get-me"
 import { canReadEmployees } from "@/lib/employee/can-read-employees"
 import { notFound } from "next/navigation"
 
-export const metadata = { title: "従業員詳細" }
+export const metadata = { title: "従業員の詳細" }
 
 type Props = {
   params: Promise<{ employee: string }>
@@ -29,7 +29,7 @@ export default async function EmployeeDetailPage(props: Props) {
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader title="従業員詳細">
+      <PageHeader title="従業員の詳細">
         <BackButton href="/company/employees" label="一覧に戻る" />
       </PageHeader>
 

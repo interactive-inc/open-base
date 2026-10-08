@@ -54,7 +54,7 @@ export default async function DepartmentApplicationsPage(props: Props) {
               <TableRow>
                 <TableHead>申請者</TableHead>
 
-                <TableHead>テンプレート</TableHead>
+                <TableHead>申請の種類</TableHead>
 
                 <TableHead>状態</TableHead>
 

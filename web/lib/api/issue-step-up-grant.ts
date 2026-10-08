@@ -19,7 +19,7 @@ export async function issueStepUpGrant(password: string): Promise<StepUpGrant | 
   })
 
   if (response.status !== 201) {
-    return toApiResponseError(response, "再認証に失敗しました")
+    return toApiResponseError(response, "再認証できませんでした。")
   }
 
   const grant = await response.json()

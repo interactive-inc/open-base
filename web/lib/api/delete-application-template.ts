@@ -14,10 +14,10 @@ export async function deleteApplicationTemplate(code: string): Promise<null | Er
 
   if (response.status >= 400) {
     return toResponseError(response, {
-      fallback: "申請テンプレートの削除に失敗しました",
+      fallback: "申請テンプレートを削除できませんでした",
       conflictMessages: {
         "template is in use by pending applications":
-          "審査中の申請で使用されているため削除できません",
+          "審査中の申請で使われているため削除できません。",
       },
     })
   }

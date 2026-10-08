@@ -13,7 +13,7 @@ import { handleDetailError } from "@/lib/api/handle-detail-error"
 import type { ApplicationApprovalEntry } from "@/lib/api/types/application-types"
 import type { ApplicationWorkflowProgress } from "@/lib/api/types/application-types"
 
-export const metadata = { title: "申請詳細" }
+export const metadata = { title: "申請の詳細" }
 
 type Props = {
   params: Promise<{ application: string }>
@@ -73,7 +73,7 @@ export default async function ApplicationDetailPage(props: Props) {
 
       {application.can_decide && decisionStep !== undefined ? (
         <section aria-label="申請の判断" className="flex flex-col gap-4">
-          <h2 className="text-lg font-semibold">この内容を確認して判断する</h2>
+          <h2 className="text-lg font-semibold">内容を確認して判断</h2>
           <ApplicationDecisionForm
             key={`${application.id}:${application.decision_target.proposal_version}:${application.decision_target.task_key}:${application.decision_target.task_round}`}
             applicationId={application.id}

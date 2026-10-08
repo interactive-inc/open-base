@@ -64,7 +64,7 @@ describe("SystemConnectorSection", () => {
 
     render(await SystemConnectorSection())
 
-    expect(screen.getByText("コネクタの取得に失敗しました")).toBeDefined()
+    expect(screen.getByText("コネクタを読み込めませんでした。")).toBeDefined()
     expect(screen.queryByRole("table")).toBeNull()
   })
 })

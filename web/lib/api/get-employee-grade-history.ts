@@ -7,7 +7,7 @@ export async function getEmployeeGradeHistory(code: string) {
   const employee = await getEmployeeByCode(code)
   if (employee instanceof Error) return employee
   if (employee === null || employee.profile === null)
-    return new Error("等級履歴の参照に必要な会社情報が未接続です")
+    return new Error("等級履歴の表示に必要な会社情報がありません。")
   const profile = employee.profile
   const responses = await Promise.all([
     getGradeAssignmentHistory({ ...profile, offset: 0 }),

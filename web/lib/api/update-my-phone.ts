@@ -15,7 +15,7 @@ export async function updateMyPhone(
   })
 
   if (response.status >= 400) {
-    return toResponseError(response, { fallback: "電話番号の更新に失敗しました" })
+    return toResponseError(response, { fallback: "電話番号を更新できませんでした" })
   }
 
   return response.json()

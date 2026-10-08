@@ -14,10 +14,10 @@ const kindOptions = [
 
 const statusOptions = [
   { value: "", label: "すべて" },
-  { value: "queued", label: "待機" },
+  { value: "queued", label: "待機中" },
   { value: "leased", label: "実行中" },
   { value: "succeeded", label: "成功" },
-  { value: "dead_letter", label: "dead letter" },
+  { value: "dead_letter", label: "配信不能" },
 ]
 
 /**

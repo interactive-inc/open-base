@@ -7,9 +7,9 @@ const availabilitySchema = z.object({ disabled_features: z.array(z.string()) })
 export async function getFeatureAvailability(): Promise<ReadonlyArray<string> | Error> {
   const client = await createClient()
   const response = await client.company.features.$get()
-  if (!response.ok) return new Error("機能設定を取得できませんでした")
+  if (!response.ok) return new Error("機能の設定を読み込めませんでした。")
   const body = await response.json().catch(() => null)
   const availability = availabilitySchema.safeParse(body)
-  if (!availability.success) return new Error("機能設定を確認できませんでした")
+  if (!availability.success) return new Error("機能の設定を確認できませんでした。")
   return availability.data.disabled_features
 }

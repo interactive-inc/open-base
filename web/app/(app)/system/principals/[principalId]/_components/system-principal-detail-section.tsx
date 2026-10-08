@@ -13,7 +13,7 @@ export async function SystemPrincipalDetailSection(props: Props) {
   const principal = await getSystemPrincipal(props.principalId)
 
   if (principal instanceof Error) {
-    return <FetchError message="Principal の取得に失敗しました" />
+    return <FetchError message="主体を読み込めませんでした。" />
   }
 
   return (
@@ -22,7 +22,7 @@ export async function SystemPrincipalDetailSection(props: Props) {
 
       <dl className="grid gap-4 rounded-2xl border bg-card p-4 sm:grid-cols-2">
         <div className="flex flex-col gap-2">
-          <dt className="text-xs text-muted-foreground">識別子</dt>
+          <dt className="text-xs text-muted-foreground">ID</dt>
 
           <dd className="font-mono text-xs">{principal.id}</dd>
         </div>
@@ -58,19 +58,19 @@ export async function SystemPrincipalDetailSection(props: Props) {
         </div>
 
         <div className="flex flex-col gap-2">
-          <dt className="text-xs text-muted-foreground">版</dt>
+          <dt className="text-xs text-muted-foreground">バージョン</dt>
 
           <dd className="text-sm">{principal.revision}</dd>
         </div>
 
         <div className="flex flex-col gap-2">
-          <dt className="text-xs text-muted-foreground">作成</dt>
+          <dt className="text-xs text-muted-foreground">作成日時</dt>
 
           <dd className="text-sm">{formatDateTime(principal.created_at)}</dd>
         </div>
 
         <div className="flex flex-col gap-2">
-          <dt className="text-xs text-muted-foreground">更新</dt>
+          <dt className="text-xs text-muted-foreground">更新日時</dt>
 
           <dd className="text-sm">{formatDateTime(principal.updated_at)}</dd>
         </div>

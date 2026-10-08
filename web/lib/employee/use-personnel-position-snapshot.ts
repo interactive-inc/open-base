@@ -35,12 +35,12 @@ export function usePersonnelPositionSnapshot(companyRevision: number) {
         return
       }
       if (response.companyRevision !== companyRevision || response.effectiveOn !== date) {
-        setError("確認した会社版・有効日と役職情報が一致しません")
+        setError("役職情報が会社情報または発効日と一致しません。再読み込みしてください。")
         return
       }
       setSnapshot(response)
     } catch {
-      if (sequence === requestSequence.current) setError("役職情報を取得できませんでした")
+      if (sequence === requestSequence.current) setError("役職情報を読み込めませんでした。")
     }
   }
 

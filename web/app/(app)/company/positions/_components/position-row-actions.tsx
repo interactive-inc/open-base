@@ -42,7 +42,7 @@ function CancelPositionButton(props: Props) {
     if (result.error !== null) {
       toast.error(result.error)
     } else if (result.ok) {
-      toast.success("役職の取消を記録しました")
+      toast.success("役職を取り消しました")
     }
 
     return result
@@ -65,12 +65,12 @@ function CancelPositionButton(props: Props) {
           <AlertDialogTitle>この役職を取り消しますか？</AlertDialogTitle>
 
           <AlertDialogDescription>
-            指定した日からの取消を記録します。過去の改訂と判断理由は残ります。
+            指定した日から役職を無効にします。これまでの変更履歴と理由は残ります。
           </AlertDialogDescription>
         </AlertDialogHeader>
 
         <AlertDialogFooter>
-          <AlertDialogCancel>やめる</AlertDialogCancel>
+          <AlertDialogCancel>キャンセル</AlertDialogCancel>
 
           <form action={formAction}>
             <PositionRevisionFields
@@ -89,7 +89,7 @@ function CancelPositionButton(props: Props) {
             <input type="hidden" name="description" value={props.position.description ?? ""} />
 
             <AlertDialogAction type="submit" variant="destructive" disabled={isPending}>
-              取消を記録
+              取り消す
             </AlertDialogAction>
           </form>
         </AlertDialogFooter>

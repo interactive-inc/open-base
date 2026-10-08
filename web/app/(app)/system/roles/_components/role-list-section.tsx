@@ -21,14 +21,14 @@ export async function RoleListSection(props: { actorPermissionKeys: ReadonlyArra
   const roles = await getRoles()
 
   if (roles instanceof Error) {
-    return <FetchError message="ロール一覧の取得に失敗しました" />
+    return <FetchError message="ロールを読み込めませんでした。" />
   }
 
   return (
     <div className="flex flex-col gap-2">
       <p className="text-sm text-muted-foreground">{roles.length} 件</p>
 
-      <Table aria-label="一覧">
+      <Table aria-label="ロール一覧">
         <TableHeader>
           <TableRow>
             <TableHead>キー</TableHead>
@@ -52,9 +52,9 @@ export async function RoleListSection(props: { actorPermissionKeys: ReadonlyArra
                 <TableCell>{role.description ?? "—"}</TableCell>
                 <TableCell>
                   {role.is_system ? (
-                    <StatusLabel>システム</StatusLabel>
+                    <StatusLabel>標準</StatusLabel>
                   ) : (
-                    <StatusLabel>動的</StatusLabel>
+                    <StatusLabel>カスタム</StatusLabel>
                   )}
                 </TableCell>
                 <TableCell>
@@ -72,7 +72,7 @@ export async function RoleListSection(props: { actorPermissionKeys: ReadonlyArra
                       )}
                     </TableRowActions>
                   ) : (
-                    <span className="text-sm text-muted-foreground">上位ロール</span>
+                    <span className="text-sm text-muted-foreground">閲覧のみ</span>
                   )}
                 </TableCell>
               </TableRow>

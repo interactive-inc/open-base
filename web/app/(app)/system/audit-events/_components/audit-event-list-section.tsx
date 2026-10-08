@@ -36,7 +36,7 @@ export async function AuditEventListSection(props: Props) {
 
     return (
       <Alert variant="destructive">
-        <AlertTitle>監査ログを取得できませんでした</AlertTitle>
+        <AlertTitle>監査ログを読み込めませんでした</AlertTitle>
         <AlertDescription>時間をおいて、もう一度お試しください。</AlertDescription>
       </Alert>
     )

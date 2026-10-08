@@ -12,12 +12,7 @@ const recordedTime = new Intl.DateTimeFormat("ja-JP", {
 /** 確定した等級割当の改訂と、保全した旧付与の原記録を区別する。 */
 export async function EmployeeGradeHistory(props: Props) {
   const history = await getEmployeeGradeHistory(props.code)
-  if (history instanceof Error)
-    return (
-      <p role="status">
-        等級履歴を取得できませんでした。閲覧権限と会社情報の接続状況を確認してください。
-      </p>
-    )
+  if (history instanceof Error) return <p role="status">等級履歴を読み込めませんでした。</p>
   return (
     <Card>
       <CardHeader>
@@ -25,39 +20,41 @@ export async function EmployeeGradeHistory(props: Props) {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          <p>確定した等級割当（会社版 {history.companyRevision}）</p>
+          <p>等級の割り当て</p>
           {history.revisions.length === 0 ? (
-            <p>この会社版に確定した等級割当はありません。</p>
+            <p>等級の割り当てはありません。</p>
           ) : (
             <EmployeeGradeHistoryTable
-              label="確定した等級割当の改訂"
-              columns={["有効期間", "等級ID・雇用ID", "改訂・状態", "記録者・理由"]}
+              label="等級の割り当て履歴"
+              columns={["有効期間", "等級ID・雇用ID", "変更ID・版・状態", "記録者・理由・記録日時"]}
               rows={history.revisions.map((revision) => ({
                 key: `${revision.id}:${revision.revision}`,
                 cells: [
                   `${revision.effectiveFrom} 〜 ${revision.effectiveTo ?? "終了日なし"}`,
                   `${revision.gradeId} / ${revision.employmentId}`,
-                  `${revision.id} / ${revision.revision} / ${revision.state === "void" ? "取消" : "記録"}`,
+                  `${revision.id} / ${revision.revision} / ${revision.state === "void" ? "取消" : "有効"}`,
                   `${revision.actorAccountId} / ${revision.reason} / ${recordedTime.format(revision.recordedAt)}`,
                 ],
               }))}
             />
           )}
-          <p>旧等級付与の原記録</p>
+          <p>以前の等級記録</p>
           {history.archive === null ? (
-            <p role="status">原記録の保全状況を確認できません。旧履歴がないことを意味しません。</p>
+            <p role="status">
+              以前の等級記録は保存されていないため表示できません。記録がなかったとは限りません。
+            </p>
           ) : (
             <>
               <p>
-                保全日：{history.archive.observedOn}
-                。保全時の名称は、付与当時の名称を証明するものではありません。
+                保存日：{history.archive.observedOn}
+                。等級名は保存した時点のもので、付与した当時の名称と異なる場合があります。
               </p>
               {history.archive.source.awards.length === 0 ? (
-                <p>保全時の原記録は0件です。</p>
+                <p>以前の等級記録はありません。</p>
               ) : (
                 <EmployeeGradeHistoryTable
-                  label="保全した旧等級付与の原記録"
-                  columns={["元の適用日", "元の等級ID・保全時の名称", "元の理由・作成日時"]}
+                  label="以前の等級記録"
+                  columns={["適用日", "等級ID・名称（保存時点）", "理由・作成日時"]}
                   rows={history.archive.source.awards.map((award) => ({
                     key: String(award.id),
                     cells: [

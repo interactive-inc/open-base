@@ -37,7 +37,7 @@ describe("SystemPermissionDefinitionSection", () => {
 
     render(await SystemPermissionDefinitionSection())
 
-    expect(screen.getByText("権限定義がありません")).toBeDefined()
+    expect(screen.getByText("権限がありません")).toBeDefined()
     expect(screen.queryByRole("table")).toBeNull()
   })
 
@@ -46,7 +46,7 @@ describe("SystemPermissionDefinitionSection", () => {
 
     render(await SystemPermissionDefinitionSection())
 
-    expect(screen.getByText("権限定義の取得に失敗しました")).toBeDefined()
+    expect(screen.getByText("権限の一覧を読み込めませんでした。")).toBeDefined()
     expect(screen.queryByRole("table")).toBeNull()
   })
 })

@@ -35,7 +35,7 @@ export function RevokeRoleButton(props: Props) {
     const result = await revokeAccountRoleAction(previousState, formData)
 
     if (result.kind === "succeeded") {
-      toast.success("ロールを剥奪しました")
+      toast.success("ロールを外しました")
     }
 
     if (result.kind === "step_up_required") {
@@ -84,7 +84,7 @@ export function RevokeRoleButton(props: Props) {
           variant="secondary"
           size="sm"
           disabled={isPending}
-          aria-label={`${props.roleLabel} を剥奪`}
+          aria-label={`${props.roleLabel}を外す`}
         >
           {props.roleLabel}
           <X data-icon="inline-end" />

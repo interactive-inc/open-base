@@ -76,7 +76,7 @@ describe("AuditEventTable", () => {
     expect(screen.getByText("custom_reason")).toBeDefined()
     expect(screen.getByText(/10:02:03/u)).toBeDefined()
 
-    const link = screen.getByRole("button", { name: "監査イベント evt-001 の詳細" })
+    const link = screen.getByRole("button", { name: "監査ログ evt-001 の詳細" })
     expect(link.getAttribute("href")).toBe("/system/audit-events/evt-001")
     expect(link.getAttribute("data-prefetch")).toBe("false")
   })

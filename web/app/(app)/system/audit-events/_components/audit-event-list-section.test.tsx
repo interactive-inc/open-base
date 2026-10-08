@@ -43,7 +43,7 @@ describe("AuditEventListSection", () => {
   test("does not render partial data for other failures", async () => {
     mocks.getAuditEvents.mockResolvedValue(new ApiResponseError(503, "raw upstream body"))
     render(await AuditEventListSection({ query }))
-    expect(screen.getByText("監査ログを取得できませんでした")).toBeDefined()
+    expect(screen.getByText("監査ログを読み込めませんでした")).toBeDefined()
     expect(screen.queryByText("raw upstream body")).toBeNull()
   })
 })

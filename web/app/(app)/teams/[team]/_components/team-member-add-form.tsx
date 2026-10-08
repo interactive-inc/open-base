@@ -62,13 +62,14 @@ export function TeamMemberAddForm(props: Props) {
         })
         .catch(() => {
           if (sequence === selectionSequence.current)
-            toast.error("配属基準リビジョンの取得に失敗しました")
+            toast.error("配属に必要な会社情報を読み込めませんでした。")
         })
     }
   }
 
   const reduce = async (previous: PersonnelActionFormState, formData: FormData) => {
-    if (!positionSnapshot.isReady) return { ok: false, error: "有効日の会社情報を確認してください" }
+    if (!positionSnapshot.isReady)
+      return { ok: false, error: "発効日時点の会社情報を確認してください。" }
     const result = await submitPersonnelAction(previous, formData)
 
     if (result.ok) {
@@ -96,10 +97,10 @@ export function TeamMemberAddForm(props: Props) {
 
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>この部署へ配属する</DialogTitle>
+          <DialogTitle>メンバーを追加</DialogTitle>
 
           <DialogDescription>
-            既存の従業員をこの部署へ配属する人事発令を登録します。新しい従業員の入社は従業員登録から行います。
+            登録済みの従業員をこの部署に配属します。新しく入社する人は、先に従業員として登録してください。
           </DialogDescription>
         </DialogHeader>
 
@@ -150,13 +151,13 @@ export function TeamMemberAddForm(props: Props) {
                 className="w-full"
                 defaultValue="primary_assignment_started"
               >
-                <NativeSelectOption value="primary_assignment_started">主配属</NativeSelectOption>
+                <NativeSelectOption value="primary_assignment_started">主務</NativeSelectOption>
 
                 <NativeSelectOption value="concurrent_assignment_started">兼務</NativeSelectOption>
               </NativeSelect>
 
               <FieldDescription>
-                主所属を移す異動は従業員詳細の人事変更から行います。
+                主務の部署を変える異動は、従業員の詳細画面から行います。
               </FieldDescription>
             </Field>
 
@@ -200,9 +201,9 @@ export function TeamMemberAddForm(props: Props) {
             </Field>
 
             <Field>
-              <FieldLabel htmlFor="team-member-manager">直属上司コード（任意）</FieldLabel>
+              <FieldLabel htmlFor="team-member-manager">上司の従業員コード（任意）</FieldLabel>
 
-              <Input id="team-member-manager" name="manager_employee_code" placeholder="例: E004" />
+              <Input id="team-member-manager" name="manager_employee_code" placeholder="例：E004" />
             </Field>
 
             {state.error !== null ? <FieldError>{state.error}</FieldError> : null}

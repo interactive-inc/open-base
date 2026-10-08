@@ -34,7 +34,7 @@ describe("SystemHealthSection", () => {
 
     render(await SystemHealthSection())
 
-    expect(screen.getByText("health の取得に失敗しました")).toBeDefined()
+    expect(screen.getByText("稼働状況を読み込めませんでした。")).toBeDefined()
     expect(screen.queryByText("正常")).toBeNull()
   })
 })

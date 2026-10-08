@@ -56,9 +56,9 @@ describe("AppLayout", () => {
 
 test("機能設定の失敗時は保護画面を表示せず、再読込を案内する", async () => {
   mocks.getMe.mockResolvedValueOnce({ permissions: [] })
-  mocks.availability.mockResolvedValueOnce(new Error("機能設定を取得できませんでした"))
+  mocks.availability.mockResolvedValueOnce(new Error("機能の設定を読み込めませんでした。"))
   render(await AppLayout({ children: <div>protected</div> }))
-  expect(screen.getByRole("alert").textContent).toContain("機能設定を取得できませんでした")
+  expect(screen.getByRole("alert").textContent).toContain("機能の設定を読み込めませんでした。")
   expect(screen.queryByText("protected")).toBeNull()
   expect(screen.getByRole("button", { name: "再読み込み" })).toBeTruthy()
 })

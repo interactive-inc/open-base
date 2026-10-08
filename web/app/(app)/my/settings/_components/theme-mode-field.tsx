@@ -19,7 +19,7 @@ const themeModes: ReadonlyArray<{
   label: string
   icon: typeof Monitor
 }> = [
-  { value: "system", label: "システム設定", icon: Monitor },
+  { value: "system", label: "端末の設定", icon: Monitor },
   { value: "light", label: "ライト", icon: Sun },
   { value: "dark", label: "ダーク", icon: Moon },
 ]
@@ -57,7 +57,7 @@ export function ThemeModeField() {
         <FieldContent>
           <FieldTitle id="theme-mode-label">表示テーマ</FieldTitle>
           <FieldDescription>
-            システム設定を選ぶと、OSのライト/ダーク設定に合わせて表示します。
+            「端末の設定」を選ぶと、端末のライト／ダーク設定に合わせて表示します。
             {mounted ? ` 現在の表示は${resolvedThemeLabel}です。` : ""}
           </FieldDescription>
         </FieldContent>

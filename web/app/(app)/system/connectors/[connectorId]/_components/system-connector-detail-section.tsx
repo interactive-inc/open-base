@@ -18,7 +18,7 @@ export async function SystemConnectorDetailSection(props: Props) {
   const connectors = await getSystemConnectors()
 
   if (connectors instanceof Error) {
-    return <FetchError message="コネクタの取得に失敗しました" />
+    return <FetchError message="コネクタを読み込めませんでした。" />
   }
 
   const connector = connectors.find((candidate) => candidate.id === props.connectorId)
@@ -27,7 +27,7 @@ export async function SystemConnectorDetailSection(props: Props) {
     return (
       <EmptyState
         title="コネクタが見つかりません"
-        description="この識別子のコネクタは登録されていません。一覧から選び直します。"
+        description="このIDのコネクタは登録されていません。一覧から選び直してください。"
       />
     )
   }
@@ -38,7 +38,7 @@ export async function SystemConnectorDetailSection(props: Props) {
 
       <dl className="grid gap-4 rounded-2xl border bg-card p-4 sm:grid-cols-2">
         <div className="flex flex-col gap-2">
-          <dt className="text-xs text-muted-foreground">識別子</dt>
+          <dt className="text-xs text-muted-foreground">ID</dt>
 
           <dd className="font-mono text-xs">{connector.id}</dd>
         </div>
@@ -50,13 +50,13 @@ export async function SystemConnectorDetailSection(props: Props) {
         </div>
 
         <div className="flex flex-col gap-2">
-          <dt className="text-xs text-muted-foreground">向き</dt>
+          <dt className="text-xs text-muted-foreground">方向</dt>
 
           <dd className="text-sm">{toConnectorDirectionLabel(connector.direction)}</dd>
         </div>
 
         <div className="flex flex-col gap-2">
-          <dt className="text-xs text-muted-foreground">transport</dt>
+          <dt className="text-xs text-muted-foreground">接続方式</dt>
 
           <dd className="text-sm">{toConnectorTransportLabel(connector.transport)}</dd>
         </div>
@@ -68,7 +68,7 @@ export async function SystemConnectorDetailSection(props: Props) {
         </div>
 
         <div className="flex flex-col gap-2">
-          <dt className="text-xs text-muted-foreground">版</dt>
+          <dt className="text-xs text-muted-foreground">バージョン</dt>
 
           <dd className="text-sm">{connector.revision}</dd>
         </div>
@@ -78,7 +78,7 @@ export async function SystemConnectorDetailSection(props: Props) {
         className="text-sm underline"
         href={`/system/integration-exchanges?connector_id=${encodeURIComponent(connector.id)}`}
       >
-        このコネクタの外部交換を見る
+        このコネクタの連携履歴を見る
       </Link>
     </section>
   )

@@ -19,7 +19,7 @@ export function readEmployeeProfileCommand(form: FormData) {
     commandId: form.get("profile_command_id"),
     reason: form.get("reason"),
   })
-  if (!parsed.success) return new Error("人物情報を再読み込みしてから変更してください")
+  if (!parsed.success) return new Error("従業員情報を再読み込みしてから変更してください。")
   return {
     commandId: parsed.data.commandId,
     reason: parsed.data.reason,

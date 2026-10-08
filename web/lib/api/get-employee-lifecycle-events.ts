@@ -19,7 +19,7 @@ export async function getEmployeeLifecycleEvents(
     { init: { cache: "no-store" } },
   )
   if (!response.ok) {
-    return toResponseError(response, { fallback: "人事タイムラインの取得に失敗しました" })
+    return toResponseError(response, { fallback: "人事の履歴を読み込めませんでした" })
   }
   return response.json()
 }

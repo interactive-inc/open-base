@@ -33,7 +33,7 @@ export function EmployeeSearchForm(props: Props) {
                 name="q"
                 type="search"
                 defaultValue={props.filter.q ?? ""}
-                placeholder="氏名・メールなど"
+                placeholder="例: 氏名、メールアドレス"
               />
             </Field>
           </div>
@@ -47,7 +47,7 @@ export function EmployeeSearchForm(props: Props) {
                 name="dept"
                 type="text"
                 defaultValue={props.filter.dept ?? ""}
-                placeholder="部署名"
+                placeholder="例: 営業部"
               />
             </Field>
           </div>

@@ -8,7 +8,7 @@ const targetTypeLabels: Readonly<Record<string, string>> = {
   application_workflow: "承認フロー",
   application: "申請",
   approval_delegation: "承認委任",
-  audit_event: "監査イベント",
+  audit_event: "監査ログ",
   audit_export: "監査出力",
 }
 

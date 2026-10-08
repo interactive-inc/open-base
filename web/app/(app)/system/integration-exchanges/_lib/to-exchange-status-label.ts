@@ -2,7 +2,7 @@ const statusLabels: Record<string, string> = {
   pending: "処理中",
   succeeded: "成功",
   failed: "失敗",
-  cancelled: "取消",
+  cancelled: "取り消し",
 }
 
 /** 外部交換の状態を日本語にする。 */

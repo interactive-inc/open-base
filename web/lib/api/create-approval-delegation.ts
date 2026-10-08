@@ -13,6 +13,6 @@ export async function createApprovalDelegation(request: {
     json: request,
   })
   if (response.status >= 400)
-    return toResponseError(response, { fallback: "代理承認設定の作成に失敗しました" })
+    return toResponseError(response, { fallback: "代理承認を設定できませんでした" })
   return response.json()
 }

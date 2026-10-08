@@ -5,7 +5,7 @@ import { getMe } from "@/lib/api/get-me"
 import { getPermissions } from "@/lib/api/get-permissions"
 import { notFound } from "next/navigation"
 
-export const metadata = { title: "ロール作成" }
+export const metadata = { title: "ロールの作成" }
 
 /**
  * ロール作成画面。権限カタログを取得してチェックボックスフォームに渡す（iam:write が必要）。
@@ -27,9 +27,9 @@ export default async function AdminRoleNewPage() {
   if (permissions instanceof Error) {
     return (
       <div className="flex flex-col gap-8">
-        <PageHeader title="ロール作成" />
+        <PageHeader title="ロールの作成" />
 
-        <FetchError message="権限カタログの取得に失敗しました" />
+        <FetchError message="権限の一覧を読み込めませんでした。" />
       </div>
     )
   }
@@ -39,7 +39,7 @@ export default async function AdminRoleNewPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader title="ロール作成" />
+      <PageHeader title="ロールの作成" />
 
       <RoleCreateForm
         permissions={permissions.filter((permission) => actorPermissionKeys.has(permission.key))}

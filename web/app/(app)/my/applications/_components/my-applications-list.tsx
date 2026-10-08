@@ -44,7 +44,7 @@ export function MyApplicationsList(props: Props) {
   if (props.applications.length === 0) {
     return (
       <EmptyState
-        title="提出済みの申請はまだありません"
+        title="申請はまだありません"
         description="右上の「新規申請」から申請を提出できます。"
       />
     )
@@ -52,12 +52,12 @@ export function MyApplicationsList(props: Props) {
 
   return (
     <div className="overflow-x-auto">
-      <Table aria-label="一覧">
+      <Table aria-label="自分の申請">
         <TableHeader>
           <TableRow>
-            <TableHead>申請 ID</TableHead>
-            <TableHead>ステータス</TableHead>
-            <TableHead>現在のステップ</TableHead>
+            <TableHead>申請ID</TableHead>
+            <TableHead>状態</TableHead>
+            <TableHead>現在の承認段階</TableHead>
             <TableHead>申請日</TableHead>
             <TableHead className="text-right">操作</TableHead>
           </TableRow>
@@ -97,12 +97,12 @@ export function MyApplicationsList(props: Props) {
   )
 }
 
-/** 承認待ちのときだけ変更・取り下げ操作を表示する。審査済みや未採番は操作不可。 */
+/** 承認待ちのときだけ変更・取り下げ操作を表示する。審査済みや未採番は操作なし。 */
 function ApplicationRowActions(props: { application: ApplicationListItem }) {
   const applicationId = props.application.id
 
   if (props.application.status !== "pending" || applicationId === null) {
-    return <span className="block text-right text-xs text-muted-foreground">操作不可</span>
+    return <span className="block text-right text-xs text-muted-foreground">操作なし</span>
   }
 
   return (
@@ -151,7 +151,7 @@ function UpdateApplicationDialog(props: {
 
   function handleOpenChange(nextOpen: boolean) {
     if (!nextOpen && isDirty.current) {
-      const ok = window.confirm("編集中の内容は破棄されます。閉じてよろしいですか?")
+      const ok = window.confirm("編集中の内容は破棄されます。閉じますか？")
 
       if (!ok) {
         return
@@ -171,9 +171,7 @@ function UpdateApplicationDialog(props: {
 
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>
-            {props.resubmit ? "差戻し内容を修正して再申請" : "申請内容を変更"}
-          </DialogTitle>
+          <DialogTitle>{props.resubmit ? "差し戻された申請を修正" : "申請内容を変更"}</DialogTitle>
 
           <DialogDescription>申請内容を編集して保存してください。</DialogDescription>
         </DialogHeader>
@@ -225,7 +223,7 @@ function WithdrawApplicationButton(props: { applicationId: EntityId }) {
       triggerLabel="取り下げ"
       title="この申請を取り下げますか？"
       description="取り下げた申請は承認されません。この操作は元に戻せません。"
-      confirmLabel="申請を取り下げ"
+      confirmLabel="取り下げる"
       pending={pending}
     >
       <input type="hidden" name="application_id" value={props.applicationId} />

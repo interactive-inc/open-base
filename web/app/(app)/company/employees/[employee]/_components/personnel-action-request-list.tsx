@@ -9,8 +9,8 @@ export function PersonnelActionRequestList(props: { data: PersonnelActionRequest
   return (
     <Card>
       <CardHeader>
-        <CardTitle>進行中の人事変更</CardTitle>
-        <CardDescription>承認フローで確定を待っている申請</CardDescription>
+        <CardTitle>承認待ちの人事発令</CardTitle>
+        <CardDescription>承認されると確定します。</CardDescription>
       </CardHeader>
       <CardContent>
         <ul className="flex flex-col gap-4">

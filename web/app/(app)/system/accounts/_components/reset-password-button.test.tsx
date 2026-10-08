@@ -10,7 +10,7 @@ vi.mock("@/lib/auth/step-up-action", () => ({ stepUpAction: vi.fn() }))
 async function submitNewPassword() {
   render(<ResetPasswordButton accountId="acc-1" />)
 
-  fireEvent.click(screen.getByRole("button", { name: "PW再設定" }))
+  fireEvent.click(screen.getByRole("button", { name: "パスワード再設定" }))
 
   await waitFor(() => {
     expect(screen.getByLabelText("新しいパスワード")).toBeDefined()

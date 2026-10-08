@@ -9,7 +9,7 @@ export async function OrgTreeView() {
   const nodes = await getOrgTree()
 
   if (nodes instanceof Error) {
-    return <FetchError message="組織ツリーの取得に失敗しました" />
+    return <FetchError message="組織図を読み込めませんでした。" />
   }
 
   if (nodes.length === 0) {

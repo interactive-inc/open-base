@@ -22,7 +22,7 @@ const actionLabels: Readonly<Record<string, string>> = {
   "application.decision.approved": "申請承認",
   "application.decision.rejected": "申請却下",
   "audit.event.searched": "監査ログ検索",
-  "audit.event.read": "監査イベント閲覧",
+  "audit.event.read": "監査ログ閲覧",
   "audit.event.exported": "監査ログのCSV出力",
 }
 

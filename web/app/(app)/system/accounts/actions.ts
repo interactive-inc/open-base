@@ -57,7 +57,7 @@ export async function revokeAccountRoleAction(
   const currentUser = await getMe()
 
   if (currentUser instanceof Error || canAssignRoles(currentUser.permissions) === false) {
-    return { kind: "failed", error: "ロールを管理する権限がありません" }
+    return { kind: "failed", error: "ロールを管理する権限がありません。" }
   }
 
   const accountId = toOpaqueAccountId(formData.get("account_id"))
@@ -65,7 +65,7 @@ export async function revokeAccountRoleAction(
   const bindingId = toOpaqueAccountId(formData.get("binding_id"))
 
   if (accountId === null || bindingId === null) {
-    return { kind: "failed", error: "アカウントとロールを指定してください" }
+    return { kind: "failed", error: "アカウントとロールを指定してください。" }
   }
 
   const stepUpToken = await getStepUpToken()
@@ -76,13 +76,13 @@ export async function revokeAccountRoleAction(
     return toFailedState(
       revoked,
       {
-        last_admin: "最後の管理者はロールを外せません",
-        role_escalation: "自分より強い権限のロールは外せません",
-        role_not_found: "指定したロールが見つかりません",
-        forbidden: "ロールを管理する権限がありません",
-        invalid_session: "セッションが無効です。ログインし直してください",
+        last_admin: "最後の管理者からはロールを外せません。",
+        role_escalation: "自分より強い権限のロールは外せません。",
+        role_not_found: "指定したロールが見つかりません。",
+        forbidden: "ロールを管理する権限がありません。",
+        invalid_session: "セッションが無効です。ログインし直してください。",
       },
-      "ロールの剥奪に失敗しました",
+      "ロールを外せませんでした。",
     )
   }
 
@@ -99,7 +99,7 @@ export async function resetPasswordAction(
   const currentUser = await getMe()
 
   if (currentUser instanceof Error || canManageAccounts(currentUser.permissions) === false) {
-    return { kind: "failed", error: "アカウントを管理する権限がありません" }
+    return { kind: "failed", error: "アカウントを管理する権限がありません。" }
   }
 
   const accountId = toOpaqueAccountId(formData.get("account_id"))
@@ -107,11 +107,11 @@ export async function resetPasswordAction(
   const newPassword = toText(formData.get("new_password"))
 
   if (accountId === null || newPassword === null) {
-    return { kind: "failed", error: "アカウントとパスワードを指定してください" }
+    return { kind: "failed", error: "アカウントとパスワードを指定してください。" }
   }
 
   if (newPassword.length < 12) {
-    return { kind: "failed", error: "パスワードは12文字以上にしてください" }
+    return { kind: "failed", error: "パスワードは12文字以上にしてください。" }
   }
 
   const stepUpToken = await getStepUpToken()
@@ -122,14 +122,14 @@ export async function resetPasswordAction(
     return toFailedState(
       reset,
       {
-        weak_password: "パスワードは12文字以上にしてください",
-        role_escalation: "自分より強い権限のアカウントは変更できません",
-        account_not_found: "対象のアカウントが見つかりません",
-        identity_not_found: "このアカウントにはパスワードが設定されていません",
-        forbidden: "アカウントを管理する権限がありません",
-        invalid_session: "セッションが無効です。ログインし直してください",
+        weak_password: "パスワードは12文字以上にしてください。",
+        role_escalation: "自分より強い権限のアカウントは変更できません。",
+        account_not_found: "対象のアカウントが見つかりません。",
+        identity_not_found: "このアカウントにはパスワードが設定されていません。",
+        forbidden: "アカウントを管理する権限がありません。",
+        invalid_session: "セッションが無効です。ログインし直してください。",
       },
-      "パスワードの再設定に失敗しました",
+      "パスワードを再設定できませんでした。",
     )
   }
 
@@ -146,7 +146,7 @@ export async function setAccountStatusAction(
   const currentUser = await getMe()
 
   if (currentUser instanceof Error || canManageAccounts(currentUser.permissions) === false) {
-    return { kind: "failed", error: "アカウントを管理する権限がありません" }
+    return { kind: "failed", error: "アカウントを管理する権限がありません。" }
   }
 
   const accountId = toOpaqueAccountId(formData.get("account_id"))
@@ -154,7 +154,7 @@ export async function setAccountStatusAction(
   const status = toStatus(formData.get("status"))
 
   if (accountId === null || status === null) {
-    return { kind: "failed", error: "アカウントと状態を指定してください" }
+    return { kind: "failed", error: "アカウントと状態を指定してください。" }
   }
 
   const stepUpToken = await getStepUpToken()
@@ -165,15 +165,15 @@ export async function setAccountStatusAction(
     return toFailedState(
       updated,
       {
-        self_deactivation: "自分自身は停止できません",
-        last_admin: "最後の管理者は停止できません",
-        role_escalation: "自分より強い権限のアカウントは変更できません",
-        account_not_found: "対象のアカウントが見つかりません",
-        invalid_status: "指定した状態が不正です",
-        forbidden: "アカウントを管理する権限がありません",
-        invalid_session: "セッションが無効です。ログインし直してください",
+        self_deactivation: "自分自身は停止できません。",
+        last_admin: "最後の管理者は停止できません。",
+        role_escalation: "自分より強い権限のアカウントは変更できません。",
+        account_not_found: "対象のアカウントが見つかりません。",
+        invalid_status: "指定した状態が正しくありません。",
+        forbidden: "アカウントを管理する権限がありません。",
+        invalid_session: "セッションが無効です。ログインし直してください。",
       },
-      "状態の変更に失敗しました",
+      "状態を変更できませんでした。",
     )
   }
 
@@ -198,7 +198,7 @@ export async function grantAccountRoleAction(
   const currentUser = await getMe()
 
   if (currentUser instanceof Error || canAssignRoles(currentUser.permissions) === false) {
-    return { kind: "failed", error: "ロールを管理する権限がありません" }
+    return { kind: "failed", error: "ロールを管理する権限がありません。" }
   }
 
   const accountId = toOpaqueAccountId(formData.get("account_id"))
@@ -206,7 +206,7 @@ export async function grantAccountRoleAction(
   const roleId = toOpaqueAccountId(formData.get("role_id"))
 
   if (accountId === null || roleId === null) {
-    return { kind: "failed", error: "アカウントとロールを指定してください" }
+    return { kind: "failed", error: "アカウントとロールを指定してください。" }
   }
 
   const stepUpToken = await getStepUpToken()
@@ -217,14 +217,14 @@ export async function grantAccountRoleAction(
     return toFailedState(
       granted,
       {
-        self_assignment: "自分自身にはロールを付与できません",
-        role_escalation: "自分が持たない権限を含むロールは付与できません",
-        role_not_found: "指定したロールが見つかりません",
-        account_not_found: "対象のアカウントが見つかりません",
-        forbidden: "ロールを管理する権限がありません",
-        invalid_session: "セッションが無効です。ログインし直してください",
+        self_assignment: "自分自身にはロールを付与できません。",
+        role_escalation: "自分が持たない権限を含むロールは付与できません。",
+        role_not_found: "指定したロールが見つかりません。",
+        account_not_found: "対象のアカウントが見つかりません。",
+        forbidden: "ロールを管理する権限がありません。",
+        invalid_session: "セッションが無効です。ログインし直してください。",
       },
-      "ロールの付与に失敗しました",
+      "ロールを付与できませんでした。",
     )
   }
 

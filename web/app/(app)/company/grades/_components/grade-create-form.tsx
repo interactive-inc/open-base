@@ -62,7 +62,7 @@ export function GradeCreateForm(props: Props) {
           <Input
             id="grade-code"
             name="code"
-            placeholder="G1"
+            placeholder="例: G1…"
             maxLength={FORM_CONSTRAINTS.grade.codeMax}
             required
           />
@@ -74,7 +74,7 @@ export function GradeCreateForm(props: Props) {
           <Input
             id="grade-name"
             name="name"
-            placeholder="メンバー"
+            placeholder="例: 一般職…"
             maxLength={FORM_CONSTRAINTS.grade.nameMax}
             required
           />
@@ -91,7 +91,7 @@ export function GradeCreateForm(props: Props) {
             min={FORM_CONSTRAINTS.grade.rankMin}
             max={FORM_CONSTRAINTS.grade.rankMax}
             step={1}
-            placeholder="不明なら空欄"
+            placeholder="空欄でも登録できます"
           />
         </Field>
 
@@ -109,7 +109,7 @@ export function GradeCreateForm(props: Props) {
 
         <Field orientation="horizontal">
           <Button type="submit" disabled={isPending}>
-            {isPending ? "作成中..." : "等級を作成"}
+            {isPending ? "作成中…" : "等級を作成"}
           </Button>
         </Field>
       </FieldGroup>

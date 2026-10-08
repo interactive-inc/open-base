@@ -20,19 +20,19 @@ export async function OrgMembersTable(props: Props) {
   const members = await getOrgDepartmentMembers(props.code)
 
   if (members instanceof Error) {
-    return <FetchError message="メンバーの取得に失敗しました" />
+    return <FetchError message="メンバーを読み込めませんでした。" />
   }
 
   if (members.length === 0) {
-    return <p className="text-sm text-muted-foreground">メンバーがいません</p>
+    return <p className="text-sm text-muted-foreground">メンバーはいません。</p>
   }
 
   return (
     <div className="overflow-x-auto">
-      <Table aria-label="一覧">
+      <Table aria-label="メンバー">
         <TableHeader>
           <TableRow>
-            <TableHead>社員コード</TableHead>
+            <TableHead>従業員コード</TableHead>
             <TableHead>氏名</TableHead>
             <TableHead>役職</TableHead>
             <TableHead>区分</TableHead>

@@ -27,7 +27,7 @@ export async function updateApplicationTemplate(
   })
 
   if (response.status >= 400) {
-    return toResponseError(response, { fallback: "申請テンプレートの変更に失敗しました" })
+    return toResponseError(response, { fallback: "申請テンプレートを変更できませんでした" })
   }
 
   return response.json()

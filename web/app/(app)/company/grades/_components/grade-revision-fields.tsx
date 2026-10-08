@@ -22,7 +22,7 @@ export function GradeRevisionFields(props: Props) {
       <input type="hidden" name="commandId" value={props.commandId} />
       <Field>
         <FieldLabel htmlFor={`${props.commandId}-from`}>
-          {props.isCancellation ? "取消の発効日" : "有効開始日"}
+          {props.isCancellation ? "取消日" : "有効開始日"}
         </FieldLabel>
         <Input
           id={`${props.commandId}-from`}

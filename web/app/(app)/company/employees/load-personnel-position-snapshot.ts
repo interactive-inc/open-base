@@ -17,7 +17,7 @@ export async function loadPersonnelPositionSnapshot(
     })
     .safeParse({ organizationRevision, effectiveOn })
 
-  if (!snapshot.success) return { ok: false as const, error: "有効日を入力してください" }
+  if (!snapshot.success) return { ok: false as const, error: "日付を正しく入力してください" }
 
   const positions = await getPersonnelPositionSnapshot(snapshot.data)
 

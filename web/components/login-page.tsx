@@ -42,7 +42,7 @@ export function LoginPage(props: Props) {
     return (
       <div className="flex min-h-screen flex-1 items-center justify-center bg-muted/40 p-8">
         <span className="text-2xl font-semibold tracking-widest">
-          {appName ?? t("open-base にサインイン")}
+          {appName ?? t("Open Base にログイン")}
         </span>
       </div>
     )
@@ -54,7 +54,7 @@ export function LoginPage(props: Props) {
         <Card className="w-full">
           <CardHeader>
             <CardTitle>
-              {appName === null ? t("open-base にサインイン") : `${appName} にサインイン`}
+              {appName === null ? t("Open Base にログイン") : `${appName} にログイン`}
             </CardTitle>
 
             <CardDescription>

@@ -16,7 +16,7 @@ const options: ReadonlyArray<{ value: NotificationFilterValue; label: string }> 
 /** 通知一覧のフィルタ。?filter= を付与した Link で RSC に遷移する（JS 不要）。 */
 export function NotificationFilter(props: Props) {
   return (
-    <div className="flex items-center gap-2" role="group" aria-label="通知フィルタ">
+    <div className="flex items-center gap-2" role="group" aria-label="表示する通知">
       {options.map((option) => {
         const isActive = option.value === props.current
 

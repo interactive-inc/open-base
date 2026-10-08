@@ -24,9 +24,9 @@ export async function createApplicationTemplate(
 
   if (response.status >= 400) {
     return toResponseError(response, {
-      fallback: "申請テンプレートの作成に失敗しました",
+      fallback: "申請テンプレートを作成できませんでした",
       conflictMessages: {
-        "template code already exists": "同じコードの申請テンプレートが既に存在します",
+        "template code already exists": "同じコードの申請テンプレートがすでにあります。",
       },
     })
   }

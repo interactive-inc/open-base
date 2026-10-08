@@ -53,7 +53,7 @@ export default async function InboxPage() {
         <EmptyState
           icon={Inbox}
           title="対応待ちはありません"
-          description="新しい申請や承認が届くとここに表示されます。"
+          description="承認が必要な申請が届くと、ここに表示されます。"
         />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -76,12 +76,12 @@ export default async function InboxPage() {
 
               <CardDescription>
                 {card.hasMore
-                  ? "受信箱を開いて続きを確認"
+                  ? "開いて続きを確認"
                   : card.count === null
-                    ? "受信箱を開く"
+                    ? "開く"
                     : card.count === 0
                       ? "対応待ちはありません"
-                      : `${card.count} 件の対応待ち`}
+                      : `対応待ち ${card.count} 件`}
               </CardDescription>
             </CardLink>
           ))}

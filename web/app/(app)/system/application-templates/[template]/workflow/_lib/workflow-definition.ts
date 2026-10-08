@@ -131,12 +131,12 @@ export function parseWorkflowDefinitionJson(value: string): WorkflowDefinitionRe
   try {
     candidate = JSON.parse(value)
   } catch {
-    return { success: false, error: "ワークフロー定義は有効な JSON で入力してください" }
+    return { success: false, error: "承認フローの定義はJSON形式で入力してください。" }
   }
 
   const parsed = applicationWorkflowSchema.safeParse(candidate)
   if (parsed.success === false) {
-    return { success: false, error: "ワークフロー定義の形式が不正です" }
+    return { success: false, error: "承認フローの定義の形式が正しくありません。" }
   }
 
   return { success: true, workflow: parsed.data }

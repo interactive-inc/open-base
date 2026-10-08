@@ -38,32 +38,34 @@ export function ApproverRow(props: {
         }}
       >
         <NativeSelectOption value="direct_manager">直属上司</NativeSelectOption>
-        <NativeSelectOption value="department_manager">部門責任者</NativeSelectOption>
-        <NativeSelectOption value="target_department_manager">異動先部門責任者</NativeSelectOption>
+        <NativeSelectOption value="department_manager">部署の責任者</NativeSelectOption>
+        <NativeSelectOption value="target_department_manager">
+          異動先の部署の責任者
+        </NativeSelectOption>
         <NativeSelectOption value="management_chain">上位管理職全員</NativeSelectOption>
         {props.selector.type === "responsibility" ? (
           <NativeSelectOption value="responsibility" disabled>
-            組織責務（移行が必要）
+            組織責務（旧形式）
           </NativeSelectOption>
         ) : null}
         {props.selector.type === "role" ? (
           <NativeSelectOption value="role" disabled>
-            IAMロール（移行が必要）
+            ロール（旧形式）
           </NativeSelectOption>
         ) : null}
         <NativeSelectOption value="employee">従業員指定</NativeSelectOption>
       </NativeSelect>
       {props.selector.type === "responsibility" ? (
         <p>
-          責務: {props.selector.responsibility_type} / 組織:{" "}
-          {props.selector.organization_unit_code ?? "全組織"}
+          責務：{props.selector.responsibility_type}／部署：
+          {props.selector.organization_unit_code ?? "すべての部署"}
         </p>
       ) : props.selector.type === "role" ? (
-        <p>旧ロール: {props.selector.role_key}</p>
+        <p>旧ロール：{props.selector.role_key}</p>
       ) : props.selector.type === "employee" ? (
         <Input
           aria-label="従業員コード"
-          placeholder="E001"
+          placeholder="例: E001"
           value={value}
           onChange={(event) =>
             props.onChange({ type: "employee", employee_code: event.target.value })

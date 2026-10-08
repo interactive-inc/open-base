@@ -14,7 +14,7 @@ export async function listPersonnelActionRequests(targetEmployeeCode: string) {
     { init: { cache: "no-store" } },
   )
   if (!response.ok) {
-    return toResponseError(response, { fallback: "人事変更申請の取得に失敗しました" })
+    return toResponseError(response, { fallback: "人事変更の申請を読み込めませんでした" })
   }
   return response.json()
 }

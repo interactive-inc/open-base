@@ -85,7 +85,7 @@ export async function updateOrgDepartmentAction(
 
   const expectation = readExpectation(formData)
   if (expectation === null)
-    return { ok: false, error: "一覧を再読み込みして部署を確認してください" }
+    return { ok: false, error: "画面を再読み込みしてから、もう一度お試しください" }
 
   const updated = await updateOrgDepartment(code, {
     ...expectation,
@@ -121,7 +121,7 @@ export async function deleteOrgDepartmentAction(
 
   const expectation = readExpectation(formData)
   if (expectation === null)
-    return { ok: false, error: "一覧を再読み込みして部署を確認してください" }
+    return { ok: false, error: "画面を再読み込みしてから、もう一度お試しください" }
 
   const deleted = await deleteOrgDepartment(code, expectation)
 

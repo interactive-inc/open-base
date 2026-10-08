@@ -22,7 +22,7 @@ export async function CompanyEmploymentSection(props: Props) {
   const employments = await getCompanyEmploymentResources()
 
   if (employments instanceof Error) {
-    return <FetchError message="雇用の取得に失敗しました" />
+    return <FetchError message="雇用を読み込めませんでした。" />
   }
 
   const allEmployments = filterResourcesByType(employments.resources, "employment")
@@ -39,14 +39,14 @@ export async function CompanyEmploymentSection(props: Props) {
       caption="雇用の一覧"
       resources={visibleEmployments}
       emptyTitle="雇用が登録されていません"
-      emptyDescription="該当する雇用がありません。絞り込みを変えるか、CLI から登録します。"
+      emptyDescription="絞り込みを変えるか、CLI で登録してください。"
       columns={[
         {
           header: "従業員",
           toValue: (resource) => readResourceText(resource, "employeeId") ?? "-",
         },
         {
-          header: "在籍区分",
+          header: "在籍状況",
           toValue: (resource) => {
             const status = readResourceText(resource, "status")
 

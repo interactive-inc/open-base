@@ -27,7 +27,8 @@ export function EmployeeCreateForm(props: { canAssignRole: boolean; companyRevis
     previousState: EmployeeCreateFormState,
     formData: FormData,
   ): Promise<EmployeeCreateFormState> {
-    if (!positionSnapshot.isReady) return { ok: false, error: "有効日の会社情報を確認してください" }
+    if (!positionSnapshot.isReady)
+      return { ok: false, error: "入社日時点の役職を読み込めていません。入社日を確認してください" }
     const result = await createEmployeeAction(previousState, formData)
 
     if (result.ok) {
@@ -74,7 +75,7 @@ export function EmployeeCreateForm(props: { canAssignRole: boolean; companyRevis
           <Input
             id="employee-name"
             name="name"
-            placeholder="例: Sam Rivers…"
+            placeholder="例: 山田 太郎…"
             autoComplete="name"
             maxLength={FORM_CONSTRAINTS.employee.nameMax}
             required
@@ -95,15 +96,13 @@ export function EmployeeCreateForm(props: { canAssignRole: boolean; companyRevis
             autoComplete="off"
             required
           />
-          <FieldDescription>
-            未来日を指定した場合、入社日までは入社予定としてログインできません。
-          </FieldDescription>
+          <FieldDescription>未来の日付にすると、入社日まではログインできません。</FieldDescription>
         </Field>
 
         <EmploymentTypeField id="employee-employment-type" isVisible />
 
         <Field>
-          <FieldLabel htmlFor="employee-email">メール</FieldLabel>
+          <FieldLabel htmlFor="employee-email">メールアドレス</FieldLabel>
 
           <Input
             id="employee-email"
@@ -132,11 +131,11 @@ export function EmployeeCreateForm(props: { canAssignRole: boolean; companyRevis
         </Field>
 
         <Field>
-          <FieldLabel htmlFor="employee-role">システム権限セット</FieldLabel>
+          <FieldLabel htmlFor="employee-role">利用権限</FieldLabel>
 
           {props.canAssignRole ? (
             <NativeSelect
-              aria-label="システム権限セット"
+              aria-label="利用権限"
               id="employee-role"
               name="role"
               defaultValue="member"
@@ -156,7 +155,7 @@ export function EmployeeCreateForm(props: { canAssignRole: boolean; companyRevis
             </>
           )}
           <FieldDescription>
-            何を操作できるかを設定します。直属上司や部署責任者など、誰に対して操作できるかは組織図で別に管理します。
+            できる操作の種類を設定します。誰に対して操作できるか（上長や部署長など）は組織図で管理します。
           </FieldDescription>
         </Field>
 
@@ -171,9 +170,7 @@ export function EmployeeCreateForm(props: { canAssignRole: boolean; companyRevis
             spellCheck={false}
             maxLength={FORM_CONSTRAINTS.employee.codeMax}
           />
-          <FieldDescription>
-            部署名ではなく、組織図の変更されない部署コードを指定します。
-          </FieldDescription>
+          <FieldDescription>部署名ではなく部署コードを入力します。</FieldDescription>
         </Field>
 
         <Field>
@@ -195,13 +192,11 @@ export function EmployeeCreateForm(props: { canAssignRole: boolean; companyRevis
               </NativeSelectOption>
             ))}
           </NativeSelect>
-          <FieldDescription>
-            役職は配属先部署とあわせて指定します。役職マスタから選び、空欄は役職なしです。
-          </FieldDescription>
+          <FieldDescription>配属先部署とあわせて指定します。</FieldDescription>
         </Field>
 
         <Field>
-          <FieldLabel htmlFor="employee-manager-code">直属上司コード（任意）</FieldLabel>
+          <FieldLabel htmlFor="employee-manager-code">上長の従業員コード（任意）</FieldLabel>
 
           <Input
             id="employee-manager-code"
@@ -212,7 +207,7 @@ export function EmployeeCreateForm(props: { canAssignRole: boolean; companyRevis
             maxLength={FORM_CONSTRAINTS.employee.codeMax}
           />
           <FieldDescription>
-            システムロールとは別の組織関係として、入社発令に記録されます。
+            入社の人事発令に記録されます。利用権限には影響しません。
           </FieldDescription>
         </Field>
 

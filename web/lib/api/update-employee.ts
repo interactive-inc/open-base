@@ -18,7 +18,7 @@ export async function updateEmployee(
 
   if (response.status >= 400) {
     return toResponseError(response, {
-      fallback: "従業員の変更に失敗しました",
+      fallback: "従業員情報を変更できませんでした",
     })
   }
 

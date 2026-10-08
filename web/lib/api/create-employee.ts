@@ -16,10 +16,10 @@ export async function createEmployee(request: EmployeeCreateRequest) {
 
   if (response.status >= 400) {
     return toResponseError(response, {
-      fallback: "従業員の登録に失敗しました",
+      fallback: "従業員を登録できませんでした",
       conflictMessages: {
-        "email already exists": "このメールアドレスは既に登録されています",
-        "employee code already exists": "この従業員コードは既に登録されています",
+        "email already exists": "このメールアドレスはすでに登録されています。",
+        "employee code already exists": "この従業員コードはすでに登録されています。",
       },
     })
   }

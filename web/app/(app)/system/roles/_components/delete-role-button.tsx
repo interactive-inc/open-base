@@ -106,7 +106,7 @@ export function DeleteRoleButton(props: Props) {
           <AlertDialogTitle>ロール「{props.roleName}」を削除しますか？</AlertDialogTitle>
 
           <AlertDialogDescription>
-            この操作は取り消せません。割当中のロールは削除できません。
+            この操作は取り消せません。アカウントに付与中のロールは削除できません。
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -120,7 +120,7 @@ export function DeleteRoleButton(props: Props) {
           <input type="hidden" name="role_id" value={props.roleId} />
 
           <AlertDialogFooter>
-            <AlertDialogCancel>やめる</AlertDialogCancel>
+            <AlertDialogCancel>キャンセル</AlertDialogCancel>
 
             <Button type="submit" variant="destructive" disabled={isPending}>
               削除する

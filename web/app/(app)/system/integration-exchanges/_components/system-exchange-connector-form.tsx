@@ -17,14 +17,14 @@ export async function SystemExchangeConnectorForm(props: Props) {
   const connectors = await getSystemConnectors()
 
   if (connectors instanceof Error) {
-    return <FetchError message="コネクタの取得に失敗しました" />
+    return <FetchError message="コネクタを読み込めませんでした。" />
   }
 
   if (connectors.length === 0) {
     return (
       <EmptyState
         title="コネクタが登録されていません"
-        description="外部交換はコネクタ単位で記録します。先にコネクタを登録します。"
+        description="連携履歴はコネクタごとに記録されます。先にコネクタを登録してください。"
       />
     )
   }

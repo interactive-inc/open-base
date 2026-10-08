@@ -17,19 +17,19 @@ type Props = {
 /** 従業員一覧テーブル。code がある行だけ詳細へ遷移できる。 */
 export function EmployeeTable(props: Props) {
   if (props.employees.length === 0) {
-    return <p className="text-sm text-muted-foreground">条件に一致する従業員がいません</p>
+    return <p className="text-sm text-muted-foreground">条件に一致する従業員はいません。</p>
   }
 
   return (
     <div className="overflow-x-auto">
-      <Table aria-label="一覧">
+      <Table aria-label="従業員の一覧">
         <TableHeader>
           <TableRow>
-            <TableHead>コード</TableHead>
+            <TableHead>従業員コード</TableHead>
             <TableHead>氏名</TableHead>
             <TableHead>部署</TableHead>
             <TableHead>役職</TableHead>
-            <TableHead>メール</TableHead>
+            <TableHead>メールアドレス</TableHead>
             <TableHead>在籍状況</TableHead>
           </TableRow>
         </TableHeader>

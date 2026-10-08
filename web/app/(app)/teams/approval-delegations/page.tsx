@@ -14,7 +14,7 @@ export default async function ApprovalDelegationsPage() {
         <BackButton href="/my/applications" label="申請へ戻る" />
       </PageHeader>
       {result instanceof Error ? (
-        <FetchError message="代理承認設定の取得に失敗しました" />
+        <FetchError message="代理承認の設定を読み込めませんでした。" />
       ) : (
         <DelegationManager delegations={result.data} />
       )}

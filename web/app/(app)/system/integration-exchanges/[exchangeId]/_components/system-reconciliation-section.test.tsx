@@ -41,7 +41,7 @@ describe("SystemReconciliationSection", () => {
 
     render(await SystemReconciliationSection({ exchangeId: "exchange-1" }))
 
-    expect(screen.getByText("照合がありません")).toBeDefined()
+    expect(screen.getByText("照合結果がありません")).toBeDefined()
     expect(screen.queryByRole("table")).toBeNull()
   })
 
@@ -50,7 +50,7 @@ describe("SystemReconciliationSection", () => {
 
     render(await SystemReconciliationSection({ exchangeId: "exchange-1" }))
 
-    expect(screen.getByText("照合の取得に失敗しました")).toBeDefined()
+    expect(screen.getByText("照合結果を読み込めませんでした。")).toBeDefined()
     expect(screen.queryByRole("table")).toBeNull()
   })
 })

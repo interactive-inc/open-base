@@ -14,7 +14,7 @@ export async function SystemConnectorSection() {
   const connectors = await getSystemConnectors()
 
   if (connectors instanceof Error) {
-    return <FetchError message="コネクタの取得に失敗しました" />
+    return <FetchError message="コネクタを読み込めませんでした。" />
   }
 
   return (
@@ -23,7 +23,7 @@ export async function SystemConnectorSection() {
       resources={connectors}
       toKey={(connector) => connector.id}
       emptyTitle="コネクタが登録されていません"
-      emptyDescription="外部接続の定義は API と CLI から登録します。まだ登録がありません。"
+      emptyDescription="コネクタはAPIまたはCLIから登録します。"
       columns={[
         {
           header: "名称",
@@ -37,13 +37,13 @@ export async function SystemConnectorSection() {
           header: "キー",
           toValue: (connector) => <span className="font-mono text-xs">{connector.key}</span>,
         },
-        { header: "向き", toValue: (connector) => toConnectorDirectionLabel(connector.direction) },
+        { header: "方向", toValue: (connector) => toConnectorDirectionLabel(connector.direction) },
         {
-          header: "transport",
+          header: "接続方式",
           toValue: (connector) => toConnectorTransportLabel(connector.transport),
         },
         { header: "状態", toValue: (connector) => toConnectorStatusLabel(connector.status) },
-        { header: "版", toValue: (connector) => connector.revision },
+        { header: "バージョン", toValue: (connector) => connector.revision },
       ]}
     />
   )

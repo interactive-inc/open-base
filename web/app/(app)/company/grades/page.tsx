@@ -43,7 +43,7 @@ async function Grades(props: { canManage: boolean }) {
   const grades = await getGradeList()
 
   if (grades instanceof Error) {
-    return <FetchError message="等級の取得に失敗しました" />
+    return <FetchError message="等級を読み込めませんでした。" />
   }
 
   return <GradeList grades={grades.grades} canManage={props.canManage} />

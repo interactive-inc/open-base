@@ -73,7 +73,7 @@ export function PageTabs(props: Props) {
             {tab.badge !== undefined && (tab.badge > 0 || tab.badgeSuffix !== undefined) ? (
               <Badge
                 variant="secondary"
-                aria-label={`未処理 ${tab.badge}${tab.badgeSuffix ?? ""} 件`}
+                aria-label={`対応待ち ${tab.badge}${tab.badgeSuffix ?? ""} 件`}
               >
                 {tab.badge}
                 {tab.badgeSuffix}

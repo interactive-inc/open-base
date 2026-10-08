@@ -18,11 +18,11 @@ export async function approveApplication(
 
   if (response.status >= 400) {
     return toResponseError(response, {
-      fallback: "申請の承認に失敗しました",
+      fallback: "申請を承認できませんでした",
       conflictMessages: {
         "application decision target changed":
-          "申請内容または承認段階が更新されています。詳細を再読み込みして確認してください",
-        "already decided": "この申請は既に審査済みです",
+          "申請内容または承認段階が更新されています。再読み込みして確認してください。",
+        "already decided": "この申請は審査済みです。",
       },
     })
   }

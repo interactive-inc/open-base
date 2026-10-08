@@ -190,7 +190,7 @@ export const featureRegistry: ReadonlyArray<FeatureDefinition> = [
     prefetch: null,
     routes: [
       {
-        label: "人",
+        label: "人物",
         href: "/company/people",
         visibility: companyReadVisibility,
       },
@@ -235,7 +235,7 @@ export const featureRegistry: ReadonlyArray<FeatureDefinition> = [
     prefetch: null,
     routes: [
       {
-        label: "組織の時点断面",
+        label: "過去の組織図",
         href: "/company/organization-snapshots",
         visibility: companyReadVisibility,
       },
@@ -265,7 +265,7 @@ export const featureRegistry: ReadonlyArray<FeatureDefinition> = [
     prefetch: null,
     routes: [
       {
-        label: "Account の対応",
+        label: "アカウントの紐付け",
         href: "/company/account-employee-links",
         visibility: companyReadVisibility,
       },
@@ -295,7 +295,7 @@ export const featureRegistry: ReadonlyArray<FeatureDefinition> = [
     prefetch: null,
     routes: [
       {
-        label: "雇用事実",
+        label: "雇用履歴",
         href: "/company/employee-events",
         visibility: companyReadVisibility,
       },
@@ -388,7 +388,7 @@ export const featureRegistry: ReadonlyArray<FeatureDefinition> = [
     prefetch: null,
     routes: [
       {
-        label: "権限定義",
+        label: "権限一覧",
         href: "/system/permission-definitions",
         // api の handler は system:admin か iam:write のどちらかを要求する。
         // iam:read では 403 になるので、nav もこの 2 キーの OR に合わせる。
@@ -420,7 +420,7 @@ export const featureRegistry: ReadonlyArray<FeatureDefinition> = [
     prefetch: null,
     routes: [
       {
-        label: "Principal",
+        label: "主体",
         href: "/system/principals",
         visibility: { kind: "permission", permission: "iam:read" },
       },
@@ -465,7 +465,7 @@ export const featureRegistry: ReadonlyArray<FeatureDefinition> = [
     prefetch: null,
     routes: [
       {
-        label: "dead letter",
+        label: "配信不能",
         href: "/system/dead-letters",
         visibility: { kind: "permission", permission: "batch:view" },
       },
@@ -498,7 +498,7 @@ export const featureRegistry: ReadonlyArray<FeatureDefinition> = [
     prefetch: null,
     routes: [
       {
-        label: "外部交換",
+        label: "連携履歴",
         href: "/system/integration-exchanges",
         visibility: { kind: "permission", permission: "system:admin" },
       },
@@ -515,7 +515,7 @@ export const featureRegistry: ReadonlyArray<FeatureDefinition> = [
       {
         // api の route は未認証で到達できるが、システムタブは運用者の空間なので
         // 画面と nav は system:admin に絞る。
-        label: "health",
+        label: "稼働状況",
         href: "/system/health",
         visibility: { kind: "permission", permission: "system:admin" },
       },
@@ -568,18 +568,18 @@ export const featureGroupLabels: Record<FeatureGroup, string> = {
   overview: "概要",
   team: "部署",
   "system-principal": "主体と認証",
-  "system-authorization": "技術的認可",
+  "system-authorization": "権限",
   "system-case": "案件と判断",
-  "system-record": "記録と証拠",
-  "system-async": "非同期実行と通知",
+  "system-record": "記録",
+  "system-async": "配信と非同期処理",
   "system-integration": "外部接続",
   "system-operation": "運用",
   "company-legal-entity": "会社と法人",
   "company-people": "人と雇用",
   "company-organization": "組織",
   "company-responsibility": "職務と責任",
-  "company-system-link": "System との対応",
-  "company-employment-fact": "雇用事実と人事発令",
+  "company-system-link": "アカウント連携",
+  "company-employment-fact": "人事発令と履歴",
   people: "人と組織",
   time: "時間と予定",
   requests: "申請と手続き",
@@ -591,10 +591,10 @@ export const featureGroupLabels: Record<FeatureGroup, string> = {
 }
 
 export const featureTierLabels: Record<FeatureTier, string> = {
-  system: "システム層",
-  company: "company",
-  "app-default": "app-default",
-  "app-opt-in": "app-opt-in",
+  system: "システム",
+  company: "会社",
+  "app-default": "標準業務",
+  "app-opt-in": "追加業務",
 }
 
 export const featureStatusLabels: Record<FeatureStatus, string> = {

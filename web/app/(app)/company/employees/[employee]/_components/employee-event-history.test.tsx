@@ -26,7 +26,7 @@ test("旧注記の期間と原文を残し、確定した発令と区別する",
     },
   ])
   render(await EmployeeEventHistory({ code: "E001" }))
-  expect(screen.getByText("旧異動・在籍記録")).toBeTruthy()
+  expect(screen.getByText("雇用履歴")).toBeTruthy()
   expect(screen.getByText("2020-04-01")).toBeTruthy()
   expect(screen.getByText("当時の記録")).toBeTruthy()
   expect(mocks.getEmployeeEventList).toHaveBeenCalledWith({ employeeCode: "E001", kind: null })
@@ -35,12 +35,12 @@ test("旧注記の期間と原文を残し、確定した発令と区別する",
 test("取得失敗を記録なしへ置き換えない", async () => {
   mocks.getEmployeeEventList.mockResolvedValue(new Error("unavailable"))
   render(await EmployeeEventHistory({ code: "E001" }))
-  expect(screen.getByText("旧異動・在籍記録を取得できませんでした")).toBeTruthy()
-  expect(screen.queryByText("異動・在籍イベントの記録はありません。")).toBeNull()
+  expect(screen.getByText("雇用履歴を読み込めませんでした。")).toBeTruthy()
+  expect(screen.queryByText("雇用履歴はありません。")).toBeNull()
 })
 
 test("取得に成功した空集合だけを記録なしとして表示する", async () => {
   mocks.getEmployeeEventList.mockResolvedValue([])
   render(await EmployeeEventHistory({ code: "E001" }))
-  expect(screen.getByText("異動・在籍イベントの記録はありません。")).toBeTruthy()
+  expect(screen.getByText("雇用履歴はありません。")).toBeTruthy()
 })

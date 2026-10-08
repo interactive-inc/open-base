@@ -98,7 +98,7 @@ describe("CompanySiteSection", () => {
 
     render(await CompanySiteSection())
 
-    expect(screen.getByText("事業所と勤務場所の取得に失敗しました")).toBeDefined()
+    expect(screen.getByText("事業所と勤務場所を読み込めませんでした。")).toBeDefined()
     expect(screen.queryByRole("table")).toBeNull()
   })
 })

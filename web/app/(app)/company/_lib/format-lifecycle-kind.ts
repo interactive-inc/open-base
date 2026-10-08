@@ -6,15 +6,15 @@ const kindLabels: Readonly<Record<string, string>> = {
   concurrent_assignment_started: "兼務開始",
   assignment_ended: "所属終了",
   position_changed: "役職変更",
-  manager_changed: "上司変更",
-  department_responsibility_started: "部署責任者就任",
-  department_responsibility_ended: "部署責任者退任",
+  manager_changed: "上長変更",
+  department_responsibility_started: "部署長就任",
+  department_responsibility_ended: "部署長退任",
   leave_started: "休職",
   returned: "復職",
   retired: "退職",
   corrected: "訂正",
   initial_state: "初期状態",
-  employment_revised: "雇用情報の改訂",
+  employment_revised: "雇用情報の変更",
 }
 
 export function formatLifecycleKind(kind: string): string {

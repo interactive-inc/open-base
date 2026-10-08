@@ -16,7 +16,7 @@ export async function getPositionList() {
       (attributes.jobId != null && typeof attributes.jobId !== "string") ||
       (attributes.description != null && typeof attributes.description !== "string")
     )
-      return new Error("公開役職の属性を読み取れませんでした")
+      return new Error("役職の情報を読み込めませんでした。")
     positions.push({
       id: resource.id,
       revision: resource.revision,

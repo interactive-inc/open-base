@@ -58,7 +58,7 @@ export function LocaleField(props: Props) {
       <Field orientation="vertical">
         <FieldContent>
           <FieldTitle id="locale-label">表示言語</FieldTitle>
-          <FieldDescription>設定した言語で画面のテキストを表示します。</FieldDescription>
+          <FieldDescription>画面に表示する言語を選びます。</FieldDescription>
         </FieldContent>
 
         <Select value={props.locale} onValueChange={handleValueChange} disabled={isPending}>

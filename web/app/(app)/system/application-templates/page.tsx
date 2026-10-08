@@ -53,7 +53,7 @@ async function TemplatesGrid() {
   const templates = await getApplicationTemplates(null)
 
   if (templates instanceof Error) {
-    return <FetchError message="テンプレートの取得に失敗しました" />
+    return <FetchError message="テンプレートを読み込めませんでした。" />
   }
 
   if (templates.length === 0) {

@@ -121,10 +121,10 @@ describe("DeleteRoleButton のやめる", () => {
     openConfirmDialog()
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "やめる" })).toBeDefined()
+      expect(screen.getByRole("button", { name: "キャンセル" })).toBeDefined()
     })
 
-    fireEvent.click(screen.getByRole("button", { name: "やめる" }))
+    fireEvent.click(screen.getByRole("button", { name: "キャンセル" }))
 
     await waitFor(() => {
       expect(screen.queryByRole("button", { name: "削除する" })).toBe(null)

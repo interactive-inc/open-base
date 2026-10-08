@@ -9,25 +9,28 @@ export async function CompanyPeopleSection() {
   const people = await getCompanyPeopleResources()
 
   if (people instanceof Error) {
-    return <FetchError message="人の取得に失敗しました" />
+    return <FetchError message="人物を読み込めませんでした。" />
   }
 
   const persons = filterResourcesByType(people.resources, "person")
 
   return (
     <CompanyResourceTable
-      caption="人の一覧"
+      caption="人物の一覧"
       resources={persons}
-      emptyTitle="人が登録されていません"
-      emptyDescription="Person の正本は API と CLI が持ちます。まだ登録がありません。"
+      emptyTitle="人物が登録されていません"
+      emptyDescription="API または CLI で登録します。"
       columns={[
         {
-          header: "正式氏名",
+          header: "氏名",
           toValue: (resource) => readResourceText(resource, "officialName") ?? "-",
         },
-        { header: "メール", toValue: (resource) => readResourceText(resource, "email") ?? "-" },
-        { header: "電話", toValue: (resource) => readResourceText(resource, "phone") ?? "-" },
-        { header: "識別子", toValue: (resource) => resource.id },
+        {
+          header: "メールアドレス",
+          toValue: (resource) => readResourceText(resource, "email") ?? "-",
+        },
+        { header: "電話番号", toValue: (resource) => readResourceText(resource, "phone") ?? "-" },
+        { header: "ID", toValue: (resource) => resource.id },
       ]}
     />
   )

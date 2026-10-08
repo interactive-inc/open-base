@@ -63,7 +63,7 @@ export function PositionCreateForm(props: Props) {
           <Input
             id="position-code"
             name="code"
-            placeholder="G1"
+            placeholder="例: P1…"
             maxLength={FORM_CONSTRAINTS.position.codeMax}
             required
           />
@@ -75,7 +75,7 @@ export function PositionCreateForm(props: Props) {
           <Input
             id="position-name"
             name="name"
-            placeholder="メンバー"
+            placeholder="例: 課長…"
             maxLength={FORM_CONSTRAINTS.position.nameMax}
             required
           />
@@ -92,7 +92,7 @@ export function PositionCreateForm(props: Props) {
             min={FORM_CONSTRAINTS.position.rankMin}
             max={FORM_CONSTRAINTS.position.rankMax}
             step={1}
-            placeholder="不明なら空欄"
+            placeholder="空欄でも登録できます"
           />
         </Field>
 
@@ -110,7 +110,7 @@ export function PositionCreateForm(props: Props) {
 
         <Field orientation="horizontal">
           <Button type="submit" disabled={isPending}>
-            {isPending ? "作成中..." : "役職を作成"}
+            {isPending ? "作成中…" : "役職を作成"}
           </Button>
         </Field>
       </FieldGroup>

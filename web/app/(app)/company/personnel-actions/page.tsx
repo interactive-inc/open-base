@@ -35,7 +35,7 @@ export default async function CompanyPersonnelActionsPage(props: {
         <PageHeader title="人事発令" />
         <Alert>
           <AlertDescription>
-            検索条件が不正です。期間や履歴リンクを確認してください。
+            検索条件が正しくありません。期間の指定を確認してください。
           </AlertDescription>
         </Alert>
         <TextLink href="/company/personnel-actions" prefetch={false}>
@@ -54,7 +54,7 @@ export default async function CompanyPersonnelActionsPage(props: {
     <div className="flex flex-col gap-8">
       <PageHeader title="人事発令" />
       <p className="text-sm text-muted-foreground">
-        入社・異動・退職など、確定した発令の履歴です。発効日と記録日時を区別し、訂正前の記録も残します。
+        入社・異動・退職など、確定した人事発令の履歴です。訂正前の記録も残ります。
       </p>
       <form action="/company/personnel-actions" method="get" className="flex flex-col gap-4">
         <FieldGroup>
@@ -72,7 +72,7 @@ export default async function CompanyPersonnelActionsPage(props: {
           </Field>
         </FieldGroup>
         <div className="flex items-center gap-4">
-          <Button type="submit">絞り込む</Button>
+          <Button type="submit">絞り込み</Button>
           <TextLink href="/company/personnel-actions" prefetch={false}>
             検索条件を解除
           </TextLink>

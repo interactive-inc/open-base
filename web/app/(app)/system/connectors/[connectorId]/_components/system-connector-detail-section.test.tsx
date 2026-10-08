@@ -34,7 +34,7 @@ describe("SystemConnectorDetailSection", () => {
     expect(screen.getByText("給与の連携")).toBeDefined()
     expect(screen.getByText("双方向")).toBeDefined()
     expect(
-      screen.getByRole("link", { name: "このコネクタの外部交換を見る" }).getAttribute("href"),
+      screen.getByRole("link", { name: "このコネクタの連携履歴を見る" }).getAttribute("href"),
     ).toBe("/system/integration-exchanges?connector_id=connector-1")
   })
 
@@ -52,7 +52,7 @@ describe("SystemConnectorDetailSection", () => {
 
     render(await SystemConnectorDetailSection({ connectorId: "connector-1" }))
 
-    expect(screen.getByText("コネクタの取得に失敗しました")).toBeDefined()
+    expect(screen.getByText("コネクタを読み込めませんでした。")).toBeDefined()
     expect(screen.queryByText("給与の連携")).toBeNull()
   })
 })

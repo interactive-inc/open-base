@@ -36,14 +36,14 @@ describe("WorkflowRepairList", () => {
 
     expect(screen.getByText("Purchase request")).toBeTruthy()
     expect(screen.getByText("候補者が無効または不足")).toBeTruthy()
-    expect(screen.getByLabelText("候補従業員 ID")).toBeTruthy()
+    expect(screen.getByLabelText("候補者の従業員ID")).toBeTruthy()
     expect(screen.queryByLabelText("必要承認数（全員承認の場合）")).toBeNull()
-    expect(screen.getByLabelText("再割当理由")).toBeTruthy()
-    expect(screen.getByRole("button", { name: "候補者を再割当" })).toBeTruthy()
+    expect(screen.getByLabelText("再割り当ての理由")).toBeTruthy()
+    expect(screen.getByRole("button", { name: "候補者を再割り当て" })).toBeTruthy()
 
-    fireEvent.click(screen.getByRole("button", { name: "候補者を再割当" }))
-    expect(screen.getByText("承認候補者を再割当しますか？")).toBeTruthy()
-    expect(screen.getByRole("button", { name: "再割当を確定" })).toBeTruthy()
+    fireEvent.click(screen.getByRole("button", { name: "候補者を再割り当て" }))
+    expect(screen.getByText("承認候補者を再割り当てしますか？")).toBeTruthy()
+    expect(screen.getByRole("button", { name: "再割り当てを確定" })).toBeTruthy()
   })
 
   test("renders an audited quorum confirmation for a missing snapshot", () => {
@@ -65,6 +65,6 @@ describe("WorkflowRepairList", () => {
     )
 
     expect(screen.getByLabelText("必要承認数（全員承認の場合）")).toBeTruthy()
-    expect(screen.getByText(/この上書きは監査イベントに記録/)).toBeTruthy()
+    expect(screen.getByText(/入力した値は監査ログに記録/)).toBeTruthy()
   })
 })

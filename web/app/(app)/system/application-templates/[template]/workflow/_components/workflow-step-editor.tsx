@@ -129,7 +129,9 @@ export function WorkflowStepEditor(props: Props) {
           />
         </Field>
         <Field>
-          <FieldLabel htmlFor={`workflow-step-${index}-rejection-behavior`}>否認時</FieldLabel>
+          <FieldLabel htmlFor={`workflow-step-${index}-rejection-behavior`}>
+            否認時の扱い
+          </FieldLabel>
           <NativeSelect
             id={`workflow-step-${index}-rejection-behavior`}
             value={step.rejection_behavior}
@@ -149,8 +151,8 @@ export function WorkflowStepEditor(props: Props) {
             <FieldLabel htmlFor={`delegation-${index}`}>代理承認</FieldLabel>
             <FieldDescription>
               {step.governance_authority === undefined
-                ? "期間付き委任をこのステップで利用します。"
-                : "会社の任用で許可された期間付き委任のみ利用します。"}
+                ? "期間を決めた代理承認をこのステップで認めます。"
+                : "任用で許可された期間付きの代理承認だけを認めます。"}
             </FieldDescription>
           </div>
           <Switch

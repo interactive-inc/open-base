@@ -21,23 +21,23 @@ export async function stepUpAction(
   const password = formData.get("password")
 
   if (typeof password !== "string" || password === "") {
-    return { ok: false, error: "パスワードを入力してください" }
+    return { ok: false, error: "パスワードを入力してください。" }
   }
 
   const grant = await issueStepUpGrant(password)
 
   if (grant instanceof Error) {
     if (grant.code === "invalid_credentials") {
-      return { ok: false, error: "パスワードが違います" }
+      return { ok: false, error: "パスワードが正しくありません。" }
     }
 
-    return { ok: false, error: "再認証に失敗しました" }
+    return { ok: false, error: "再認証できませんでした。" }
   }
 
   const maxAge = stepUpCookieMaxAge(grant.expiresAt, new Date())
 
   if (maxAge === null) {
-    return { ok: false, error: "再認証に失敗しました" }
+    return { ok: false, error: "再認証できませんでした。" }
   }
 
   const cookieStore = await cookies()

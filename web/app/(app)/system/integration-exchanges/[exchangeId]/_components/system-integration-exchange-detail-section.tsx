@@ -13,7 +13,7 @@ export async function SystemIntegrationExchangeDetailSection(props: Props) {
   const exchange = await getSystemIntegrationExchange(props.exchangeId)
 
   if (exchange instanceof Error) {
-    return <FetchError message="外部交換の取得に失敗しました" />
+    return <FetchError message="連携履歴を読み込めませんでした。" />
   }
 
   return (
@@ -22,7 +22,7 @@ export async function SystemIntegrationExchangeDetailSection(props: Props) {
 
       <dl className="grid gap-4 rounded-2xl border bg-card p-4 sm:grid-cols-2">
         <div className="flex flex-col gap-2">
-          <dt className="text-xs text-muted-foreground">識別子</dt>
+          <dt className="text-xs text-muted-foreground">ID</dt>
 
           <dd className="font-mono text-xs">{exchange.id}</dd>
         </div>
@@ -38,7 +38,7 @@ export async function SystemIntegrationExchangeDetailSection(props: Props) {
         </div>
 
         <div className="flex flex-col gap-2">
-          <dt className="text-xs text-muted-foreground">向き</dt>
+          <dt className="text-xs text-muted-foreground">方向</dt>
 
           <dd className="text-sm">{toConnectorDirectionLabel(exchange.direction)}</dd>
         </div>
@@ -50,25 +50,25 @@ export async function SystemIntegrationExchangeDetailSection(props: Props) {
         </div>
 
         <div className="flex flex-col gap-2">
-          <dt className="text-xs text-muted-foreground">試行</dt>
+          <dt className="text-xs text-muted-foreground">試行回数</dt>
 
           <dd className="text-sm">{exchange.attempt}</dd>
         </div>
 
         <div className="flex flex-col gap-2">
-          <dt className="text-xs text-muted-foreground">冪等キー</dt>
+          <dt className="text-xs text-muted-foreground">重複防止キー</dt>
 
           <dd className="font-mono text-xs break-all">{exchange.idempotencyKey}</dd>
         </div>
 
         <div className="flex flex-col gap-2">
-          <dt className="text-xs text-muted-foreground">payload の digest</dt>
+          <dt className="text-xs text-muted-foreground">データのハッシュ値</dt>
 
           <dd className="font-mono text-xs break-all">{exchange.payloadDigest}</dd>
         </div>
 
         <div className="flex flex-col gap-2">
-          <dt className="text-xs text-muted-foreground">外部の参照</dt>
+          <dt className="text-xs text-muted-foreground">外部参照</dt>
 
           <dd className="text-sm break-all">{exchange.externalReference ?? "-"}</dd>
         </div>

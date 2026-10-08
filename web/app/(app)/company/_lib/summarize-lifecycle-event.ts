@@ -18,10 +18,10 @@ export function summarizeLifecycleEvent(summary: unknown): ReadonlyArray<string>
   }
   if ("previousManagerEmployeeCode" in value) {
     parts.push(
-      `上司: ${stringOrNone(value.previousManagerEmployeeCode)} → ${stringOrNone(value.managerEmployeeCode)}`,
+      `上長: ${stringOrNone(value.previousManagerEmployeeCode)} → ${stringOrNone(value.managerEmployeeCode)}`,
     )
   } else if (typeof value.managerEmployeeCode === "string") {
-    parts.push(`上司: ${value.managerEmployeeCode}`)
+    parts.push(`上長: ${value.managerEmployeeCode}`)
   }
   if (typeof value.status === "string") parts.push(`状態: ${value.status}`)
   return parts

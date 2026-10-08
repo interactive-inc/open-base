@@ -16,8 +16,7 @@ export async function savePositionDefinition(command: PositionDefinitionCommand)
   })
   if (response.status >= 400)
     return toResponseError(response, {
-      fallback:
-        "役職の改訂を保存できませんでした。確認した情報が変更されている場合は再読込してください",
+      fallback: "役職の改訂を保存できませんでした。再読み込みしてからやり直してください。",
     })
   return response.json()
 }

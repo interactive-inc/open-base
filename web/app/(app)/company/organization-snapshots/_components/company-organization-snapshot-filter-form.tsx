@@ -25,7 +25,7 @@ export function CompanyOrganizationSnapshotFilterForm(props: Props) {
             </Field>
           </div>
 
-          <Button type="submit">この日で見る</Button>
+          <Button type="submit">この日で表示</Button>
         </FieldGroup>
       </FieldSet>
     </form>

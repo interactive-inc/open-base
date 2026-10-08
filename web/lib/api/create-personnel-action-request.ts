@@ -10,7 +10,7 @@ export async function createPersonnelActionRequest(request: Record<string, unkno
     { headers: { "Idempotency-Key": crypto.randomUUID() }, init: { cache: "no-store" } },
   )
   if (!response.ok) {
-    return toResponseError(response, { fallback: "人事変更の申請に失敗しました" })
+    return toResponseError(response, { fallback: "人事変更を申請できませんでした" })
   }
   return response.json()
 }

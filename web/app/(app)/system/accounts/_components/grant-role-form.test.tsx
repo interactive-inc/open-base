@@ -56,10 +56,10 @@ describe("GrantRoleForm", () => {
     fireEvent.click(screen.getByRole("button", { name: "付与" }))
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "やめる" })).toBeDefined()
+      expect(screen.getByRole("button", { name: "キャンセル" })).toBeDefined()
     })
 
-    fireEvent.click(screen.getByRole("button", { name: "やめる" }))
+    fireEvent.click(screen.getByRole("button", { name: "キャンセル" }))
 
     await waitFor(() => {
       expect(screen.queryByLabelText("パスワード")).toBe(null)

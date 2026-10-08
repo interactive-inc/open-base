@@ -65,7 +65,7 @@ export function WorkflowEditor(props: {
     ),
   )
   const migrationError = hasLegacySelectors
-    ? "旧形式の組織責務・IAMロールが含まれています。「会社の責務でステップを追加」から責務と適用範囲を確認して設定し、旧ステップを削除してください。期限後の承認者指定も詳細設定で見直してください。自動変換は行いません。"
+    ? "旧形式の承認者（組織責務・ロール）が含まれています。自動では変換されないため、「責務でステップを追加」から責務と適用範囲を設定し、旧ステップを削除してください。期限後の承認者も詳細設定で見直してください。"
     : null
   const definitionError = definition.success ? null : definition.error
   const [state, action, pending] = useActionState(
@@ -93,7 +93,7 @@ export function WorkflowEditor(props: {
       <input type="hidden" name="expected_revision" value={state.revision} />
 
       <FieldSet className="gap-4" disabled={!draft.basicEditingAllowed}>
-        <FieldLegend className="sr-only">ワークフロー基本設定</FieldLegend>
+        <FieldLegend className="sr-only">承認フローの基本設定</FieldLegend>
         {workflow.steps.map((step, index) => (
           <WorkflowStepEditor
             key={step.key}
@@ -135,7 +135,7 @@ export function WorkflowEditor(props: {
                 ...workflow.steps,
                 {
                   ...step,
-                  name: "会社の責務による承認",
+                  name: "責務による承認",
                   approvers: [],
                   governance_authority: {
                     organization_id: companyOrganizationId,
@@ -149,7 +149,7 @@ export function WorkflowEditor(props: {
             })
           }}
         >
-          会社の責務でステップを追加
+          責務でステップを追加
         </Button>
       </FieldSet>
 
@@ -158,9 +158,9 @@ export function WorkflowEditor(props: {
           詳細設定（条件分岐・エスカレーション・JSON）
         </summary>
         <Field className="mt-4" data-invalid={definitionError === null ? undefined : true}>
-          <FieldLabel htmlFor="workflow-advanced">ワークフロー定義</FieldLabel>
+          <FieldLabel htmlFor="workflow-advanced">承認フローの定義（JSON）</FieldLabel>
           <FieldDescription>
-            payload／申請者属性の条件、期限後の承認者など全項目を編集できます。
+            申請内容や申請者の属性による条件、期限後の承認者など、すべての項目を編集できます。
           </FieldDescription>
           <Textarea
             id="workflow-advanced"

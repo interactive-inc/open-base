@@ -131,7 +131,7 @@ export function PositionEditForm(props: Props) {
             {state.error !== null ? <FieldError>{state.error}</FieldError> : null}
 
             <Button type="submit" disabled={isPending}>
-              {isPending ? "更新中..." : "変更を保存"}
+              {isPending ? "保存中…" : "変更を保存"}
             </Button>
           </FieldGroup>
         </form>

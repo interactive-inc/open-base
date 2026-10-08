@@ -60,13 +60,13 @@ export function toGradeDefinitionCommand(
       ].map((key) => [key, form.get(key)]),
     ),
   )
-  if (!parsed.success) return new Error("等級の版・有効期間・変更理由と入力内容を確認してください")
+  if (!parsed.success) return new Error("有効期間・変更理由・入力内容を確認してください")
   const input = parsed.data
   if (
     (operation === "create" && input.resourceRevision !== 0) ||
     (operation !== "create" && input.resourceRevision === 0)
   )
-    return new Error("等級の資源版が不正です")
+    return new Error("画面を再読み込みしてから、もう一度お試しください")
   return {
     commandId: input.commandId,
     expectedRevision: input.companyRevision,

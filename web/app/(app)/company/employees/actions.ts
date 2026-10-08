@@ -59,7 +59,7 @@ export async function createEmployeeAction(
   const errors: Array<string> = []
 
   const code = toRequiredText(formData.get("code"), {
-    label: "コード",
+    label: "従業員コード",
     max: FORM_CONSTRAINTS.employee.codeMax,
   })
 
@@ -77,14 +77,14 @@ export async function createEmployeeAction(
   }
 
   const email = toRequiredText(formData.get("email"), {
-    label: "メール",
+    label: "メールアドレス",
     max: FORM_CONSTRAINTS.employee.emailMax,
   })
 
   if (email instanceof Error) {
     errors.push(email.message)
   } else if (isValidEmail(email) === false) {
-    errors.push("メールはメールアドレス形式で入力してください")
+    errors.push("メールアドレスの形式が正しくありません")
   }
 
   const password = toRequiredText(formData.get("password"), {
@@ -102,11 +102,11 @@ export async function createEmployeeAction(
   const hireOn = toRequiredIsoDate(formData.get("hire_on"), "入社日")
   const employmentType = formData.get("employment_type")
   if (employmentType !== "FULL_TIME" && employmentType !== "PART_TIME") {
-    return { ok: false, error: "雇用区分を選択してください" }
+    return { ok: false, error: "雇用形態を選択してください" }
   }
 
   if (role === null) {
-    errors.push("ロールを入力してください")
+    errors.push("利用権限を選択してください")
   }
 
   if (hireOn instanceof Error) errors.push(hireOn.message)
@@ -130,7 +130,7 @@ export async function createEmployeeAction(
   }
 
   const managerEmployeeCode = toOptionalText(formData.get("manager_employee_code"), {
-    label: "直属上司コード",
+    label: "上長の従業員コード",
     max: FORM_CONSTRAINTS.employee.codeMax,
   })
   if (managerEmployeeCode instanceof Error) errors.push(managerEmployeeCode.message)

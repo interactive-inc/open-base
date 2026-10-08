@@ -85,7 +85,7 @@ describe("CompanyEmploymentSection", () => {
 
     render(await CompanyEmploymentSection({ status: null }))
 
-    expect(screen.getByText("雇用の取得に失敗しました")).toBeDefined()
+    expect(screen.getByText("雇用を読み込めませんでした。")).toBeDefined()
     expect(screen.queryByRole("table")).toBeNull()
   })
 })

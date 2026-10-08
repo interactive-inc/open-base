@@ -5,7 +5,7 @@ import { ListSkeleton } from "@/components/list-skeleton"
 import { PageHeader } from "@/components/page-header"
 import { requireAnyPermission } from "@/lib/auth/require-any-permission"
 
-export const metadata = { title: "組織の時点断面" }
+export const metadata = { title: "過去の組織図" }
 
 type Props = {
   searchParams: Promise<{ [key: string]: string | Array<string> | undefined }>
@@ -24,7 +24,7 @@ export default async function CompanyOrganizationSnapshotsPage(props: Props) {
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader title="組織の時点断面" />
+      <PageHeader title="過去の組織図" />
 
       <CompanyOrganizationSnapshotFilterForm effectiveOn={effectiveOn} />
 

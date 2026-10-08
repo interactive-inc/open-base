@@ -45,7 +45,7 @@ import { formatDateTime } from "@/lib/format-date-time"
 const initialState: WorkflowRepairState = { ok: false, error: null }
 
 const reasonLabels: Record<WorkflowRepair["reason"], string> = {
-  snapshot_missing: "承認者スナップショットがありません",
+  snapshot_missing: "承認者の記録がありません",
   inactive_candidates: "候補者が無効または不足",
 }
 
@@ -74,7 +74,7 @@ function WorkflowRepairCard(props: { repair: WorkflowRepair }) {
       const next = await reassignWorkflowStepAction(previous, formData)
 
       if (next.ok) {
-        toast.success("承認候補者を再割当しました")
+        toast.success("承認候補者を再割り当てしました")
       } else if (next.error !== null) {
         toast.error(next.error)
       }
@@ -99,7 +99,7 @@ function WorkflowRepairCard(props: { repair: WorkflowRepair }) {
           </Link>
         </CardTitle>
         <CardDescription>
-          申請 ID {repair.id} ・ {repair.applicant_name ?? "申請者不明"} ・開始{" "}
+          申請ID {repair.id}・{repair.applicant_name ?? "申請者不明"}・開始{" "}
           {formatDateTime(repair.started_at)}
         </CardDescription>
         <CardAction>
@@ -114,7 +114,7 @@ function WorkflowRepairCard(props: { repair: WorkflowRepair }) {
           <FieldGroup>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field data-invalid={state.error !== null}>
-                <FieldLabel htmlFor={`repair-candidates-${repair.id}`}>候補従業員 ID</FieldLabel>
+                <FieldLabel htmlFor={`repair-candidates-${repair.id}`}>候補者の従業員ID</FieldLabel>
                 <Input
                   id={`repair-candidates-${repair.id}`}
                   name="candidate_employee_ids"
@@ -123,7 +123,7 @@ function WorkflowRepairCard(props: { repair: WorkflowRepair }) {
                   aria-invalid={state.error !== null}
                 />
                 <FieldDescription>
-                  有効なアカウントを持つ従業員 ID を最大 20 件指定します。
+                  有効なアカウントを持つ従業員のIDを、カンマ区切りで最大20件指定します。
                 </FieldDescription>
               </Field>
 
@@ -149,23 +149,23 @@ function WorkflowRepairCard(props: { repair: WorkflowRepair }) {
                   aria-invalid={state.error !== null}
                 />
                 <FieldDescription>
-                  全員承認のスナップショットがない場合だけ、候補者数と同じ値を入力します。この上書きは監査イベントに記録されます。
+                  全員承認で承認者の記録がない場合だけ、候補者数と同じ値を入力します。入力した値は監査ログに記録されます。
                 </FieldDescription>
               </Field>
             ) : null}
 
             <Field data-invalid={state.error !== null}>
-              <FieldLabel htmlFor={`repair-reason-${repair.id}`}>再割当理由</FieldLabel>
+              <FieldLabel htmlFor={`repair-reason-${repair.id}`}>再割り当ての理由</FieldLabel>
               <Textarea
                 id={`repair-reason-${repair.id}`}
                 name="reason"
                 rows={3}
                 maxLength={1_000}
-                placeholder="例: 退職した承認者から後任者へ再割当…"
+                placeholder="例: 退職した承認者から後任者へ変更"
                 required
                 aria-invalid={state.error !== null}
               />
-              <FieldDescription>理由と操作者は監査イベントに記録されます。</FieldDescription>
+              <FieldDescription>理由と操作者は監査ログに記録されます。</FieldDescription>
               <div aria-live="polite">
                 {state.error !== null ? <FieldError>{state.error}</FieldError> : null}
               </div>
@@ -173,21 +173,21 @@ function WorkflowRepairCard(props: { repair: WorkflowRepair }) {
 
             <AlertDialog>
               <AlertDialogTrigger render={<Button type="button" disabled={pending} />}>
-                {pending ? "再割当中…" : "候補者を再割当"}
+                {pending ? "再割り当て中…" : "候補者を再割り当て"}
               </AlertDialogTrigger>
 
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>承認候補者を再割当しますか？</AlertDialogTitle>
+                  <AlertDialogTitle>承認候補者を再割り当てしますか？</AlertDialogTitle>
                   <AlertDialogDescription>
-                    現在の候補者スナップショットを新しい監査ラウンドへ差し替えます。入力した理由、操作者、必要承認数の上書きは履歴に残ります。
+                    現在の承認候補者を、入力した候補者に差し替えます。理由、操作者、必要承認数の変更は監査ログに残ります。
                   </AlertDialogDescription>
                 </AlertDialogHeader>
 
                 <AlertDialogFooter>
-                  <AlertDialogCancel>やめる</AlertDialogCancel>
+                  <AlertDialogCancel>キャンセル</AlertDialogCancel>
                   <AlertDialogAction type="submit" form={formId} disabled={pending}>
-                    再割当を確定
+                    再割り当てを確定
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>

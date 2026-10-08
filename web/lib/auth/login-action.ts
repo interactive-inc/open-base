@@ -26,13 +26,13 @@ export async function loginAction(
   const password = formData.get("password")
 
   if (typeof email !== "string" || typeof password !== "string") {
-    return { ok: false, error: t("メールアドレスとパスワードを入力してください") }
+    return { ok: false, error: t("メールアドレスとパスワードを入力してください。") }
   }
 
   const result = await postLogin({ email, password })
 
   if (result instanceof Error) {
-    return { ok: false, error: t("メールアドレスまたはパスワードが正しくありません") }
+    return { ok: false, error: t("メールアドレスまたはパスワードが正しくありません。") }
   }
 
   const cookieStore = await cookies()

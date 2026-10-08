@@ -13,16 +13,16 @@ export async function SystemPrincipalSection() {
   const principals = await getSystemPrincipals()
 
   if (principals instanceof Error) {
-    return <FetchError message="Principal の取得に失敗しました" />
+    return <FetchError message="主体を読み込めませんでした。" />
   }
 
   return (
     <SystemResourceTable
-      caption="Principal の一覧"
+      caption="主体の一覧"
       resources={principals}
       toKey={(principal) => principal.id}
-      emptyTitle="Principal が登録されていません"
-      emptyDescription="人以外の主体は API と CLI から登録します。まだ登録がありません。"
+      emptyTitle="主体が登録されていません"
+      emptyDescription="人以外の主体はAPIまたはCLIから登録します。"
       columns={[
         {
           header: "名称",
@@ -60,7 +60,7 @@ export async function SystemPrincipalSection() {
           },
         },
         {
-          header: "作成",
+          header: "作成日時",
           toValue: (principal) => formatDateTime(principal.created_at),
         },
       ]}

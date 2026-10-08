@@ -26,7 +26,7 @@ export async function updateApplicationAction(
   const applicationId = toEntityId(formData.get("application_id"))
 
   if (applicationId === null) {
-    return { ok: false, error: "申請を特定できませんでした" }
+    return { ok: false, error: "申請を特定できませんでした。" }
   }
 
   const payload = toPayload(formData.get("payload"))
@@ -56,9 +56,9 @@ export async function resubmitApplicationAction(
   await requireAuth()
 
   const applicationId = toEntityId(formData.get("application_id"))
-  if (applicationId === null) return { ok: false, error: "申請を特定できませんでした" }
+  if (applicationId === null) return { ok: false, error: "申請を特定できませんでした。" }
   const payload = toPayload(formData.get("payload"))
-  if (payload instanceof Error) return { ok: false, error: "申請内容の形式が正しくありません" }
+  if (payload instanceof Error) return { ok: false, error: "申請内容の形式が正しくありません。" }
   const result = await resubmitApplication(applicationId, payload)
   if (result instanceof Error) return { ok: false, error: result.message }
   revalidatePath("/my/applications")
@@ -76,7 +76,7 @@ export async function withdrawApplicationAction(
   const applicationId = toEntityId(formData.get("application_id"))
 
   if (applicationId === null) {
-    return { ok: false, error: "申請を特定できませんでした" }
+    return { ok: false, error: "申請を特定できませんでした。" }
   }
 
   const withdrawn = await withdrawApplication(applicationId)

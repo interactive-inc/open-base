@@ -30,7 +30,7 @@ export async function updateRole(roleId: string, props: Props): Promise<null | A
   )
 
   if (response.status !== 200) {
-    return toApiResponseError(response, "ロールの更新に失敗しました")
+    return toApiResponseError(response, "ロールを更新できませんでした。")
   }
 
   return null

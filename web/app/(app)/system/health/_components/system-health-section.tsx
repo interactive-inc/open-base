@@ -8,7 +8,7 @@ export async function SystemHealthSection() {
   const status = await getSystemHealth()
 
   if (status instanceof Error) {
-    return <FetchError message="health の取得に失敗しました" variant="network" />
+    return <FetchError message="稼働状況を読み込めませんでした。" variant="network" />
   }
 
   return (

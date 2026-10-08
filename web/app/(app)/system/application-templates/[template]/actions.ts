@@ -22,11 +22,11 @@ function toPayload(rawPayload: string): Record<string, unknown> | Error {
   try {
     parsed = JSON.parse(trimmed)
   } catch {
-    return new Error("payload は有効な JSON で入力してください")
+    return new Error("申請内容はJSON形式で入力してください。")
   }
 
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    return new Error("payload は JSON オブジェクトで入力してください")
+    return new Error("申請内容はJSONオブジェクトで入力してください。")
   }
 
   return { ...parsed }
@@ -44,7 +44,7 @@ export async function submitApplicationAction(
   const rawPayload = formData.get("payload")
 
   if (typeof templateCode !== "string" || templateCode === "") {
-    return { ok: false, error: "テンプレートが指定されていません" }
+    return { ok: false, error: "テンプレートが指定されていません。" }
   }
 
   const payloadInput = typeof rawPayload === "string" ? rawPayload : ""

@@ -40,19 +40,19 @@ export function OrgDepartmentCreateForm() {
         <Field>
           <FieldLabel htmlFor="create_code">部署コード</FieldLabel>
 
-          <Input id="create_code" name="code" placeholder="D010" />
+          <Input id="create_code" name="code" placeholder="例: D010…" />
         </Field>
 
         <Field>
           <FieldLabel htmlFor="create_name">部署名</FieldLabel>
 
-          <Input id="create_name" name="name" placeholder="営業部" />
+          <Input id="create_name" name="name" placeholder="例: 営業部…" />
         </Field>
 
         <Field>
-          <FieldLabel htmlFor="create_parent_code">親コード</FieldLabel>
+          <FieldLabel htmlFor="create_parent_code">親部署コード（任意）</FieldLabel>
 
-          <Input id="create_parent_code" name="parent_code" placeholder="任意" />
+          <Input id="create_parent_code" name="parent_code" placeholder="例: D001…" />
         </Field>
       </FieldGroup>
 

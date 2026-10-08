@@ -75,7 +75,7 @@ describe("SystemPrincipalSection", () => {
 
     render(await SystemPrincipalSection())
 
-    expect(screen.getByText("Principal が登録されていません")).toBeDefined()
+    expect(screen.getByText("主体が登録されていません")).toBeDefined()
     expect(screen.queryByRole("table")).toBeNull()
   })
 
@@ -84,7 +84,7 @@ describe("SystemPrincipalSection", () => {
 
     render(await SystemPrincipalSection())
 
-    expect(screen.getByText("Principal の取得に失敗しました")).toBeDefined()
+    expect(screen.getByText("主体を読み込めませんでした。")).toBeDefined()
     expect(screen.queryByRole("table")).toBeNull()
   })
 })

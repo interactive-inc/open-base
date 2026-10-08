@@ -49,7 +49,7 @@ describe("saveWorkflowAction", () => {
 
     expect(result).toEqual({
       ok: false,
-      error: "承認フローを管理する権限がありません",
+      error: "承認フローを管理する権限がありません。",
       revision: 4,
     })
   })

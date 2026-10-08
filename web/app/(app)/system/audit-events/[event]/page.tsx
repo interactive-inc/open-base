@@ -17,7 +17,7 @@ import { getAuditEvent } from "@/lib/api/get-audit-event"
 import type { AuditEventDetail } from "@/lib/api/types/audit-types"
 import { requirePermission } from "@/lib/auth/require-permission"
 
-export const metadata = { title: "監査イベント" }
+export const metadata = { title: "監査ログの詳細" }
 
 type Props = {
   params: Promise<{ event: string }>
@@ -53,11 +53,11 @@ function DetailField(props: { label: string; children: React.ReactNode; mono?: b
 function DetailError() {
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader title="監査イベント">
+      <PageHeader title="監査ログの詳細">
         <BackButton href="/system/audit-events" label="一覧に戻る" prefetch={false} />
       </PageHeader>
       <Alert variant="destructive">
-        <AlertTitle>監査イベントを取得できませんでした</AlertTitle>
+        <AlertTitle>監査ログを読み込めませんでした</AlertTitle>
         <AlertDescription>時間をおいて、もう一度お試しください。</AlertDescription>
       </Alert>
     </div>
@@ -80,18 +80,18 @@ export default async function AuditEventDetailPage(props: Props) {
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader title="監査イベント">
+      <PageHeader title="監査ログの詳細">
         <BackButton href="/system/audit-events" label="一覧に戻る" prefetch={false} />
       </PageHeader>
 
       <div className="grid gap-4 xl:grid-cols-2">
         <Card>
           <CardHeader>
-            <h2 className="font-heading text-base font-medium">イベント概要</h2>
+            <h2 className="font-heading text-base font-medium">概要</h2>
           </CardHeader>
           <CardContent>
             <dl className="grid gap-4 sm:grid-cols-2">
-              <DetailField label="イベントID" mono>
+              <DetailField label="ログID" mono>
                 {event.event_id}
               </DetailField>
               <DetailField label="リクエストID" mono>
@@ -142,16 +142,16 @@ export default async function AuditEventDetailPage(props: Props) {
       <section aria-labelledby="forensic-json-heading" className="flex flex-col gap-4">
         <div>
           <h2 id="forensic-json-heading" className="text-lg font-semibold">
-            証跡データ
+            記録データ
           </h2>
           <p className="text-sm text-muted-foreground">
             必要な項目だけ展開し、取り扱いに注意してください。
           </p>
         </div>
-        <AuditJsonView label="認可情報" value={event.authorization_json} />
+        <AuditJsonView label="権限の判定" value={event.authorization_json} />
         <AuditJsonView label="変更前" value={event.before_json} />
         <AuditJsonView label="変更後" value={event.after_json} />
-        <AuditJsonView label="メタデータ" value={event.metadata_json} />
+        <AuditJsonView label="付加情報" value={event.metadata_json} />
       </section>
     </div>
   )

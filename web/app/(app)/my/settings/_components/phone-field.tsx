@@ -34,7 +34,7 @@ export function PhoneField(props: Props) {
   )
 
   if (props.profile === null)
-    return <p>人物情報の対応確認が完了するまで電話番号を編集できません。</p>
+    return <p>アカウントと従業員情報の紐付けが済むまで、電話番号は変更できません。</p>
 
   return (
     <form action={dispatch}>
@@ -42,9 +42,7 @@ export function PhoneField(props: Props) {
         <Field orientation="vertical">
           <FieldContent>
             <FieldTitle id="phone-label">電話番号</FieldTitle>
-            <FieldDescription>
-              転居などのライフイベント届出で、入力欄に自動反映されます
-            </FieldDescription>
+            <FieldDescription>転居などの届出で、入力欄に自動で反映されます。</FieldDescription>
           </FieldContent>
 
           <div className="flex gap-2">
@@ -53,7 +51,7 @@ export function PhoneField(props: Props) {
               name="phone"
               defaultValue={props.phone ?? ""}
               maxLength={64}
-              placeholder="例: 090-1234-5678"
+              placeholder="例：090-1234-5678"
               className="w-full"
             />
           </div>

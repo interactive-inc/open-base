@@ -4,14 +4,14 @@ import { getCompanyDefinitionResources } from "@/lib/api/get-company-definition-
 import { filterResourcesByType } from "@/lib/company/filter-resources-by-type"
 import { readResourceText } from "@/lib/company/read-resource-text"
 
-const emptyDescription = "会社の正本は API と CLI が持ちます。まだ登録がありません。"
+const emptyDescription = "API または CLI で登録します。"
 
 /** 事業所（Site）と勤務場所（Workplace）を読み取り専用で並べる。 */
 export async function CompanySiteSection() {
   const definitions = await getCompanyDefinitionResources()
 
   if (definitions instanceof Error) {
-    return <FetchError message="事業所と勤務場所の取得に失敗しました" />
+    return <FetchError message="事業所と勤務場所を読み込めませんでした。" />
   }
 
   const sites = filterResourcesByType(definitions.resources, "site")

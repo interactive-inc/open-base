@@ -29,7 +29,7 @@ export default async function OrgPage() {
       <Tabs defaultValue="chart">
         <TabsList>
           <TabsTrigger value="chart">組織図</TabsTrigger>
-          <TabsTrigger value="list">リスト</TabsTrigger>
+          <TabsTrigger value="list">一覧</TabsTrigger>
         </TabsList>
 
         <TabsContent value="chart" className="mt-4">
@@ -48,7 +48,7 @@ export default async function OrgPage() {
       {canManage ? (
         <>
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <h2 className="text-xl font-semibold">部署ノードの管理</h2>
+            <h2 className="text-xl font-semibold">部署の管理</h2>
 
             <div className="flex items-center gap-2">
               <Button nativeButton={false} render={<Link href="/company/departments/new" />}>

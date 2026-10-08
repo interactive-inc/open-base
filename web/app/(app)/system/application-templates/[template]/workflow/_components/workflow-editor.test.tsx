@@ -57,7 +57,7 @@ describe("WorkflowEditor", () => {
       <WorkflowEditor code="expense" initial={initialWorkflow} revision={7} />,
     )
 
-    fireEvent.change(screen.getByLabelText("ワークフロー定義"), {
+    fireEvent.change(screen.getByLabelText("承認フローの定義（JSON）"), {
       target: { value: JSON.stringify(advancedWorkflow, null, 2) },
     })
     fireEvent.change(screen.getByDisplayValue("承認ステップ 1"), {
@@ -77,11 +77,11 @@ describe("WorkflowEditor", () => {
 
   test("keeps an invalid workflow JSON draft while disabling visual editing and save", () => {
     render(<WorkflowEditor code="expense" initial={initialWorkflow} revision={7} />)
-    const definition = screen.getByLabelText("ワークフロー定義")
+    const definition = screen.getByLabelText("承認フローの定義（JSON）")
 
     fireEvent.change(definition, { target: { value: '{"version":1,"steps":[]}' } })
 
-    const visualEditor = screen.getByRole("group", { name: "ワークフロー基本設定" })
+    const visualEditor = screen.getByRole("group", { name: "承認フローの基本設定" })
     const saveButton = screen.getByRole("button", { name: "承認フローを保存" })
     const definitionField = definition.closest('[data-slot="field"]')
 
@@ -90,7 +90,7 @@ describe("WorkflowEditor", () => {
     expect(definition.getAttribute("aria-invalid")).toBe("true")
     expect((visualEditor as HTMLFieldSetElement).disabled).toBe(true)
     expect((saveButton as HTMLButtonElement).disabled).toBe(true)
-    expect(screen.getByRole("alert").textContent).toContain("ワークフロー定義")
+    expect(screen.getByRole("alert").textContent).toContain("承認フローの定義")
   })
 
   test("submits the loaded revision and exposes stable labels and a live error region", () => {
@@ -117,7 +117,7 @@ describe("WorkflowEditor", () => {
     expect(screen.getByLabelText("完了条件").id).toBe("workflow-step-0-approval-mode")
     expect(screen.getByLabelText("必要人数").id).toBe("workflow-step-0-minimum-approvals")
     expect(screen.getByLabelText("期限（日）").id).toBe("workflow-step-0-due-days")
-    expect(screen.getByLabelText("否認時").id).toBe("workflow-step-0-rejection-behavior")
+    expect(screen.getByLabelText("否認時の扱い").id).toBe("workflow-step-0-rejection-behavior")
     expect(screen.getByLabelText("ステップ 1 承認者 1 の種類")).toBeDefined()
     expect(container.querySelector('[aria-live="polite"]')).not.toBeNull()
   })
@@ -172,7 +172,7 @@ describe("WorkflowEditor", () => {
       <WorkflowEditor code="personnel" initial={responsibilityWorkflow} revision={3} />,
     )
 
-    expect(screen.getByText("責務: PEOPLE_OPERATIONS / 組織: 全組織")).toBeDefined()
+    expect(screen.getByText("責務：PEOPLE_OPERATIONS／部署：すべての部署")).toBeDefined()
     expect(screen.queryByLabelText("責務タイプ")).toBeNull()
     expect(
       (screen.getByRole("button", { name: "承認フローを保存" }) as HTMLButtonElement).disabled,
@@ -209,9 +209,9 @@ test("公開責務の条件を編集し、会社が決める人数を上書き�
   const rendered = render(<WorkflowEditor code="review" initial={initial} revision={1} />)
   expect(screen.queryByLabelText("完了条件")).toBeNull()
   expect(screen.queryByRole("button", { name: "承認者を追加" })).toBeNull()
-  fireEvent.change(screen.getByLabelText("会社の責務コード"), { target: { value: "" } })
-  expect(screen.getByLabelText("会社の責務コード").closest("fieldset")?.disabled).toBe(false)
-  fireEvent.change(screen.getByLabelText("会社の責務コード"), { target: { value: "BOARD_REVIEW" } })
+  fireEvent.change(screen.getByLabelText("責務コード"), { target: { value: "" } })
+  expect(screen.getByLabelText("責務コード").closest("fieldset")?.disabled).toBe(false)
+  fireEvent.change(screen.getByLabelText("責務コード"), { target: { value: "BOARD_REVIEW" } })
   fireEvent.change(screen.getByLabelText("責務の適用範囲"), { target: { value: "amount" } })
   fireEvent.change(screen.getByLabelText("通貨コード"), { target: { value: "JPY" } })
   fireEvent.change(screen.getByLabelText("申請内の金額項目"), { target: { value: "amount" } })
@@ -233,8 +233,8 @@ test("公開責務の条件を編集し、会社が決める人数を上書き�
 
 test("空欄から公開責務のステップを追加して入力を完了できる", () => {
   const rendered = render(<WorkflowEditor code="review" initial={initialWorkflow} revision={1} />)
-  fireEvent.click(screen.getByRole("button", { name: "会社の責務でステップを追加" }))
-  fireEvent.change(screen.getByLabelText("会社の責務コード"), { target: { value: "REVIEWER" } })
+  fireEvent.click(screen.getByRole("button", { name: "責務でステップを追加" }))
+  fireEvent.change(screen.getByLabelText("責務コード"), { target: { value: "REVIEWER" } })
   fireEvent.change(screen.getByLabelText("責務の適用範囲"), {
     target: { value: "organization-unit" },
   })
@@ -273,10 +273,10 @@ test.each(["approvers", "escalation_approvers"])("旧責務を表示して保存
   expect(
     (screen.getByRole("button", { name: "承認フローを保存" }) as HTMLButtonElement).disabled,
   ).toBe(true)
-  expect(screen.getByRole("alert").textContent).toContain("適用範囲を確認")
-  expect(screen.queryByRole("option", { name: "IAMロール" })).toBeNull()
+  expect(screen.getByRole("alert").textContent).toContain("適用範囲を設定")
+  expect(screen.queryByRole("option", { name: "ロール" })).toBeNull()
   expect(screen.queryByRole("option", { name: "組織責務" })).toBeNull()
-  fireEvent.change(screen.getByLabelText("ワークフロー定義"), {
+  fireEvent.change(screen.getByLabelText("承認フローの定義（JSON）"), {
     target: { value: JSON.stringify(initialWorkflow) },
   })
   expect(

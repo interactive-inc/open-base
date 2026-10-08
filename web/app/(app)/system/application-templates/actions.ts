@@ -34,7 +34,7 @@ function parseSchemaJson(value: FormDataEntryValue | null): unknown {
   try {
     return JSON.parse(text)
   } catch {
-    return new Error("schema_json が不正な JSON です")
+    return new Error("入力項目の形式が正しくありません。")
   }
 }
 
@@ -49,7 +49,7 @@ export async function createApplicationTemplateAction(
     currentUser instanceof Error ||
     canManageApplicationTemplates(currentUser.permissions) === false
   ) {
-    return { ok: false, error: "テンプレートを管理する権限がありません" }
+    return { ok: false, error: "テンプレートを管理する権限がありません。" }
   }
 
   const codeValue = formData.get("code")
@@ -57,7 +57,7 @@ export async function createApplicationTemplateAction(
   const code = typeof codeValue === "string" ? codeValue.trim() : ""
 
   if (code === "") {
-    return { ok: false, error: "コードを入力してください" }
+    return { ok: false, error: "コードを入力してください。" }
   }
 
   const nameValue = formData.get("name")
@@ -65,7 +65,7 @@ export async function createApplicationTemplateAction(
   const name = typeof nameValue === "string" ? nameValue.trim() : ""
 
   if (name === "") {
-    return { ok: false, error: "名称を入力してください" }
+    return { ok: false, error: "名称を入力してください。" }
   }
 
   const categoryValue = formData.get("category")
@@ -73,7 +73,7 @@ export async function createApplicationTemplateAction(
   const category = typeof categoryValue === "string" ? categoryValue.trim() : ""
 
   if (category === "") {
-    return { ok: false, error: "カテゴリを入力してください" }
+    return { ok: false, error: "カテゴリを入力してください。" }
   }
 
   const descriptionValue = formData.get("description")
@@ -118,7 +118,7 @@ export async function updateApplicationTemplateAction(
     currentUser instanceof Error ||
     canManageApplicationTemplates(currentUser.permissions) === false
   ) {
-    return { ok: false, error: "テンプレートを管理する権限がありません" }
+    return { ok: false, error: "テンプレートを管理する権限がありません。" }
   }
 
   const codeValue = formData.get("code")
@@ -126,7 +126,7 @@ export async function updateApplicationTemplateAction(
   const code = typeof codeValue === "string" ? codeValue.trim() : ""
 
   if (code === "") {
-    return { ok: false, error: "テンプレートが不明です" }
+    return { ok: false, error: "テンプレートが見つかりません。" }
   }
 
   const nameValue = formData.get("name")
@@ -134,7 +134,7 @@ export async function updateApplicationTemplateAction(
   const name = typeof nameValue === "string" ? nameValue.trim() : ""
 
   if (name === "") {
-    return { ok: false, error: "名称を入力してください" }
+    return { ok: false, error: "名称を入力してください。" }
   }
 
   const categoryValue = formData.get("category")
@@ -142,7 +142,7 @@ export async function updateApplicationTemplateAction(
   const category = typeof categoryValue === "string" ? categoryValue.trim() : ""
 
   if (category === "") {
-    return { ok: false, error: "カテゴリを入力してください" }
+    return { ok: false, error: "カテゴリを入力してください。" }
   }
 
   const descriptionValue = formData.get("description")
@@ -186,7 +186,7 @@ export async function deleteApplicationTemplateAction(
     currentUser instanceof Error ||
     canManageApplicationTemplates(currentUser.permissions) === false
   ) {
-    return { ok: false, error: "テンプレートを管理する権限がありません" }
+    return { ok: false, error: "テンプレートを管理する権限がありません。" }
   }
 
   const codeValue = formData.get("code")
@@ -194,7 +194,7 @@ export async function deleteApplicationTemplateAction(
   const code = typeof codeValue === "string" ? codeValue.trim() : ""
 
   if (code === "") {
-    return { ok: false, error: "テンプレートが不明です" }
+    return { ok: false, error: "テンプレートが見つかりません。" }
   }
 
   const deleted = await deleteApplicationTemplate(code)

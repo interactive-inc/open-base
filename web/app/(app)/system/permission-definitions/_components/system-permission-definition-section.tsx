@@ -10,15 +10,15 @@ export async function SystemPermissionDefinitionSection() {
   const definitions = await getSystemPermissionDefinitions()
 
   if (definitions instanceof Error) {
-    return <FetchError message="権限定義の取得に失敗しました" />
+    return <FetchError message="権限の一覧を読み込めませんでした。" />
   }
 
   return (
     <SystemResourceTable
-      caption="権限定義の一覧"
+      caption="権限の一覧"
       resources={definitions}
       toKey={(definition) => definition.key}
-      emptyTitle="権限定義がありません"
+      emptyTitle="権限がありません"
       emptyDescription="有効な機能がないため、選べる権限がありません。"
       columns={[
         {

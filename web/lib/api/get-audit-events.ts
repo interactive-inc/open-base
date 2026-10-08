@@ -13,7 +13,7 @@ export async function getAuditEvents(
   )
 
   if (response.status >= 400) {
-    return toApiResponseError(response, "監査ログを取得できませんでした")
+    return toApiResponseError(response, "監査ログを読み込めませんでした。")
   }
 
   return response.json()

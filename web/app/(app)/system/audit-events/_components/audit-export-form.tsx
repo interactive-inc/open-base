@@ -144,7 +144,7 @@ export function AuditExportForm(props: Props) {
             {validation?.field === "to" ? <FieldError>{validation.message}</FieldError> : null}
           </Field>
         </FieldGroup>
-        <FieldDescription>オフセット付き日時で、31日以内の期間を指定します。</FieldDescription>
+        <FieldDescription>タイムゾーン付きの日時で、31日以内の期間を指定します。</FieldDescription>
         {validation?.field === "form" ? <FieldError>{validation.message}</FieldError> : null}
         <Button type="submit" disabled={pending} className="self-start">
           {pending ? (
@@ -165,7 +165,7 @@ export function AuditExportForm(props: Props) {
               <p>{feedback.message}</p>
               {feedback.requestId === null ? null : (
                 <p className="font-mono text-xs text-muted-foreground" translate="no">
-                  問い合わせID: {feedback.requestId}
+                  問い合わせID：{feedback.requestId}
                 </p>
               )}
             </div>

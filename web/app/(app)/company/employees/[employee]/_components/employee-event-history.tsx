@@ -21,24 +21,24 @@ export async function EmployeeEventHistory(props: Props) {
   const events = await getEmployeeEventList({ employeeCode: props.code, kind: null })
 
   if (events instanceof Error) {
-    return <FetchError message="旧異動・在籍記録を取得できませんでした" />
+    return <FetchError message="雇用履歴を読み込めませんでした。" />
   }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>旧異動・在籍記録</CardTitle>
+        <CardTitle>雇用履歴</CardTitle>
       </CardHeader>
 
       <CardContent>
         {events.length === 0 ? (
-          <p className="text-sm text-muted-foreground">異動・在籍イベントの記録はありません。</p>
+          <p className="text-sm text-muted-foreground">雇用履歴はありません。</p>
         ) : (
           <div className="overflow-x-auto">
-            <Table aria-label="異動・在籍履歴">
+            <Table aria-label="雇用履歴">
               <TableHeader>
                 <TableRow>
-                  <TableHead>適用日</TableHead>
+                  <TableHead>発生日</TableHead>
                   <TableHead>種別</TableHead>
                   <TableHead>異動元</TableHead>
                   <TableHead>異動先</TableHead>

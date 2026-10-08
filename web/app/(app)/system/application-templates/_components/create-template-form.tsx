@@ -44,21 +44,23 @@ export function CreateTemplateForm() {
         <Field>
           <FieldLabel htmlFor="template-code">コード</FieldLabel>
 
-          <Input id="template-code" name="code" placeholder="paid_leave" required />
+          <Input id="template-code" name="code" placeholder="例: paid_leave" required />
 
-          <FieldDescription>英数字とアンダースコアのみ。後から変更不可。</FieldDescription>
+          <FieldDescription>
+            英数字とアンダースコア（_）が使えます。作成後は変更できません。
+          </FieldDescription>
         </Field>
 
         <Field>
           <FieldLabel htmlFor="template-name">名称</FieldLabel>
 
-          <Input id="template-name" name="name" placeholder="有給休暇申請" required />
+          <Input id="template-name" name="name" placeholder="例: 有給休暇申請" required />
         </Field>
 
         <Field>
           <FieldLabel htmlFor="template-category">カテゴリ</FieldLabel>
 
-          <Input id="template-category" name="category" placeholder="attendance" required />
+          <Input id="template-category" name="category" placeholder="例: attendance" required />
         </Field>
 
         <Field>
@@ -70,7 +72,11 @@ export function CreateTemplateForm() {
         <Field>
           <FieldLabel htmlFor="template-approver-roles">承認ロール（カンマ区切り）</FieldLabel>
 
-          <Input id="template-approver-roles" name="approver_roles" placeholder="manager, admin" />
+          <Input
+            id="template-approver-roles"
+            name="approver_roles"
+            placeholder="例: manager, admin"
+          />
         </Field>
 
         <Field>
@@ -85,7 +91,7 @@ export function CreateTemplateForm() {
 
         <Field orientation="horizontal">
           <Button type="submit" disabled={isPending}>
-            {isPending ? "作成中..." : "テンプレートを作成"}
+            {isPending ? "作成中…" : "テンプレートを作成"}
           </Button>
         </Field>
       </FieldGroup>

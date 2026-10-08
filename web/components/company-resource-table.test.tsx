@@ -32,7 +32,7 @@ describe("CompanyResourceTable", () => {
         columns={columns}
         resources={[]}
         emptyTitle="事業所が登録されていません"
-        emptyDescription="正本は API と CLI が持ちます。"
+        emptyDescription="API または CLI から登録します。"
       />,
     )
 
@@ -56,7 +56,7 @@ describe("CompanyResourceTable", () => {
           },
         ]}
         emptyTitle="事業所が登録されていません"
-        emptyDescription="正本は API と CLI が持ちます。"
+        emptyDescription="API または CLI から登録します。"
       />,
     )
 
@@ -77,7 +77,7 @@ describe("CompanyResourceTable", () => {
         columns={columns}
         resources={[baseResource]}
         emptyTitle="事業所が登録されていません"
-        emptyDescription="正本は API と CLI が持ちます。"
+        emptyDescription="API または CLI から登録します。"
       />,
     )
 

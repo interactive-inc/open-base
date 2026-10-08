@@ -22,11 +22,11 @@ export async function updateOrgDepartment(
 
   if (response.status >= 400) {
     return toResponseError(response, {
-      fallback: "部署の変更に失敗しました",
+      fallback: "部署を変更できませんでした",
       conflictMessages: {
         "circular reference detected in department hierarchy":
-          "部署階層が循環するため変更できません",
-        "a department cannot be its own parent": "部署を自身の親に設定することはできません",
+          "部署の階層が循環するため変更できません。",
+        "a department cannot be its own parent": "部署を自分自身の上位部署にはできません。",
       },
     })
   }

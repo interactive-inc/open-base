@@ -48,7 +48,7 @@ export default async function MyApplicationsPage(props: { searchParams: SearchPa
           nativeButton={false}
           render={<Link href="/inbox/applications" />}
         >
-          承認 inbox
+          承認待ち
         </Button>
 
         <Button nativeButton={false} render={<Link href="/system/application-templates" />}>
@@ -67,7 +67,7 @@ async function MyApplicationsTable(props: { offset: number; pageSize: number }) 
   const result = await listMyApplications({ limit: props.pageSize, offset: props.offset })
 
   if (result instanceof Error) {
-    return <FetchError message="申請一覧の取得に失敗しました" />
+    return <FetchError message="申請を読み込めませんでした。" />
   }
 
   return (

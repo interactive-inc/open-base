@@ -6,7 +6,7 @@ import { ListSkeleton } from "@/components/list-skeleton"
 import { PageHeader } from "@/components/page-header"
 import { requirePermission } from "@/lib/auth/require-permission"
 
-export const metadata = { title: "外部交換" }
+export const metadata = { title: "連携履歴" }
 
 type Props = {
   searchParams: Promise<{ [key: string]: string | Array<string> | undefined }>
@@ -26,7 +26,7 @@ export default async function SystemIntegrationExchangesPage(props: Props) {
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader title="外部交換" />
+      <PageHeader title="連携履歴" />
 
       <Suspense fallback={<ListSkeleton rows={1} />}>
         <SystemExchangeConnectorForm connectorId={connectorId} />
@@ -34,8 +34,8 @@ export default async function SystemIntegrationExchangesPage(props: Props) {
 
       {connectorId === null ? (
         <EmptyState
-          title="コネクタを選びます"
-          description="外部交換はコネクタ単位で記録するので、まずコネクタを選びます。"
+          title="コネクタを選択してください"
+          description="連携履歴はコネクタごとに表示します。"
         />
       ) : (
         <Suspense key={connectorId} fallback={<ListSkeleton rows={5} />}>

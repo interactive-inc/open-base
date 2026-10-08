@@ -41,7 +41,7 @@ export default function RootError(props: Props) {
         </p>
 
         {props.error.digest !== undefined ? (
-          <p className="text-xs text-muted-foreground">エラーID: {props.error.digest}</p>
+          <p className="text-xs text-muted-foreground">エラーID：{props.error.digest}</p>
         ) : null}
       </div>
 

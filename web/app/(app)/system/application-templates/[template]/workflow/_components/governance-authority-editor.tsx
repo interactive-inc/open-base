@@ -32,7 +32,7 @@ export function GovernanceAuthorityEditor(props: Props) {
   return (
     <div className="flex flex-col gap-4 md:col-span-2">
       <Field>
-        <FieldLabel htmlFor={`${prefix}-code`}>会社の責務コード</FieldLabel>
+        <FieldLabel htmlFor={`${prefix}-code`}>責務コード</FieldLabel>
         <Input
           id={`${prefix}-code`}
           value={props.authority.responsibility_code}
@@ -40,7 +40,9 @@ export function GovernanceAuthorityEditor(props: Props) {
             props.onChange({ ...props.authority, responsibility_code: event.target.value })
           }
         />
-        <FieldDescription>有効な任用から承認者・合議人数・委任制限を決定します。</FieldDescription>
+        <FieldDescription>
+          有効な任用をもとに、承認者・必要人数・代理承認の制限を決めます。
+        </FieldDescription>
       </Field>
       <Field>
         <FieldLabel htmlFor={`${prefix}-scope`}>責務の適用範囲</FieldLabel>
@@ -50,7 +52,7 @@ export function GovernanceAuthorityEditor(props: Props) {
           onChange={(event) => changeScope(event.target.value)}
         >
           <NativeSelectOption value="none">範囲を指定しない</NativeSelectOption>
-          <NativeSelectOption value="organization-unit">組織</NativeSelectOption>
+          <NativeSelectOption value="organization-unit">部署</NativeSelectOption>
           <NativeSelectOption value="legal-entity">法人</NativeSelectOption>
           <NativeSelectOption value="site">拠点</NativeSelectOption>
           <NativeSelectOption value="workplace">勤務場所</NativeSelectOption>
@@ -58,7 +60,7 @@ export function GovernanceAuthorityEditor(props: Props) {
           <NativeSelectOption value="amount">金額</NativeSelectOption>
         </NativeSelect>
         <FieldDescription>
-          指定しない場合、範囲を限定した任用は承認資格になりません。
+          範囲を指定しない場合、範囲を限定した任用の担当者は承認者になりません。
         </FieldDescription>
       </Field>
       {scope !== null && "scope_id" in scope ? (

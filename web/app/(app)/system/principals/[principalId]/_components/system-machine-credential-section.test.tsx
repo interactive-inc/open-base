@@ -43,7 +43,7 @@ describe("SystemMachineCredentialSection", () => {
 
     render(await SystemMachineCredentialSection({ principalId: "principal-1" }))
 
-    expect(screen.getByText("機械 credential がありません")).toBeDefined()
+    expect(screen.getByText("機械用の認証情報がありません")).toBeDefined()
     expect(screen.queryByRole("table")).toBeNull()
   })
 
@@ -52,7 +52,7 @@ describe("SystemMachineCredentialSection", () => {
 
     render(await SystemMachineCredentialSection({ principalId: "principal-1" }))
 
-    expect(screen.getByText("機械 credential の取得に失敗しました")).toBeDefined()
+    expect(screen.getByText("認証情報を読み込めませんでした。")).toBeDefined()
     expect(screen.queryByRole("table")).toBeNull()
   })
 })

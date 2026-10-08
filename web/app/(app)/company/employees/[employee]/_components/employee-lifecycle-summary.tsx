@@ -10,18 +10,18 @@ export function EmployeeLifecycleSummary(props: { state: EmployeeLifecycleState 
     <Card>
       <CardHeader>
         <CardTitle className="flex flex-wrap items-center gap-4">
-          現在の人事状態
+          現在の人事情報
           <EmployeeStatusBadge status={props.state.status} />
         </CardTitle>
         <CardDescription>
-          {formatLifecycleDate(props.state.as_of)}時点の確定済み情報
+          {formatLifecycleDate(props.state.as_of)}時点の確定した情報です。
         </CardDescription>
       </CardHeader>
       <CardContent>
         <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <DetailField label="主所属">{primary?.department_name ?? "未配属"}</DetailField>
+          <DetailField label="主務">{primary?.department_name ?? "未配属"}</DetailField>
           <DetailField label="役職">{primary?.position_title ?? "-"}</DetailField>
-          <DetailField label="直属上司">{primary?.manager_employee_code ?? "未設定"}</DetailField>
+          <DetailField label="上長">{primary?.manager_employee_code ?? "未設定"}</DetailField>
           <DetailField label="兼務">
             {props.state.concurrent_assignments.length === 0
               ? "なし"
@@ -29,10 +29,10 @@ export function EmployeeLifecycleSummary(props: { state: EmployeeLifecycleState 
                   .map((assignment) => assignment.department_name)
                   .join("、")}
           </DetailField>
-          <DetailField label="部署責任">
+          <DetailField label="部署長">
             {props.state.responsibility_department_codes.join("、") || "なし"}
           </DetailField>
-          <DetailField label="雇用期間ID">
+          <DetailField label="雇用ID">
             <span className="break-all">{props.state.employment_period_id ?? "-"}</span>
           </DetailField>
         </dl>

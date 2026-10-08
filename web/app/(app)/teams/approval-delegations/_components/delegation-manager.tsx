@@ -38,7 +38,7 @@ export function DelegationManager(props: { delegations: ReadonlyArray<Delegation
   const [, deleteAction, deleting] = useActionState(
     async (state: DelegationState, data: FormData) => {
       const next = await deleteDelegationAction(state, data)
-      if (next.ok) toast.success("代理承認設定を解除しました")
+      if (next.ok) toast.success("代理承認を解除しました")
       else if (next.error) toast.error(next.error)
       return next
     },
@@ -54,29 +54,29 @@ export function DelegationManager(props: { delegations: ReadonlyArray<Delegation
           <form action={createAction}>
             <FieldGroup>
               <Field>
-                <FieldLabel htmlFor="delegate-code">代理先の従業員コード</FieldLabel>
+                <FieldLabel htmlFor="delegate-code">代理承認者の従業員コード</FieldLabel>
                 <Input
                   id="delegate-code"
                   name="delegate_employee_code"
-                  placeholder="E002"
+                  placeholder="例：E002"
                   required
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="delegate-template">テンプレートコード</FieldLabel>
+                <FieldLabel htmlFor="delegate-template">申請テンプレートのコード</FieldLabel>
                 <Input
                   id="delegate-template"
                   name="template_code"
-                  placeholder="空欄なら全テンプレート"
+                  placeholder="空欄ならすべての申請"
                 />
-                <FieldDescription>特定の申請だけを委任する場合に入力します。</FieldDescription>
+                <FieldDescription>特定の申請だけを任せる場合に入力します。</FieldDescription>
               </Field>
               <Field>
-                <FieldLabel htmlFor="delegate-start">開始</FieldLabel>
+                <FieldLabel htmlFor="delegate-start">開始日時</FieldLabel>
                 <Input id="delegate-start" name="starts_at" type="datetime-local" required />
               </Field>
               <Field>
-                <FieldLabel htmlFor="delegate-end">終了</FieldLabel>
+                <FieldLabel htmlFor="delegate-end">終了日時</FieldLabel>
                 <Input id="delegate-end" name="ends_at" type="datetime-local" required />
               </Field>
               {createState.error ? <FieldError>{createState.error}</FieldError> : null}
@@ -89,7 +89,7 @@ export function DelegationManager(props: { delegations: ReadonlyArray<Delegation
       </Card>
       <div className="flex flex-col gap-4">
         {props.delegations.length === 0 ? (
-          <Card>代理承認設定はありません。</Card>
+          <Card>代理承認の設定はありません。</Card>
         ) : (
           props.delegations.map((item) => (
             <Card key={item.id}>
@@ -99,7 +99,7 @@ export function DelegationManager(props: { delegations: ReadonlyArray<Delegation
                     {item.delegator?.name ?? "不明"} → {item.delegate?.name ?? "不明"}
                   </div>
                   <div className="text-sm text-muted-foreground">
-                    対象: {item.template_code ?? "全テンプレート"}
+                    対象：{item.template_code ?? "すべての申請"}
                   </div>
                   <div className="text-sm text-muted-foreground">
                     {formatDateTime(item.starts_at)} 〜 {formatDateTime(item.ends_at)}

@@ -56,7 +56,7 @@ describe("CompanyOrganizationSnapshotSection", () => {
 
     expect(screen.getByText("開発部")).toBeDefined()
     expect(screen.getByText("（最上位）")).toBeDefined()
-    expect(screen.getByText("組織 revision 9 時点の内容です。")).toBeDefined()
+    expect(screen.getByText("現在時点の組織です。")).toBeDefined()
   })
 
   test("組織単位のコードは部署ハブへ辿れる", async () => {
@@ -148,10 +148,10 @@ describe("CompanyOrganizationSnapshotSection", () => {
 
     render(await CompanyOrganizationSnapshotSection({ effectiveOn: null }))
 
-    expect(screen.getByText("組織単位がありません")).toBeDefined()
+    expect(screen.getByText("部署がありません")).toBeDefined()
     expect(screen.getByText("配属がありません")).toBeDefined()
     expect(screen.getByText("レポートラインがありません")).toBeDefined()
-    expect(screen.getByText("責任の割当がありません")).toBeDefined()
+    expect(screen.getByText("責任の割り当てがありません")).toBeDefined()
   })
 
   test("取得に失敗したときは部分的な内容を出さない", async () => {
@@ -159,7 +159,7 @@ describe("CompanyOrganizationSnapshotSection", () => {
 
     render(await CompanyOrganizationSnapshotSection({ effectiveOn: null }))
 
-    expect(screen.getByText("組織の時点断面の取得に失敗しました")).toBeDefined()
+    expect(screen.getByText("過去の組織図を読み込めませんでした。")).toBeDefined()
     expect(screen.queryByRole("table")).toBeNull()
   })
 })

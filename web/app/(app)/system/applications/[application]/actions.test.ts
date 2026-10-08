@@ -67,7 +67,7 @@ describe("確認した内容に対するWebの判断", () => {
     const body = form("approve")
     expect(await decideApplicationAction(initial, body)).toEqual({
       ok: false,
-      error: "申請内容または承認段階が更新されています。詳細を再読み込みして確認してください",
+      error: "申請内容または承認段階が更新されています。再読み込みして確認してください。",
     })
     expect(mocks.approvePost).toHaveBeenCalledTimes(1)
     expect(body.get("proposal_version")).toBe("3")

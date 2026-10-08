@@ -68,24 +68,24 @@ type CommandEntry = {
  * ⌘K で表示するコマンド候補として使う。
  */
 const commands: ReadonlyArray<CommandEntry> = [
-  { label: "ホーム", href: "/", icon: LayoutDashboard, group: "ナビゲーション" },
+  { label: "ホーム", href: "/", icon: LayoutDashboard, group: "全般" },
   {
-    label: "申請の承認",
+    label: "承認待ちの申請",
     href: "/inbox/applications",
     icon: Inbox,
     group: "受信箱",
     workflowApplicationInbox: true,
   },
-  { label: "従業員一覧", href: "/company/employees", icon: Users, group: "人材" },
+  { label: "従業員", href: "/company/employees", icon: Users, group: "会社" },
   {
-    label: "従業員 新規登録",
+    label: "従業員の登録",
     href: "/company/employees/new",
     icon: Users,
-    group: "人材",
+    group: "会社",
     requiredPermission: "employee:create",
   },
-  { label: "部署・組織図", href: "/company/departments", icon: GitBranch, group: "人材" },
-  { label: "自分の申請", href: "/my/applications", icon: FileText, group: "業務" },
+  { label: "組織図", href: "/company/departments", icon: GitBranch, group: "会社" },
+  { label: "自分の申請", href: "/my/applications", icon: FileText, group: "自分" },
   {
     label: "監査ログ",
     href: "/system/audit-events",
@@ -198,13 +198,13 @@ export function CommandPalette(props: Props) {
       open={open}
       onOpenChange={setOpen}
       title="コマンドパレット"
-      description="メニューを検索してページに移動"
+      description="ページ名で検索して移動します。"
     >
       <Command>
         <CommandInput placeholder="ページを検索…" />
 
         <CommandList>
-          <CommandEmpty>見つかりません</CommandEmpty>
+          <CommandEmpty>該当するページはありません。</CommandEmpty>
 
           {groups.map((group, index) => (
             <div key={group}>

@@ -81,7 +81,7 @@ describe("AuditEventDetailPage", () => {
     render(await AuditEventDetailPage({ params: Promise.resolve({ event: "evt-001" }) }))
 
     expect(screen.getByText("192.0.2.1")).toBeDefined()
-    for (const label of ["認可情報", "変更前", "変更後", "メタデータ"]) {
+    for (const label of ["権限の判定", "変更前", "変更後", "付加情報"]) {
       expect(screen.getByRole("button", { name: label }).getAttribute("aria-expanded")).toBe(
         "false",
       )
@@ -113,7 +113,7 @@ describe("AuditEventDetailPage", () => {
     mocks.requirePermission.mockResolvedValue({ permissions: ["audit:read"] })
     mocks.getAuditEvent.mockResolvedValue(new ApiResponseError(503, "SQL raw body"))
     render(await AuditEventDetailPage({ params: Promise.resolve({ event: "evt-001" }) }))
-    expect(screen.getByText("監査イベントを取得できませんでした")).toBeDefined()
+    expect(screen.getByText("監査ログを読み込めませんでした")).toBeDefined()
     expect(screen.queryByText(/SQL raw body/u)).toBeNull()
   })
 })

@@ -30,7 +30,7 @@ export default async function AdminRolesPage() {
         {currentUser.permissions.includes("system:admin") ||
         currentUser.permissions.includes("iam:write") ? (
           <Link href="/system/roles/new" className={buttonVariants({ variant: "default" })}>
-            新規作成
+            ロールを作成
           </Link>
         ) : null}
       </PageHeader>

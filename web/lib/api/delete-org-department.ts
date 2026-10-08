@@ -19,9 +19,9 @@ export async function deleteOrgDepartment(
 
   if (response.status >= 400) {
     return toResponseError(response, {
-      fallback: "部署の削除に失敗しました",
+      fallback: "部署を削除できませんでした",
       conflictMessages: {
-        "department has children or members": "子部署または所属者が残っているため削除できません",
+        "department has children or members": "下位の部署または所属者がいるため削除できません。",
       },
     })
   }

@@ -4,7 +4,7 @@ import { ListSkeleton } from "@/components/list-skeleton"
 import { PageHeader } from "@/components/page-header"
 import { requirePermission } from "@/lib/auth/require-permission"
 
-export const metadata = { title: "dead letter" }
+export const metadata = { title: "配信不能" }
 
 /**
  * 再試行の上限に達した配信の一覧。再投入は API と CLI が持つので、
@@ -15,7 +15,7 @@ export default async function SystemDeadLettersPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader title="dead letter" />
+      <PageHeader title="配信不能" />
 
       <Suspense fallback={<ListSkeleton rows={5} />}>
         <SystemDeadLetterSection />

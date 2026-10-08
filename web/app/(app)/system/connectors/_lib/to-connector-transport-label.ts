@@ -1,7 +1,7 @@
 const transportLabels: Record<string, string> = {
   api: "API",
   file: "ファイル",
-  webhook: "webhook",
+  webhook: "Webhook",
 }
 
 /** Connector の transport を表示用の綴りにする。 */

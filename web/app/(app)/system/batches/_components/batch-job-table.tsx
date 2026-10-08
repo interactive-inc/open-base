@@ -22,7 +22,7 @@ type Props = {
 export function BatchJobTable(props: Props) {
   return (
     <div className="overflow-x-auto">
-      <Table aria-label="一覧">
+      <Table aria-label="バッチ一覧">
         <TableHeader>
           <TableRow>
             <TableHead>ジョブ名</TableHead>

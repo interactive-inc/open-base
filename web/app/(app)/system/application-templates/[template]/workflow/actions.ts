@@ -17,7 +17,7 @@ export async function saveWorkflowAction(
   if (user instanceof Error || canManageApplicationTemplates(user.permissions) === false) {
     return {
       ok: false,
-      error: "承認フローを管理する権限がありません",
+      error: "承認フローを管理する権限がありません。",
       revision: _previous.revision,
     }
   }
@@ -29,7 +29,11 @@ export async function saveWorkflowAction(
     typeof definition !== "string" ||
     typeof expectedRevisionInput !== "string"
   ) {
-    return { ok: false, error: "承認フローの入力が不正です", revision: _previous.revision }
+    return {
+      ok: false,
+      error: "承認フローの入力内容が正しくありません。",
+      revision: _previous.revision,
+    }
   }
   const expectedRevision = Number(expectedRevisionInput)
   if (
@@ -37,13 +41,17 @@ export async function saveWorkflowAction(
     expectedRevision < 0 ||
     String(expectedRevision) !== expectedRevisionInput
   ) {
-    return { ok: false, error: "承認フローの改版番号が不正です", revision: _previous.revision }
+    return {
+      ok: false,
+      error: "承認フローのバージョンが正しくありません。画面を再読み込みしてください。",
+      revision: _previous.revision,
+    }
   }
   let workflow: ApplicationWorkflow
   try {
     workflow = JSON.parse(definition) as ApplicationWorkflow
   } catch {
-    return { ok: false, error: "詳細JSONが不正です", revision: expectedRevision }
+    return { ok: false, error: "詳細設定のJSONが正しくありません。", revision: expectedRevision }
   }
   const saved = await updateApplicationWorkflow(code, workflow, expectedRevision)
   if (saved instanceof ApiResponseError && saved.code === "workflow_revision_conflict") {

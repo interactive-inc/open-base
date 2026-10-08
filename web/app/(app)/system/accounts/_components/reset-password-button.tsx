@@ -94,7 +94,7 @@ export function ResetPasswordButton(props: Props) {
   return (
     <AlertDialog open={isFormOpen} onOpenChange={setFormOpen}>
       <AlertDialogTrigger render={<Button variant="secondary" size="sm" disabled={isPending} />}>
-        PW再設定
+        パスワード再設定
       </AlertDialogTrigger>
 
       <AlertDialogContent>
@@ -102,7 +102,7 @@ export function ResetPasswordButton(props: Props) {
           <AlertDialogTitle>パスワードを再設定しますか？</AlertDialogTitle>
 
           <AlertDialogDescription>
-            新しいパスワードを設定すると、このアカウントの既存トークンは無効になります。
+            再設定すると、このアカウントのログイン中のセッションは無効になります。
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -120,7 +120,7 @@ export function ResetPasswordButton(props: Props) {
               required
               minLength={12}
               maxLength={200}
-              placeholder="12文字以上で入力…"
+              placeholder="12文字以上"
             />
           </Field>
 
@@ -131,7 +131,7 @@ export function ResetPasswordButton(props: Props) {
           ) : null}
 
           <AlertDialogFooter>
-            <AlertDialogCancel>やめる</AlertDialogCancel>
+            <AlertDialogCancel>キャンセル</AlertDialogCancel>
 
             <Button type="submit" disabled={isPending}>
               再設定する

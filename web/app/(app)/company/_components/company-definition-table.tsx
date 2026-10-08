@@ -45,7 +45,7 @@ export function CompanyDefinitionTable(props: Props) {
 
               <TableCell>{definition.name}</TableCell>
 
-              <TableCell className="text-right">{definition.rank ?? "不明"}</TableCell>
+              <TableCell className="text-right">{definition.rank ?? "-"}</TableCell>
 
               <TableCell>{definition.description ?? "-"}</TableCell>
               <TableCell>

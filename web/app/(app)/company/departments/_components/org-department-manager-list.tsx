@@ -42,16 +42,16 @@ export function OrgDepartmentManagerList(props: Props) {
   return (
     <div className="flex flex-col gap-8">
       <div className="overflow-x-auto">
-        <Table aria-label="一覧">
+        <Table aria-label="部署の一覧">
           <TableHeader>
             <TableRow>
               <TableHead>コード</TableHead>
 
               <TableHead>部署名</TableHead>
 
-              <TableHead>親</TableHead>
+              <TableHead>親部署</TableHead>
 
-              <TableHead>責任者</TableHead>
+              <TableHead>部署長</TableHead>
 
               <TableHead className="text-right">操作</TableHead>
             </TableRow>
@@ -140,13 +140,13 @@ function UpdateDepartmentDialog(props: { department: OrgDepartmentResponse }) {
             </Field>
 
             <Field>
-              <FieldLabel htmlFor="update_parent_code">親コード</FieldLabel>
+              <FieldLabel htmlFor="update_parent_code">親部署コード（任意）</FieldLabel>
 
               <Input
                 id="update_parent_code"
                 name="parent_code"
                 defaultValue={props.department.parent_code ?? ""}
-                placeholder="任意"
+                placeholder="例: D001…"
               />
             </Field>
           </FieldGroup>
@@ -189,8 +189,8 @@ function DeleteDepartmentButton(props: { department: OrgDepartmentResponse }) {
       <ConfirmActionDialog
         action={formAction}
         triggerLabel="削除"
-        title={`部署 ${props.department.name}（${props.department.code}）を削除しますか？`}
-        description="部署ノードの削除は元に戻せません。配下の部署がある場合は削除できません。"
+        title={`${props.department.name}（${props.department.code}）を削除しますか？`}
+        description="削除すると元に戻せません。下位の部署がある場合は削除できません。"
         confirmLabel="部署を削除"
         pending={pending}
       >

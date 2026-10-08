@@ -34,7 +34,7 @@ export function CompanyEmployeeEventFilterForm(props: Props) {
                 type="text"
                 required
                 defaultValue={props.employeeCode ?? ""}
-                placeholder="E001"
+                placeholder="例: E001"
               />
             </Field>
           </div>

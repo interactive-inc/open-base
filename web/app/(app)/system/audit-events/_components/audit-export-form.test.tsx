@@ -116,7 +116,7 @@ describe("AuditExportForm", () => {
     renderForm()
     fireEvent.submit(screen.getByRole("button", { name: "CSVを出力" }).closest("form")!)
     expect(await screen.findByText(message)).toBeDefined()
-    expect(screen.getByText("問い合わせID: req-fixture")).toBeDefined()
+    expect(screen.getByText("問い合わせID：req-fixture")).toBeDefined()
     expect(screen.queryByText(/SQL raw password/u)).toBeNull()
   })
 })

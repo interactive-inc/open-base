@@ -122,7 +122,7 @@ describe("CompanyDefinitionSection", () => {
 
     render(await CompanyDefinitionSection())
 
-    expect(screen.getByText("職務と責任の取得に失敗しました")).toBeDefined()
+    expect(screen.getByText("職務と責任を読み込めませんでした。")).toBeDefined()
     expect(screen.queryByRole("table")).toBeNull()
   })
 })

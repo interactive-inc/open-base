@@ -83,7 +83,7 @@ export function AdminApplicationsFilterForm(props: Props) {
 
           <div className="sm:w-40">
             <Field className="w-full">
-              <FieldLabel htmlFor="admin-app-applicant">申請者 ID</FieldLabel>
+              <FieldLabel htmlFor="admin-app-applicant">申請者ID</FieldLabel>
 
               <Input
                 id="admin-app-applicant"
@@ -98,7 +98,7 @@ export function AdminApplicationsFilterForm(props: Props) {
 
           <div className="sm:w-44">
             <Field className="w-full">
-              <FieldLabel htmlFor="admin-app-from">申請日 (以降)</FieldLabel>
+              <FieldLabel htmlFor="admin-app-from">申請日（以降）</FieldLabel>
 
               <Input id="admin-app-from" name="from" type="date" defaultValue={props.fromValue} />
             </Field>
@@ -106,7 +106,7 @@ export function AdminApplicationsFilterForm(props: Props) {
 
           <div className="sm:w-44">
             <Field className="w-full">
-              <FieldLabel htmlFor="admin-app-to">申請日 (以前)</FieldLabel>
+              <FieldLabel htmlFor="admin-app-to">申請日（以前）</FieldLabel>
 
               <Input id="admin-app-to" name="to" type="date" defaultValue={props.toValue} />
             </Field>

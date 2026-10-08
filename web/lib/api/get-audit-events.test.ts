@@ -55,7 +55,7 @@ describe("getAuditEvents", () => {
     await expect(getAuditEvents({ limit: "50" })).resolves.toBe(expected)
     expect(mocks.toApiResponseError).toHaveBeenCalledWith(
       response,
-      "監査ログを取得できませんでした",
+      "監査ログを読み込めませんでした。",
     )
   })
 })

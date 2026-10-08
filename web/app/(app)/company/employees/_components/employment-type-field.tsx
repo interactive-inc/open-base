@@ -8,7 +8,7 @@ export function EmploymentTypeField(props: Props) {
   if (!props.isVisible) return null
   return (
     <Field>
-      <FieldLabel htmlFor={props.id}>雇用区分</FieldLabel>
+      <FieldLabel htmlFor={props.id}>雇用形態</FieldLabel>
       <NativeSelect id={props.id} name="employment_type" defaultValue="" required>
         <NativeSelectOption value="" disabled>
           選択してください

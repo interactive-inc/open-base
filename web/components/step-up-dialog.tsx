@@ -84,7 +84,7 @@ export function StepUpDialog(props: Props) {
           </DialogTitle>
 
           <DialogDescription>
-            この操作には再認証が必要です。確認後 5 分間は続けて操作できます。
+            この操作には再認証が必要です。確認後5分間は再認証なしで操作できます。
           </DialogDescription>
         </DialogHeader>
 
@@ -119,7 +119,7 @@ export function StepUpDialog(props: Props) {
 
             <DialogFooter>
               <Button type="button" variant="secondary" onClick={props.onCancel}>
-                やめる
+                キャンセル
               </Button>
 
               <Button type="submit" disabled={isPending}>

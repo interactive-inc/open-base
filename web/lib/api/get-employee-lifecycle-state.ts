@@ -8,7 +8,7 @@ export async function getEmployeeLifecycleState(code: string, asOf?: string) {
     { init: { cache: "no-store" } },
   )
   if (!response.ok) {
-    return toResponseError(response, { fallback: "人事状態の取得に失敗しました" })
+    return toResponseError(response, { fallback: "在籍状況を読み込めませんでした" })
   }
   return response.json()
 }

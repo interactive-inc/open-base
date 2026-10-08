@@ -7,7 +7,7 @@ export async function getApplicationWorkflow(code: string) {
     param: { code },
   })
   if (response.status >= 400) {
-    return toResponseError(response, { fallback: "承認フローの取得に失敗しました" })
+    return toResponseError(response, { fallback: "承認フローを読み込めませんでした" })
   }
   return response.json()
 }

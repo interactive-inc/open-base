@@ -16,9 +16,9 @@ export async function updateApplication(id: EntityId, payload: unknown) {
 
   if (response.status >= 400) {
     return toResponseError(response, {
-      fallback: "申請の変更に失敗しました",
+      fallback: "申請を変更できませんでした",
       conflictMessages: {
-        "application is already decided": "この申請は既に審査済みのため変更できません",
+        "application is already decided": "この申請は審査済みのため変更できません。",
       },
     })
   }

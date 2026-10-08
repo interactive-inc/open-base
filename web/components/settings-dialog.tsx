@@ -33,7 +33,7 @@ export function SettingsDialog(props: Props) {
         <DialogHeader>
           <DialogTitle>設定</DialogTitle>
 
-          <DialogDescription>表示や操作に関する個人設定を変更できます。</DialogDescription>
+          <DialogDescription>表示テーマ、表示言語、電話番号を変更できます。</DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-8">

@@ -49,7 +49,7 @@ describe("SystemExchangeConnectorForm", () => {
 
     render(await SystemExchangeConnectorForm({ connectorId: null }))
 
-    expect(screen.getByText("コネクタの取得に失敗しました")).toBeDefined()
+    expect(screen.getByText("コネクタを読み込めませんでした。")).toBeDefined()
     expect(screen.queryByRole("combobox")).toBeNull()
   })
 })

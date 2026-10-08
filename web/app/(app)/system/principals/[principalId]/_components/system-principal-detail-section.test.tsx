@@ -66,7 +66,7 @@ describe("SystemPrincipalDetailSection", () => {
 
     render(await SystemPrincipalDetailSection({ principalId: "principal-9" }))
 
-    expect(screen.getByText("Principal の取得に失敗しました")).toBeDefined()
+    expect(screen.getByText("主体を読み込めませんでした。")).toBeDefined()
     expect(screen.queryByText("取込コネクタ")).toBeNull()
   })
 })

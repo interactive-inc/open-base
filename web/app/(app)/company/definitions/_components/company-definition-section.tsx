@@ -6,14 +6,14 @@ import { readResourceNumber } from "@/lib/company/read-resource-number"
 import { readResourceText } from "@/lib/company/read-resource-text"
 import { toAuthorityScopeLabel } from "@/app/(app)/company/definitions/_lib/to-authority-scope-label"
 
-const emptyDescription = "定義の正本は API と CLI が持ちます。まだ登録がありません。"
+const emptyDescription = "API または CLI で登録します。"
 
 /** 職務・組織上の役職・責任・権限範囲・合議体の定義を読み取り専用で並べる。 */
 export async function CompanyDefinitionSection() {
   const definitions = await getCompanyDefinitionResources()
 
   if (definitions instanceof Error) {
-    return <FetchError message="職務と責任の取得に失敗しました" />
+    return <FetchError message="職務と責任を読み込めませんでした。" />
   }
 
   const jobs = filterResourcesByType(definitions.resources, "job")
@@ -61,7 +61,7 @@ export async function CompanyDefinitionSection() {
               toValue: (resource) => readResourceText(resource, "officialName") ?? "-",
             },
             {
-              header: "組織単位",
+              header: "部署",
               toValue: (resource) => readResourceText(resource, "organizationUnitId") ?? "-",
             },
             {

@@ -109,7 +109,7 @@ export default async function AdminApplicationsPage(props: { searchParams: Searc
           nativeButton={false}
           render={<Link href="/inbox/applications" />}
         >
-          承認 inbox
+          承認待ちの申請
         </Button>
       </PageHeader>
 
@@ -175,7 +175,7 @@ async function AdminListSection(props: {
   })
 
   if (result instanceof Error) {
-    return <FetchError message="申請一覧の取得に失敗しました" />
+    return <FetchError message="申請を読み込めませんでした。" />
   }
 
   const paginationExtraParams: Record<string, string | undefined> = {

@@ -31,7 +31,7 @@ export async function getWorkflowRepairs(
   })
 
   if (response.status >= 400) {
-    return toApiResponseError(response, "承認フローの修復対象を取得できませんでした")
+    return toApiResponseError(response, "修復が必要な承認フローを読み込めませんでした。")
   }
 
   return response.json()

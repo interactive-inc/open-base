@@ -47,7 +47,7 @@ describe("SystemDeadLetterSection", () => {
 
     expect(screen.getByRole("cell", { name: "ジョブ" })).toBeDefined()
     expect(screen.getByRole("cell", { name: "送信箱" })).toBeDefined()
-    expect(screen.getByRole("cell", { name: "未" })).toBeDefined()
+    expect(screen.getByRole("cell", { name: "未実行" })).toBeDefined()
     expect(screen.getAllByRole("row").slice(1)).toHaveLength(2)
   })
 
@@ -64,7 +64,7 @@ describe("SystemDeadLetterSection", () => {
 
     render(await SystemDeadLetterSection())
 
-    expect(screen.getByText("dead letter がありません")).toBeDefined()
+    expect(screen.getByText("配信不能はありません")).toBeDefined()
     expect(screen.queryByRole("table")).toBeNull()
   })
 
@@ -73,7 +73,7 @@ describe("SystemDeadLetterSection", () => {
 
     render(await SystemDeadLetterSection())
 
-    expect(screen.getByText("dead letter の取得に失敗しました")).toBeDefined()
+    expect(screen.getByText("配信不能の一覧を読み込めませんでした。")).toBeDefined()
     expect(screen.queryByRole("table")).toBeNull()
   })
 })

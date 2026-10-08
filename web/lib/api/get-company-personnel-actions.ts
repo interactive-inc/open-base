@@ -19,6 +19,6 @@ export async function getCompanyPersonnelActions(query: CompanyPersonnelActionQu
     },
     { init: { cache: "no-store" } },
   )
-  if (!response.ok) return toResponseError(response, { fallback: "人事発令の取得に失敗しました" })
+  if (!response.ok) return toResponseError(response, { fallback: "人事発令を読み込めませんでした" })
   return response.json()
 }

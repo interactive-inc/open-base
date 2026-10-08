@@ -36,7 +36,7 @@ async function reject(
   decisionTarget: ApplicationDecisionTarget,
 ): Promise<DecisionState> {
   if (comment === null) {
-    return { ok: false, error: "承認しない理由を入力してください" }
+    return { ok: false, error: "理由を入力してください。" }
   }
 
   const decided = await rejectApplication(applicationId, comment, decisionTarget)
@@ -57,13 +57,13 @@ export async function decideApplicationAction(
 
   // 会社上の判断資格はAPIで再検査する。
   if (currentUser instanceof Error) {
-    return { ok: false, error: "申請を承認・却下する権限がありません" }
+    return { ok: false, error: "申請を承認・却下する権限がありません。" }
   }
 
   const applicationId = toEntityId(formData.get("application_id"))
 
   if (applicationId === null) {
-    return { ok: false, error: "申請が指定されていません" }
+    return { ok: false, error: "申請が指定されていません。" }
   }
 
   const target = z
@@ -80,7 +80,7 @@ export async function decideApplicationAction(
       task_round: formData.get("task_round"),
     })
   if (!target.success)
-    return { ok: false, error: "確認した申請を特定できません。詳細を再読み込みしてください" }
+    return { ok: false, error: "申請を特定できませんでした。画面を再読み込みしてください。" }
 
   const decision = formData.get("decision")
 
@@ -90,7 +90,7 @@ export async function decideApplicationAction(
     typeof rawComment === "string" && rawComment.trim() !== "" ? rawComment.trim() : null
 
   if (decision !== "approve" && decision !== "reject") {
-    return { ok: false, error: "操作が不正です" }
+    return { ok: false, error: "操作が正しくありません。" }
   }
 
   const decide = async () => {

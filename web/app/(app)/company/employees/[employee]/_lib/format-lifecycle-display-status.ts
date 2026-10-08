@@ -3,7 +3,7 @@ const statusLabels: Readonly<Record<string, string>> = {
   scheduled: "予定",
   corrected: "訂正済み",
   correction: "訂正",
-  migration: "移行時点",
+  migration: "移行データ",
 }
 
 export function formatLifecycleDisplayStatus(status: string): string {

@@ -15,15 +15,17 @@ export function EmployeeLifecycleTimeline(props: {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>人材タイムライン</CardTitle>
-        <CardDescription>入社から配属、異動、休復職、退職までの確定履歴</CardDescription>
+        <CardTitle>人事発令の履歴</CardTitle>
+        <CardDescription>
+          入社から退職までの確定した人事発令を、時系列で表示します。
+        </CardDescription>
       </CardHeader>
       <CardContent>
         {props.events.data.length === 0 ? (
           <Empty>
             <EmptyHeader>
               <EmptyTitle>人事発令はまだありません</EmptyTitle>
-              <EmptyDescription>確定した発令がここへ時系列で表示されます。</EmptyDescription>
+              <EmptyDescription>人事発令を確定すると、ここに表示されます。</EmptyDescription>
             </EmptyHeader>
           </Empty>
         ) : (

@@ -23,7 +23,7 @@ describe("RevokeRoleButton", () => {
 
     render(<RevokeRoleButton accountId="acc-1" bindingId="binding-1" roleLabel="accounting" />)
 
-    fireEvent.click(screen.getByRole("button", { name: "accounting を剥奪" }))
+    fireEvent.click(screen.getByRole("button", { name: "accountingを外す" }))
 
     await waitFor(() => {
       expect(screen.getByLabelText("パスワード")).toBeDefined()
@@ -52,7 +52,7 @@ describe("RevokeRoleButton", () => {
 
     render(<RevokeRoleButton accountId="acc-1" bindingId="binding-1" roleLabel="accounting" />)
 
-    fireEvent.click(screen.getByRole("button", { name: "accounting を剥奪" }))
+    fireEvent.click(screen.getByRole("button", { name: "accountingを外す" }))
 
     await waitFor(() => {
       expect(vi.mocked(revokeAccountRoleAction).mock.calls.length).toBe(1)

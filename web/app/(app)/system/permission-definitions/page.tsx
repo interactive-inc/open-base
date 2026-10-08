@@ -5,7 +5,7 @@ import { ListSkeleton } from "@/components/list-skeleton"
 import { PageHeader } from "@/components/page-header"
 import { requireAnyPermission } from "@/lib/auth/require-any-permission"
 
-export const metadata = { title: "権限定義" }
+export const metadata = { title: "権限一覧" }
 
 /**
  * 権限キーのカタログ。ロールに割り当てられる技術的 permission の正本はコードの
@@ -18,7 +18,7 @@ export default async function SystemPermissionDefinitionsPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader title="権限定義" />
+      <PageHeader title="権限一覧" />
 
       <Link className="text-sm underline" href="/system/roles">
         ロールの一覧へ

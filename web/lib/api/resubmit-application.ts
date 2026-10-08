@@ -9,7 +9,7 @@ export async function resubmitApplication(id: EntityId, payload: unknown) {
     json: { payload },
   })
   if (response.status >= 400) {
-    return toResponseError(response, { fallback: "申請の再提出に失敗しました" })
+    return toResponseError(response, { fallback: "申請を再提出できませんでした" })
   }
   return response.json()
 }

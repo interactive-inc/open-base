@@ -92,7 +92,7 @@ export function RoleCreateForm(props: Props) {
     <>
       <form onSubmit={handleSubmit} className="flex flex-col gap-8">
         <Field>
-          <FieldLabel htmlFor="key">キー（名前空間:名前、不変）</FieldLabel>
+          <FieldLabel htmlFor="key">キー（「分類:名前」の形式、作成後は変更不可）</FieldLabel>
           <Input
             id="key"
             name="key"
@@ -100,13 +100,13 @@ export function RoleCreateForm(props: Props) {
             minLength={3}
             maxLength={100}
             pattern="[a-z][a-z0-9_-]*:[a-z][a-z0-9_-]*"
-            placeholder="company:auditor"
+            placeholder="例: company:auditor"
           />
         </Field>
 
         <Field>
           <FieldLabel htmlFor="name">名前</FieldLabel>
-          <Input id="name" name="name" required maxLength={100} placeholder="監査担当" />
+          <Input id="name" name="name" required maxLength={100} placeholder="例: 監査担当" />
         </Field>
 
         <Field>

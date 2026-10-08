@@ -3,13 +3,13 @@ export function readCompanyRevision(form: FormData): number | Error {
   const value = form.get("company_revision")
 
   if (typeof value !== "string" || !/^(0|[1-9]\d*)$/.test(value)) {
-    return new Error("会社情報を再取得して内容を確認してください")
+    return new Error("会社情報を再読み込みして内容を確認してください。")
   }
 
   const revision = Number(value)
 
   if (!Number.isSafeInteger(revision)) {
-    return new Error("会社情報を再取得して内容を確認してください")
+    return new Error("会社情報を再読み込みして内容を確認してください。")
   }
 
   return revision

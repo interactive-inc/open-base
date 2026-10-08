@@ -132,7 +132,7 @@ export function AccountStatusButton(props: Props) {
           <AlertDialogTitle>このアカウントを停止しますか？</AlertDialogTitle>
 
           <AlertDialogDescription>
-            停止するとこのアカウントはログインできなくなり、発行済みのトークンも即時無効になります。
+            停止すると、このアカウントはログインできなくなり、ログイン中のセッションもすぐに無効になります。
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -148,7 +148,7 @@ export function AccountStatusButton(props: Props) {
           <input type="hidden" name="status" value="suspended" />
 
           <AlertDialogFooter>
-            <AlertDialogCancel>やめる</AlertDialogCancel>
+            <AlertDialogCancel>キャンセル</AlertDialogCancel>
 
             <Button type="submit" variant="destructive" disabled={isPending}>
               停止する

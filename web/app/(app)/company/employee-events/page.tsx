@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/page-header"
 import type { EmployeeEventKind } from "@/lib/api/types/employee-event-types"
 import { requireAnyPermission } from "@/lib/auth/require-any-permission"
 
-export const metadata = { title: "雇用事実" }
+export const metadata = { title: "雇用履歴" }
 
 type Props = {
   searchParams: Promise<{ [key: string]: string | Array<string> | undefined }>
@@ -28,14 +28,14 @@ export default async function CompanyEmployeeEventsPage(props: Props) {
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader title="雇用事実" />
+      <PageHeader title="雇用履歴" />
 
       <CompanyEmployeeEventFilterForm employeeCode={employeeCode} kind={kind} />
 
       {employeeCode === null ? (
         <EmptyState
           title="従業員コードを入力してください"
-          description="この一覧は従業員ごとに引きます。全社をまとめて読む API はありません。"
+          description="雇用履歴は従業員ごとに表示します。"
         />
       ) : (
         <Suspense key={`${employeeCode}:${kind ?? ""}`} fallback={<ListSkeleton rows={5} />}>

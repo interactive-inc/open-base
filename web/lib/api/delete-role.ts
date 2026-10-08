@@ -19,7 +19,7 @@ export async function deleteRole(
   )
 
   if (response.status !== 204) {
-    return toApiResponseError(response, "ロールの削除に失敗しました")
+    return toApiResponseError(response, "ロールを削除できませんでした。")
   }
 
   return null

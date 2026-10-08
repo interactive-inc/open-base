@@ -54,8 +54,8 @@ describe("CompanyEmployeeEventSection", () => {
 
     render(await CompanyEmployeeEventSection({ employeeCode: "E003", kind: null }))
 
-    expect(screen.getByText("記録がありません")).toBeDefined()
-    expect(screen.getByText("E003 に該当する雇用事実はありません。")).toBeDefined()
+    expect(screen.getByText("雇用履歴がありません")).toBeDefined()
+    expect(screen.getByText("E003 の雇用履歴はありません。")).toBeDefined()
     expect(screen.queryByRole("table")).toBeNull()
   })
 
@@ -64,7 +64,7 @@ describe("CompanyEmployeeEventSection", () => {
 
     render(await CompanyEmployeeEventSection({ employeeCode: "E001", kind: null }))
 
-    expect(screen.getByText("雇用事実の取得に失敗しました")).toBeDefined()
+    expect(screen.getByText("雇用履歴を読み込めませんでした。")).toBeDefined()
     expect(screen.queryByRole("table")).toBeNull()
   })
 })

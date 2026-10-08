@@ -26,21 +26,21 @@ export async function CompanyEmployeeEventSection(props: Props) {
   })
 
   if (events instanceof Error) {
-    return <FetchError message="雇用事実の取得に失敗しました" />
+    return <FetchError message="雇用履歴を読み込めませんでした。" />
   }
 
   if (events.length === 0) {
     return (
       <EmptyState
-        title="記録がありません"
-        description={`${props.employeeCode} に該当する雇用事実はありません。`}
+        title="雇用履歴がありません"
+        description={`${props.employeeCode} の雇用履歴はありません。`}
       />
     )
   }
 
   return (
     <div className="overflow-x-auto">
-      <Table aria-label="雇用事実の一覧">
+      <Table aria-label="雇用履歴の一覧">
         <TableHeader>
           <TableRow>
             <TableHead>発生日</TableHead>

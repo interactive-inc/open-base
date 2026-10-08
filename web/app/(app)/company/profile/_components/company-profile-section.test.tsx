@@ -75,7 +75,7 @@ describe("CompanyProfileSection", () => {
     render(await CompanyProfileSection())
 
     expect(screen.getByText("法人が登録されていません")).toBeDefined()
-    expect(screen.getByText("会社プロフィールが登録されていません")).toBeDefined()
+    expect(screen.getByText("会社情報が登録されていません")).toBeDefined()
     expect(screen.queryByRole("table")).toBeNull()
   })
 
@@ -84,7 +84,7 @@ describe("CompanyProfileSection", () => {
 
     render(await CompanyProfileSection())
 
-    expect(screen.getByText("会社と法人の取得に失敗しました")).toBeDefined()
+    expect(screen.getByText("会社と法人を読み込めませんでした。")).toBeDefined()
     expect(screen.queryByText("サンプル株式会社")).toBeNull()
   })
 })

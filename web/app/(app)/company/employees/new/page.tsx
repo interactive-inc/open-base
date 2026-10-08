@@ -8,7 +8,7 @@ import { getPersonnelPositionSnapshot } from "@/lib/api/get-personnel-position-s
 import { canCreateEmployee } from "@/lib/employee/can-create-employee"
 import { notFound } from "next/navigation"
 
-export const metadata = { title: "従業員登録" }
+export const metadata = { title: "従業員の登録" }
 
 /** 従業員登録画面。フォームは Client Component に切り出し、Server Action で POST /employees する。 */
 export default async function EmployeeNewPage() {
@@ -22,11 +22,12 @@ export default async function EmployeeNewPage() {
 
   const snapshot = await getPersonnelPositionSnapshot()
 
-  if (snapshot instanceof Error) return <FetchError message="会社情報の取得に失敗しました" />
+  if (snapshot instanceof Error)
+    return <FetchError message="登録に必要な情報を読み込めませんでした。" />
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader title="従業員を登録">
+      <PageHeader title="従業員の登録">
         <BackButton href="/company/employees" label="一覧に戻る" />
       </PageHeader>
 

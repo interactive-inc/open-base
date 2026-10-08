@@ -11,12 +11,7 @@ type Props = {
 /** 役職マスタ一覧テーブル。canManage のときだけ各行に変更・取消の操作列を出す。 */
 export function PositionList(props: Props) {
   if (props.positions.length === 0) {
-    return (
-      <EmptyState
-        title="役職がありません"
-        description="右上の「新規役職」から役職を登録しましょう。"
-      />
-    )
+    return <EmptyState title="役職がありません" description="「新規役職」から登録してください。" />
   }
 
   return (

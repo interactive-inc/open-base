@@ -49,7 +49,7 @@ export function ConfirmActionDialog(props: Props) {
         </AlertDialogHeader>
 
         <AlertDialogFooter>
-          <AlertDialogCancel>やめる</AlertDialogCancel>
+          <AlertDialogCancel>キャンセル</AlertDialogCancel>
 
           <form action={props.action}>
             {props.children}

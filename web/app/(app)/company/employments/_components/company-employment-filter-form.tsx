@@ -21,7 +21,7 @@ export function CompanyEmploymentFilterForm(props: Props) {
         <FieldGroup className="flex-row flex-wrap items-end gap-4">
           <div className="sm:w-48">
             <Field className="w-full">
-              <FieldLabel htmlFor="company-employment-status">在籍区分</FieldLabel>
+              <FieldLabel htmlFor="company-employment-status">在籍状況</FieldLabel>
 
               <NativeSelect
                 id="company-employment-status"

@@ -15,7 +15,7 @@ const permissions = [
 function renderFilledForm() {
   render(<RoleCreateForm permissions={permissions} />)
 
-  fireEvent.change(screen.getByLabelText("キー（名前空間:名前、不変）"), {
+  fireEvent.change(screen.getByLabelText("キー（「分類:名前」の形式、作成後は変更不可）"), {
     target: { value: "company:auditor" },
   })
 
@@ -47,9 +47,10 @@ describe("RoleCreateForm", () => {
       expect(screen.getByLabelText("パスワード")).toBeDefined()
     })
 
-    expect(screen.getByLabelText<HTMLInputElement>("キー（名前空間:名前、不変）").value).toBe(
-      "company:auditor",
-    )
+    expect(
+      screen.getByLabelText<HTMLInputElement>("キー（「分類:名前」の形式、作成後は変更不可）")
+        .value,
+    ).toBe("company:auditor")
 
     expect(screen.getByLabelText<HTMLInputElement>("名前").value).toBe("監査担当")
   })
@@ -72,9 +73,10 @@ describe("RoleCreateForm", () => {
       expect(screen.getByText("同じキーのロールが既に存在します")).toBeDefined()
     })
 
-    expect(screen.getByLabelText<HTMLInputElement>("キー（名前空間:名前、不変）").value).toBe(
-      "company:auditor",
-    )
+    expect(
+      screen.getByLabelText<HTMLInputElement>("キー（「分類:名前」の形式、作成後は変更不可）")
+        .value,
+    ).toBe("company:auditor")
   })
 
   test("再認証に成功すると同じ作成をやり直す", async () => {

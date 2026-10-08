@@ -9,7 +9,7 @@ export async function submitApplication(body: ApplicationSubmitRequest) {
   const response = await client["company"]["application-requests"].$post({ json: body })
 
   if (response.status >= 400) {
-    return toResponseError(response, { fallback: "申請の提出に失敗しました" })
+    return toResponseError(response, { fallback: "申請を提出できませんでした" })
   }
 
   return response.json()

@@ -17,19 +17,19 @@ export async function SystemIntegrationExchangeSection(props: Props) {
   const exchanges = await getSystemIntegrationExchanges(props.connectorId)
 
   if (exchanges instanceof Error) {
-    return <FetchError message="外部交換の取得に失敗しました" />
+    return <FetchError message="連携履歴を読み込めませんでした。" />
   }
 
   return (
     <SystemResourceTable
-      caption="外部交換の一覧"
+      caption="連携履歴の一覧"
       resources={exchanges}
       toKey={(exchange) => exchange.id}
-      emptyTitle="外部交換がありません"
-      emptyDescription="このコネクタではまだ交換が記録されていません。"
+      emptyTitle="連携履歴がありません"
+      emptyDescription="このコネクタの連携はまだありません。"
       columns={[
         {
-          header: "操作",
+          header: "処理",
           toValue: (exchange) => (
             <Link
               className="font-mono text-xs underline"
@@ -39,10 +39,10 @@ export async function SystemIntegrationExchangeSection(props: Props) {
             </Link>
           ),
         },
-        { header: "向き", toValue: (exchange) => toConnectorDirectionLabel(exchange.direction) },
+        { header: "方向", toValue: (exchange) => toConnectorDirectionLabel(exchange.direction) },
         { header: "状態", toValue: (exchange) => toExchangeStatusLabel(exchange.status) },
-        { header: "試行", toValue: (exchange) => exchange.attempt },
-        { header: "外部の参照", toValue: (exchange) => exchange.externalReference ?? "-" },
+        { header: "試行回数", toValue: (exchange) => exchange.attempt },
+        { header: "外部参照", toValue: (exchange) => exchange.externalReference ?? "-" },
         { header: "直近のエラー", toValue: (exchange) => exchange.lastErrorCode ?? "-" },
       ]}
     />

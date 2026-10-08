@@ -60,7 +60,7 @@ export function EmployeeEditForm(props: Props) {
 
   const isPending = action[2]
 
-  if (props.profile === null) return <p>人物情報の対応確認が完了するまで編集できません。</p>
+  if (props.profile === null) return <p>人物情報を確認できないため、編集できません。</p>
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -71,7 +71,7 @@ export function EmployeeEditForm(props: Props) {
           <DialogTitle>従業員を編集</DialogTitle>
 
           <DialogDescription>
-            人物台帳の氏名を変更します。所属・役職・在籍状態は人事発令から変更してください。
+            氏名を変更します。所属・役職・在籍状況は人事発令で変更します。
           </DialogDescription>
         </DialogHeader>
 
@@ -105,7 +105,7 @@ export function EmployeeEditForm(props: Props) {
             ) : null}
 
             <Button type="submit" disabled={isPending}>
-              {isPending ? "更新中…" : "変更を保存"}
+              {isPending ? "保存中…" : "変更を保存"}
             </Button>
           </FieldGroup>
         </form>

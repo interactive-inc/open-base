@@ -21,29 +21,32 @@ export async function SystemMachineCredentialSection(props: Props) {
   const credentials = await getSystemMachineCredentials(props.principalId)
 
   if (credentials instanceof Error) {
-    return <FetchError message="機械 credential の取得に失敗しました" />
+    return <FetchError message="認証情報を読み込めませんでした。" />
   }
 
   return (
     <section className="flex flex-col gap-4">
-      <h2 className="text-lg font-semibold">機械 credential</h2>
+      <h2 className="text-lg font-semibold">機械用の認証情報</h2>
 
       <SystemResourceTable
-        caption="機械 credential の一覧"
+        caption="機械用の認証情報の一覧"
         resources={credentials}
         toKey={(credential) => credential.id}
-        emptyTitle="機械 credential がありません"
-        emptyDescription="この Principal にはまだ credential が発行されていません。発行は API と CLI から行います。"
+        emptyTitle="機械用の認証情報がありません"
+        emptyDescription="この主体にはまだ認証情報が発行されていません。発行はAPIまたはCLIから行います。"
         columns={[
           { header: "名称", toValue: (credential) => credential.name },
           {
             header: "状態",
             toValue: (credential) => statusLabels[credential.status] ?? credential.status,
           },
-          { header: "作成", toValue: (credential) => formatDateTime(credential.created_at) },
+          { header: "作成日時", toValue: (credential) => formatDateTime(credential.created_at) },
           { header: "有効期限", toValue: (credential) => formatDateTime(credential.expires_at) },
-          { header: "最終利用", toValue: (credential) => formatDateTime(credential.last_used_at) },
-          { header: "失効", toValue: (credential) => formatDateTime(credential.revoked_at) },
+          {
+            header: "最終利用日時",
+            toValue: (credential) => formatDateTime(credential.last_used_at),
+          },
+          { header: "失効日時", toValue: (credential) => formatDateTime(credential.revoked_at) },
         ]}
       />
     </section>

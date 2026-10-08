@@ -31,7 +31,7 @@ export async function createRole(props: Props): Promise<null | ApiResponseError>
   )
 
   if (response.status !== 201) {
-    return toApiResponseError(response, "ロールの作成に失敗しました")
+    return toApiResponseError(response, "ロールを作成できませんでした。")
   }
 
   return null

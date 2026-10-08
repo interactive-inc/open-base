@@ -6,7 +6,7 @@ import { ListSkeleton } from "@/components/list-skeleton"
 import { PageHeader } from "@/components/page-header"
 import { requirePermission } from "@/lib/auth/require-permission"
 
-export const metadata = { title: "Principal の詳細" }
+export const metadata = { title: "主体の詳細" }
 
 type Props = {
   params: Promise<{ principalId: string }>
@@ -20,10 +20,10 @@ export default async function SystemPrincipalPage(props: Props) {
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader title="Principal の詳細" />
+      <PageHeader title="主体の詳細" />
 
       <Link className="text-sm underline" href="/system/principals">
-        Principal の一覧へ戻る
+        主体の一覧へ戻る
       </Link>
 
       <Suspense fallback={<ListSkeleton rows={3} />}>

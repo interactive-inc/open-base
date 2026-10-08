@@ -13,7 +13,7 @@ export async function applyPersonnelAction(
     { headers: { "Idempotency-Key": idempotencyKey }, init: { cache: "no-store" } },
   )
   if (!response.ok) {
-    return toResponseError(response, { fallback: "人事発令の確定に失敗しました" })
+    return toResponseError(response, { fallback: "人事発令を確定できませんでした" })
   }
   return response.json()
 }

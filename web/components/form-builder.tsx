@@ -73,7 +73,7 @@ export function FormBuilder(props: Props) {
       {schema.fields.length === 0 ? (
         <EmptyState
           title="まだ項目がありません"
-          description="「項目を追加」ボタンから入力欄を作っていきます。"
+          description="「項目を追加」から入力欄を作成します。"
           action={
             <Button type="button" onClick={addField}>
               <Plus />
@@ -156,7 +156,7 @@ export function FormBuilder(props: Props) {
                   <Input
                     id={`${field.id}-description`}
                     value={field.description ?? ""}
-                    placeholder="入力者向けの補足文"
+                    placeholder="入力する人への補足"
                     onChange={(event) =>
                       updateField(index, {
                         ...field,
@@ -168,7 +168,7 @@ export function FormBuilder(props: Props) {
 
                 {field.type === "select" ? (
                   <Field>
-                    <FieldLabel htmlFor={`${field.id}-options`}>選択肢（改行区切り）</FieldLabel>
+                    <FieldLabel htmlFor={`${field.id}-options`}>選択肢</FieldLabel>
 
                     <Textarea
                       id={`${field.id}-options`}
@@ -183,7 +183,7 @@ export function FormBuilder(props: Props) {
                       className="w-full"
                     />
 
-                    <FieldDescription>1行に1つの選択肢を書く</FieldDescription>
+                    <FieldDescription>1行に1つずつ入力します。</FieldDescription>
                   </Field>
                 ) : null}
 

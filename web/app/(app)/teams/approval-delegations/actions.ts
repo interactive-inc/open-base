@@ -24,11 +24,11 @@ export async function createDelegationAction(
     typeof starts !== "string" ||
     typeof ends !== "string"
   )
-    return { ok: false, error: "代理先と期間を入力してください" }
+    return { ok: false, error: "代理先と期間を入力してください。" }
   const startsAt = new Date(starts)
   const endsAt = new Date(ends)
   if (Number.isNaN(startsAt.valueOf()) || Number.isNaN(endsAt.valueOf()))
-    return { ok: false, error: "期間が不正です" }
+    return { ok: false, error: "期間を正しく入力してください。" }
   const result = await createApprovalDelegation({
     delegate_employee_code: delegate.trim(),
     template_code: typeof template === "string" && template.trim() !== "" ? template.trim() : null,
@@ -47,7 +47,7 @@ export async function deleteDelegationAction(
   await requireAuth()
 
   const id = toEntityId(formData.get("delegation_id"))
-  if (id === null) return { ok: false, error: "代理設定を特定できません" }
+  if (id === null) return { ok: false, error: "代理承認の設定を特定できませんでした。" }
   const result = await deleteApprovalDelegation(id)
   if (result instanceof Error) return { ok: false, error: result.message }
   revalidatePath("/teams/approval-delegations")

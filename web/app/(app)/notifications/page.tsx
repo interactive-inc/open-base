@@ -85,7 +85,7 @@ async function MyNotifications(props: {
   const result = await getMyNotifications({ limit: props.pageSize, offset: props.offset, isRead })
 
   if (result instanceof Error) {
-    return <FetchError message="通知一覧の取得に失敗しました" />
+    return <FetchError message="通知を読み込めませんでした。" />
   }
 
   const extraParams = {

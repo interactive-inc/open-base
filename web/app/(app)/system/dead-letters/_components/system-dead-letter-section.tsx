@@ -16,15 +16,15 @@ export async function SystemDeadLetterSection() {
   const deadLetters = await getSystemDeadLetters()
 
   if (deadLetters instanceof Error) {
-    return <FetchError message="dead letter の取得に失敗しました" />
+    return <FetchError message="配信不能の一覧を読み込めませんでした。" />
   }
 
   return (
     <SystemResourceTable
-      caption="dead letter の一覧"
+      caption="配信不能の一覧"
       resources={deadLetters}
       toKey={(deadLetter) => deadLetter.id}
-      emptyTitle="dead letter がありません"
+      emptyTitle="配信不能はありません"
       emptyDescription="再試行の上限に達した配信はありません。"
       columns={[
         {
@@ -32,7 +32,7 @@ export async function SystemDeadLetterSection() {
           toValue: (deadLetter) => sourceTypeLabels[deadLetter.sourceType] ?? deadLetter.sourceType,
         },
         {
-          header: "発生元の識別子",
+          header: "発生元ID",
           toValue: (deadLetter) => <span className="font-mono text-xs">{deadLetter.sourceId}</span>,
         },
         {
@@ -41,12 +41,12 @@ export async function SystemDeadLetterSection() {
             <span className="font-mono text-xs">{deadLetter.reasonCode}</span>
           ),
         },
-        { header: "試行", toValue: (deadLetter) => deadLetter.attempt },
-        { header: "記録", toValue: (deadLetter) => formatDateTime(deadLetter.recordedAt) },
+        { header: "試行回数", toValue: (deadLetter) => deadLetter.attempt },
+        { header: "記録日時", toValue: (deadLetter) => formatDateTime(deadLetter.recordedAt) },
         {
-          header: "再投入",
+          header: "再実行",
           toValue: (deadLetter) => {
-            if (deadLetter.requeuedAt === null) return "未"
+            if (deadLetter.requeuedAt === null) return "未実行"
 
             return formatDateTime(deadLetter.requeuedAt)
           },

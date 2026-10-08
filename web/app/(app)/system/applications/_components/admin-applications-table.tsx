@@ -76,7 +76,7 @@ export function AdminApplicationsTable(props: Props) {
                 <Link
                   href={`/system/applications?applicant_id=${row.applicant_id}`}
                   className="underline-offset-4 hover:underline"
-                  aria-label={`${row.applicant_name} の申請で絞り込む`}
+                  aria-label={`${row.applicant_name}の申請で絞り込む`}
                 >
                   {row.applicant_name}
                 </Link>

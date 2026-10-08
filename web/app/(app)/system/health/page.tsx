@@ -4,7 +4,7 @@ import { ListSkeleton } from "@/components/list-skeleton"
 import { PageHeader } from "@/components/page-header"
 import { requirePermission } from "@/lib/auth/require-permission"
 
-export const metadata = { title: "health" }
+export const metadata = { title: "稼働状況" }
 
 /**
  * api の health。
@@ -16,7 +16,7 @@ export default async function SystemHealthPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader title="health" />
+      <PageHeader title="稼働状況" />
 
       <Suspense fallback={<ListSkeleton rows={1} />}>
         <SystemHealthSection />

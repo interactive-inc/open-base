@@ -81,7 +81,7 @@ export default async function ApplicationInboxPage(props: { searchParams: Search
               nativeButton={false}
               render={<Link href="/my/applications" />}
             >
-              申請一覧へ
+              自分の申請
             </Button>
           </>
         }
@@ -102,7 +102,7 @@ async function InboxTable(props: { offset: number; pageSize: number; sort: Appli
   })
 
   if (result instanceof Error) {
-    return <FetchError message="inbox の取得に失敗しました" />
+    return <FetchError message="承認待ちの申請を読み込めませんでした。" />
   }
 
   if (result.data.length === 0) {
@@ -117,7 +117,7 @@ async function InboxTable(props: { offset: number; pageSize: number; sort: Appli
             <TableRow>
               <TableHead>申請名</TableHead>
               <TableHead>申請者</TableHead>
-              <TableHead>ステータス</TableHead>
+              <TableHead>状態</TableHead>
               <SortableTableHead
                 pathname="/inbox/applications"
                 currentSort={props.sort}

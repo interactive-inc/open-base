@@ -34,7 +34,7 @@ export async function updateRoleAction(
   const currentUser = await getMe()
 
   if (currentUser instanceof Error || canManageRoles(currentUser.permissions) === false) {
-    return { kind: "failed", error: "ロールを管理する権限がありません" }
+    return { kind: "failed", error: "ロールを管理する権限がありません。" }
   }
 
   const roleId = toRoleId(formData.get("role_id"))
@@ -42,7 +42,7 @@ export async function updateRoleAction(
   const name = toRoleText(formData.get("name"))
 
   if (roleId === null || name === null) {
-    return { kind: "failed", error: "ロールと名前は必須です" }
+    return { kind: "failed", error: "ロールと名前を入力してください。" }
   }
 
   const description = toRoleText(formData.get("description"))
@@ -77,13 +77,13 @@ export async function deleteRoleAction(
   const currentUser = await getMe()
 
   if (currentUser instanceof Error || canManageRoles(currentUser.permissions) === false) {
-    return { kind: "failed", error: "ロールを管理する権限がありません" }
+    return { kind: "failed", error: "ロールを管理する権限がありません。" }
   }
 
   const roleId = toRoleId(formData.get("role_id"))
 
   if (roleId === null) {
-    return { kind: "failed", error: "ロールを指定してください" }
+    return { kind: "failed", error: "ロールを指定してください。" }
   }
 
   const stepUpToken = await getStepUpToken()
@@ -110,7 +110,7 @@ export async function createRoleAction(
   const currentUser = await getMe()
 
   if (currentUser instanceof Error || canManageRoles(currentUser.permissions) === false) {
-    return { kind: "failed", error: "ロールを管理する権限がありません" }
+    return { kind: "failed", error: "ロールを管理する権限がありません。" }
   }
 
   const key = toRoleText(formData.get("key"))
@@ -118,7 +118,7 @@ export async function createRoleAction(
   const name = toRoleText(formData.get("name"))
 
   if (key === null || name === null) {
-    return { kind: "failed", error: "キーと名前は必須です" }
+    return { kind: "failed", error: "キーと名前を入力してください。" }
   }
 
   const description = toRoleText(formData.get("description"))

@@ -11,7 +11,7 @@ import { canManageApplicationTemplates } from "@/lib/application/can-manage-appl
 import { toFormSchema } from "@/lib/application/form-schema"
 import { categoryLabel } from "@/lib/category-label"
 
-export const metadata = { title: "申請テンプレート詳細" }
+export const metadata = { title: "申請テンプレートの詳細" }
 
 type Props = {
   params: Promise<{ template: string }>
@@ -39,7 +39,7 @@ export default async function ApplicationTemplateDetailPage(props: Props) {
   return (
     <div className="flex flex-col gap-8">
       <PageHeader title={template.name}>
-        <BackButton href="/system/application-templates" label="テンプレ一覧へ" />
+        <BackButton href="/system/application-templates" label="一覧に戻る" />
       </PageHeader>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -50,7 +50,7 @@ export default async function ApplicationTemplateDetailPage(props: Props) {
 
       <Card>
         <CardHeader>
-          <CardDescription>この依頼を提出する</CardDescription>
+          <CardDescription>内容を入力して申請を提出します。</CardDescription>
         </CardHeader>
 
         <CardContent>

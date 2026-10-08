@@ -59,7 +59,7 @@ export function AuditEventTable(props: Props) {
           <TableHead>実行者</TableHead>
           <TableHead>対象</TableHead>
           <TableHead>理由</TableHead>
-          <TableHead className="hidden xl:table-cell">クライアント / リクエスト</TableHead>
+          <TableHead className="hidden xl:table-cell">クライアント／リクエスト</TableHead>
           <TableHead>詳細</TableHead>
         </TableRow>
       </TableHeader>
@@ -111,7 +111,7 @@ export function AuditEventTable(props: Props) {
                   <Link
                     href={`/system/audit-events/${encodeURIComponent(event.event_id)}`}
                     prefetch={false}
-                    aria-label={`監査イベント ${event.event_id} の詳細`}
+                    aria-label={`監査ログ ${event.event_id} の詳細`}
                   />
                 }
               >
