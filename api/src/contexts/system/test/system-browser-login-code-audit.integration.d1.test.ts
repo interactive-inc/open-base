@@ -48,6 +48,8 @@ describe("System browser login code audit", () => {
       await new CreateSystemBrowserLoginCodeAdapter(context).createSystemBrowserLoginCode({
         codeHash,
         accountId,
+        tokenVersion: 0,
+        sessionFamilyId: null,
         createdAt,
         expiresAt,
       }),
@@ -55,6 +57,8 @@ describe("System browser login code audit", () => {
     const consumer = new ConsumeSystemBrowserLoginCodeAdapter(context)
     expect(await consumer.consumeSystemBrowserLoginCode(codeHash, new Date(2_000))).toEqual({
       accountId,
+      tokenVersion: 0,
+      sessionFamilyActive: true,
     })
     expect(await consumer.consumeSystemBrowserLoginCode(codeHash, new Date(3_000))).toBeNull()
 
@@ -84,6 +88,8 @@ describe("System browser login code audit", () => {
     await new CreateSystemBrowserLoginCodeAdapter(context).createSystemBrowserLoginCode({
       codeHash,
       accountId,
+      tokenVersion: 0,
+      sessionFamilyId: null,
       createdAt,
       expiresAt,
     })
@@ -102,7 +108,7 @@ describe("System browser login code audit", () => {
     const context = { env: { DB: database } }
     await execSql(
       database,
-      `INSERT INTO system_browser_login_codes (code_hash, account_id, created_at, expires_at) VALUES ('${"b".repeat(64)}', 'fcd3b186-db56-4b04-8df7-acf9afd0c292', 1000, 61000);`,
+      `INSERT INTO system_browser_login_codes (code_hash, account_id, token_version, created_at, expires_at) VALUES ('${"b".repeat(64)}', 'fcd3b186-db56-4b04-8df7-acf9afd0c292', 0, 1000, 61000);`,
     )
     await execSql(database, "DROP TABLE system_audit_events;")
 
@@ -110,6 +116,8 @@ describe("System browser login code audit", () => {
       await new CreateSystemBrowserLoginCodeAdapter(context).createSystemBrowserLoginCode({
         codeHash,
         accountId,
+        tokenVersion: 0,
+        sessionFamilyId: null,
         createdAt,
         expiresAt,
       }),

@@ -42,14 +42,15 @@ async function seedCode(
   fixture: SystemSessionTestContext,
   code: string,
   expiresAt = now.getTime() + 60_000,
+  tokenVersion = 0,
 ): Promise<void> {
   const codeHash = await systemLoginCodeHash(code)
   if (codeHash instanceof Error) throw codeHash
   await fixture.database
     .prepare(`INSERT INTO system_cli_login_codes
-         (code_hash, account_id, created_at, expires_at)
-       VALUES (?1, '1cb0c8e2-74ea-4cf3-b33a-321991689e26', ?2, ?3)`)
-    .bind(codeHash, Math.min(now.getTime(), expiresAt - 1), expiresAt)
+         (code_hash, account_id, token_version, created_at, expires_at)
+       VALUES (?1, '1cb0c8e2-74ea-4cf3-b33a-321991689e26', ?2, ?3, ?4)`)
+    .bind(codeHash, tokenVersion, Math.min(now.getTime(), expiresAt - 1), expiresAt)
     .run()
 }
 
@@ -150,6 +151,32 @@ describe("POST /system/cli-sessions", () => {
       (
         await fixture.database
           .prepare("SELECT action FROM system_audit_events")
+          .all<Record<string, unknown>>()
+      ).results,
+    ).toEqual([])
+  })
+
+  test("rejects a code issued before the token version was bumped", async () => {
+    const { client, fixture } = await createFixture()
+    await seedCode(fixture, "revoked-version-code")
+    await execSql(
+      fixture.database,
+      `
+      UPDATE system_accounts
+      SET token_version = token_version + 1, updated_at = updated_at + 1
+      WHERE id = '1cb0c8e2-74ea-4cf3-b33a-321991689e26';
+    `,
+    )
+
+    const response = await client.system["cli-sessions"].$post({
+      json: { code: "revoked-version-code" },
+    })
+
+    expect(Number(response.status)).toBe(401)
+    expect(
+      (
+        await fixture.database
+          .prepare("SELECT id FROM system_sessions")
           .all<Record<string, unknown>>()
       ).results,
     ).toEqual([])

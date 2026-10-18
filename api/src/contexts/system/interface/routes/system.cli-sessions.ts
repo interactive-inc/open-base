@@ -59,7 +59,12 @@ export const POST = systemFactory.createHandlers(
     if (account instanceof Error) {
       throw new SystemCLILoginUnavailableError()
     }
-    if (account === null || account.status !== "active") {
+    // codeは発行時のtoken versionへ束縛し、その後の失効を越えてSessionへ交換させない。
+    if (
+      account === null ||
+      account.status !== "active" ||
+      account.tokenVersion !== consumed.tokenVersion
+    ) {
       throw new SystemCLICodeInvalidError()
     }
     const issued = await new IssueSystemSession({
@@ -71,7 +76,7 @@ export const POST = systemFactory.createHandlers(
       sessionMaxLifetimeMilliseconds,
     }).execute({
       accountId: account.id,
-      tokenVersion: account.tokenVersion,
+      tokenVersion: consumed.tokenVersion,
       now,
       auditContext: { authorizationJson: null, metadataJson: metadataJson?.toString() ?? null },
     })
