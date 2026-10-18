@@ -78,6 +78,8 @@ export class PrepareCompanyRecordDecisionReplayAdapter {
         return new CompanyForbiddenError("委任が許可されていません")
       const delegation = await query.findDelegation({
         caseId: proposal.caseId,
+        taskKey: task.key,
+        round: task.round,
         actorAccountId: original.actorAccountId,
         candidateAccountIds: [original.representedAccountId],
         delegationId: original.delegationId,

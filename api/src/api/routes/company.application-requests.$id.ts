@@ -62,6 +62,8 @@ export const GET = factory.createHandlers(verifyBearer, async (c) => {
     if (!currentCandidate) {
       const delegation = await query.findDelegation({
         caseId: proposal.caseId,
+        taskKey: proposal.currentTaskKey,
+        round: proposal.currentTaskRound ?? 1,
         actorAccountId,
         candidateAccountIds: candidates,
         at: new Date(c.env.NOW ?? Date.now()),

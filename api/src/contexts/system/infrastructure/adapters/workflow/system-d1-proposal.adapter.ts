@@ -64,9 +64,12 @@ export type SystemProposalQuery = Readonly<{
       at: Date
     }>,
   ): Promise<ReadonlyArray<AccountId> | Error>
+  /** 委任を受けた本人がこのTaskの判断から除外されていれば、委任は見つからないものとして扱う。 */
   findDelegation(
     input: Readonly<{
       caseId: string
+      taskKey: string
+      round: number
       actorAccountId: AccountId
       candidateAccountIds: ReadonlyArray<AccountId>
       delegationId?: string
@@ -469,11 +472,11 @@ export class SystemD1ProposalAdapter implements SystemProposalQuery {
   > {
     if (input.candidateAccountIds.length === 0) return null
     try {
-      const placeholders = input.candidateAccountIds.map((_, index) => `?${index + 4}`)
+      const placeholders = input.candidateAccountIds.map((_, index) => `?${index + 6}`)
       const exactDelegation =
         input.delegationId === undefined
           ? ""
-          : `AND delegation.id = ?${input.candidateAccountIds.length + 4}`
+          : `AND delegation.id = ?${input.candidateAccountIds.length + 6}`
       const row = await this.c.env.DB.prepare(
         `SELECT delegation.id, delegation.delegator_account_id
          FROM system_delegations AS delegation
@@ -484,6 +487,13 @@ export class SystemD1ProposalAdapter implements SystemProposalQuery {
            AND delegation.ends_at > ?3
            AND (delegation.revoked_at IS NULL OR delegation.revoked_at > ?3)
            AND delegation.delegator_account_id IN (${placeholders.join(", ")})
+           AND NOT EXISTS (
+             SELECT 1 FROM system_decision_task_exclusions
+             WHERE case_id = ?1
+               AND task_key = ?4
+               AND round = ?5
+               AND excluded_account_id = ?2
+           )
            AND (
              NOT EXISTS (
                SELECT 1 FROM system_delegation_procedure_scopes
@@ -515,6 +525,8 @@ export class SystemD1ProposalAdapter implements SystemProposalQuery {
           input.caseId,
           input.actorAccountId,
           input.at.getTime(),
+          input.taskKey,
+          input.round,
           ...input.candidateAccountIds,
           ...(input.delegationId === undefined ? [] : [input.delegationId]),
         )

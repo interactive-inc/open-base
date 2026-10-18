@@ -428,7 +428,7 @@
     "src/contexts/system/infrastructure/adapters/workflow/revalidate-system-execution-attestations.adapter.ts": "5fbd8d6de378078b1dde4f38e83e1b7988d5a708ccbe85ae9291dd9adaae7d95",
     "src/contexts/system/infrastructure/adapters/workflow/system-d1-authorized-execution.adapter.ts": "406f8d53f468537733294992f894c0552bbd700741b275555256737d43991e55",
     "src/contexts/system/infrastructure/adapters/workflow/system-d1-procedure-delegation.adapter.ts": "54563f78b2a46a6555c0abd7d0ba35ca05fe2d96ebc04b51f5e3feddb3de9d9d",
-    "src/contexts/system/infrastructure/adapters/workflow/system-d1-proposal.adapter.ts": "b09c47b1b58f36fbf6d4aae5787a09c4f28f9433fd2eda6eb693439bbeabca9f",
+    "src/contexts/system/infrastructure/adapters/workflow/system-d1-proposal.adapter.ts": "f7ee060fd5368e073cee9d0361d1eb9bf367cc51375ad00831d6da6ff44f678f",
     "src/contexts/system/infrastructure/adapters/workflow/system-d1-workflow.adapter.ts": "848b9e4c18746f307f354db79d21266da5c2466373e02f58ff97e7528086c0d5",
     "src/contexts/system/infrastructure/errors.test.ts": "230c2e5ca72709b7b93e92362fa0cfd15f154a08a7f5bc422cb1c2beed941da5",
     "src/contexts/system/infrastructure/errors.ts": "040587b412053dcd406e03c8d21b53d179df9250f6d66cfdb2eb79132dcfb6ff",
@@ -507,8 +507,8 @@
     "src/contexts/system/infrastructure/schema/system-work-item.sql": "2d77ca4f47250efa9e79d63b47617c3acab82a5854b2e08b4efb2118e245cf18",
     "src/contexts/system/infrastructure/schema/system-work-item.test.ts": "316256756d44fc82edc6568b9947ebde695f1c8eaea278bc13aa342ad33af290",
     "src/contexts/system/infrastructure/schema/system-work-item.ts": "5f7b624b24f77b02021c2b7a8bed898a29784c1cf6abc85c47ab66c80b132bed",
-    "src/contexts/system/infrastructure/schema/system-workflow.sql": "847e53e421ae18282bf3391c2e6c5206f0db443ec29b389019d36ecd6ced729c",
-    "src/contexts/system/infrastructure/schema/system-workflow.test.ts": "cff003d34745232f272faaf696a450eeebcb10ff4e404765392f0937a1afb49e",
+    "src/contexts/system/infrastructure/schema/system-workflow.sql": "2a6a5d33f0214753628457d47e171c470c0ff17e63041b6d3b5d5eef1be4fd54",
+    "src/contexts/system/infrastructure/schema/system-workflow.test.ts": "d6ad601e00326368e2832fe1eb2c50b9b5325a4afd864e0f46384f42ca979c08",
     "src/contexts/system/infrastructure/schema/system-workflow.ts": "1763e398acdba44fab1a93d916946d8b578b48378142ed26329d7bf78611b8c3",
     "src/contexts/system/interface/attachments/to-attachment-preservation-http-failure.ts": "732d2519542f2e7731a523f33a1acb2b8c8b7aac656a7ecb6e83a1a104564823",
     "src/contexts/system/interface/audit/to-audit-disclosure-http-failure.ts": "821fc257bb76ae211927e665dda658358a8ca90308e101e917bf8eeea26f8faa",
@@ -958,7 +958,7 @@
     "src/contexts/system/test/system-test-id.test-support.ts": "ca132b2bcfa7c1e8e6ea0252687a5197adad59c862857b4052385888183271a4",
     "src/contexts/system/test/system-work-item-persistence.integration.d1.test.ts": "43404c495bad04f95bea21960ddb7cddc554957c782ad81d615ac5705e519c42",
     "src/contexts/system/test/system-work-item-route.integration.d1.test.ts": "543dc136c54a8cbc6f62ee7a3c579a19b535be9ebf5e0304ceb26b1e85a6f2bd",
-    "src/contexts/system/test/system-workflow-application.integration.d1.test.ts": "d45be7bac6a089a0b0221d3a7c44f9adfcb6aeb67d897eca1a3d759da7f9a90f",
+    "src/contexts/system/test/system-workflow-application.integration.d1.test.ts": "a7e168caf963799d08959d09ebae0186b0ff697fa07c3cdedeba8045e80477b6",
     "system-context.manifest.json": "056acd9ca4c4bb0cc209b2d90f6ed779f6f1d7cd0f6f2af6094cfa2470827162"
   }
 }
