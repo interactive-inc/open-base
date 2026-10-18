@@ -45,7 +45,14 @@ export const POST = systemFactory.createHandlers(
     if (account instanceof Error) {
       throw new SystemBrowserLoginCodeUnavailableError()
     }
-    if (account === null || account.status !== "active") {
+    // codeは発行元credentialへ束縛する。token versionの更新やSession familyの失効の後は、
+    // 失効前に発行したcodeを現在のtoken versionのSessionへ交換させない。
+    if (
+      account === null ||
+      account.status !== "active" ||
+      account.tokenVersion !== consumed.tokenVersion ||
+      !consumed.sessionFamilyActive
+    ) {
       throw new SystemLoginCodeInvalidError()
     }
 
@@ -75,7 +82,7 @@ export const POST = systemFactory.createHandlers(
       sessionMaxLifetimeMilliseconds,
     }).execute({
       accountId: account.id,
-      tokenVersion: account.tokenVersion,
+      tokenVersion: consumed.tokenVersion,
       now,
       auditContext: { authorizationJson: null, metadataJson: metadataJson?.toString() ?? null },
     })

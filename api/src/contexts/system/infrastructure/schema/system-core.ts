@@ -298,7 +298,7 @@ export const systemCliLoginStates = sqliteTable(
 
 export type SystemCliLoginStateRow = InferSelectModel<typeof systemCliLoginStates>
 
-/** CLI callbackからtoken交換へAccountEntityだけを渡すhashed single-use code。 */
+/** CLI callbackからtoken交換へAccountと発行時のtoken versionを渡すhashed single-use code。 */
 export const systemCliLoginCodes = sqliteTable(
   "system_cli_login_codes",
   {
@@ -306,6 +306,7 @@ export const systemCliLoginCodes = sqliteTable(
     accountId: text("account_id")
       .notNull()
       .references(() => systemAccounts.id, { onDelete: "cascade" }),
+    tokenVersion: integer("token_version").notNull(),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
     expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
   },
@@ -313,12 +314,13 @@ export const systemCliLoginCodes = sqliteTable(
     index("system_cli_login_codes_expires_idx").on(table.expiresAt),
     check("system_cli_login_codes_hash_length", sql`length(${table.codeHash}) BETWEEN 32 AND 512`),
     check("system_cli_login_codes_expiration", sql`${table.expiresAt} > ${table.createdAt}`),
+    check("system_cli_login_codes_token_version", sql`${table.tokenVersion} >= 0`),
   ],
 )
 
 export type SystemCliLoginCodeRow = InferSelectModel<typeof systemCliLoginCodes>
 
-/** Web browserからtoken交換へAccountEntityだけを渡すhashed single-use code。 */
+/** 発行元credentialのtoken versionとSession familyへ束縛し、Web browserのtoken交換へ渡すhashed single-use code。 */
 export const systemBrowserLoginCodes = sqliteTable(
   "system_browser_login_codes",
   {
@@ -326,6 +328,8 @@ export const systemBrowserLoginCodes = sqliteTable(
     accountId: text("account_id")
       .notNull()
       .references(() => systemAccounts.id, { onDelete: "cascade" }),
+    tokenVersion: integer("token_version").notNull(),
+    sessionFamilyId: text("session_family_id"),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
     expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
   },
@@ -336,6 +340,11 @@ export const systemBrowserLoginCodes = sqliteTable(
       sql`length(${table.codeHash}) BETWEEN 32 AND 512`,
     ),
     check("system_browser_login_codes_expiration", sql`${table.expiresAt} > ${table.createdAt}`),
+    check("system_browser_login_codes_token_version", sql`${table.tokenVersion} >= 0`),
+    check(
+      "system_browser_login_codes_session_family_id_length",
+      sql`${table.sessionFamilyId} IS NULL OR length(${table.sessionFamilyId}) BETWEEN 1 AND 255`,
+    ),
   ],
 )
 

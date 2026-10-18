@@ -341,6 +341,8 @@ CREATE TABLE system_cli_login_codes (
     CHECK (length(code_hash) BETWEEN 32 AND 512),
   account_id TEXT NOT NULL
     REFERENCES system_accounts(id) ON DELETE CASCADE,
+  token_version INTEGER NOT NULL
+    CHECK (token_version >= 0),
   created_at INTEGER NOT NULL,
   expires_at INTEGER NOT NULL,
   CHECK (expires_at > created_at)
@@ -354,6 +356,10 @@ CREATE TABLE system_browser_login_codes (
     CHECK (length(code_hash) BETWEEN 32 AND 512),
   account_id TEXT NOT NULL
     REFERENCES system_accounts(id) ON DELETE CASCADE,
+  token_version INTEGER NOT NULL
+    CHECK (token_version >= 0),
+  session_family_id TEXT
+    CHECK (session_family_id IS NULL OR length(session_family_id) BETWEEN 1 AND 255),
   created_at INTEGER NOT NULL,
   expires_at INTEGER NOT NULL,
   CHECK (expires_at > created_at)
