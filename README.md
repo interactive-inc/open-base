@@ -52,15 +52,25 @@ bun cli/index.ts bootstrap --email you@example.com --password "$INITIAL_PASSWORD
 
 COMMAND_IDはUUIDを使用します。初期化後はBOOTSTRAP_TOKENを設定から除去してAPIを再起動します。Web UIで登録したメールアドレスとパスワードを使ってログインできます。外部IdPも環境変数で設定できます。
 
-## Service Bindingによる照会
+## Service Bindingによる照会と操作
 
-同じCloudflare accountの別Workerは、Service Binding RPCでAPIへaccess tokenを渡し、その本人のAccountを照会できます。RPC入口はWorkerの `ServiceBindingEntrypoint` で、公開URLやHTTP APIからは到達できません。現在のmethodは `whoami(accessToken)` だけです。
+同じCloudflare accountの別Workerは、Service Binding RPCでAPIへaccess tokenを渡し、その本人のAccountを照会したり、その本人としてHTTP APIを呼んだりできます。RPC入口はWorkerの `ServiceBindingEntrypoint` で、公開URLやHTTP APIからは到達できません。methodは `whoami(accessToken)` と `request(accessToken, input)` です。
 
 受理するtokenは、外部IdPが発行したEdDSAの `at+jwt` で、`aud` が `SERVICE_BINDING_ACCESS_TOKEN_AUDIENCE` と一致する単一値のものだけです。発行者と検証鍵は `IDENTITY_ACCESS_TOKEN_ISSUER`（未設定なら `IDENTITY_ISSUER`）と `IDENTITY_JWKS`（未設定なら発行者のOpenID Connect discovery）を共有します。`sub`、`client_id`、`scope`、`iat`、`exp`、`jti` を必須とし、委任や交換を表す `act` を持つtokenは拒否します。`sub` は有効なIdentity bindingを通じてactiveな人のAccountへ対応付けます。
 
 `SERVICE_BINDING_ACCESS_TOKEN_AUDIENCE` が未設定、空、または `IDENTITY_ACCESS_TOKEN_AUDIENCE` や `IDENTITY_AUDIENCE` と同じ値のとき、RPC入口は全ての呼び出しを拒否します。HTTP APIは、Bearerとしても外部IdPのログインや再認証のtokenとしても、このaudienceを含むtokenを受理しません。そのため同じ値を設定すると、HTTP APIの外部access tokenや外部IdPのログインも拒否されます。
 
-結果は `{ ok: true, account: { accountId } }`、または `{ ok: false, reason: "rejected" | "unavailable" }` です。拒否の理由は返しません。`unavailable` は検証鍵やDBを一時的に使えない状態を表します。
+`whoami` の結果は `{ ok: true, account: { accountId } }`、または `{ ok: false, reason: "rejected" | "unavailable" }` です。拒否の理由は返しません。`unavailable` は検証鍵やDBを一時的に使えない状態を表します。
+
+`request` は、tokenを `whoami` と同じ規則で検証したあと、HTTP APIと同じappへ要求を通します。routing、入力検証、認可、監査、エラーの形はその本人がHTTP APIを呼んだときと同じで、権限の無い操作は同じ403になります。検証済みの本人はWorker内部でだけ渡し、Authorization headerやHTTP要求からは指定できません。どの操作を利用者へ開くかは、bindingを持つWorkerが決めます。
+
+`input` は `{ method, path, query, body }` です。`method` は `GET`、`HEAD`、`POST`、`PUT`、`PATCH`、`DELETE` のいずれか、`path` は `/` で始まる絶対pathで、scheme、host、`..`、query、fragmentを含められません。ASCII以外の文字などURLで符号化が必要な文字は、呼び出し側で百分率符号化して渡します。`query` は文字列の値だけを持つobject（100件まで）、`body` はJSONとして送る値（1 MBまで、GETとHEADでは不可）です。不正な入力は `{ ok: false, reason: "rejected" }` になり、appを呼びません。headerは渡せないため、`idempotency-key`、`if-match`、再認証などのheaderを必要とする操作はまだ呼べません。
+
+ブラウザ用のlogin code、OAuth認可、MCP grantのように、認証済みの本人から別の資格情報を発行する経路は、RPCからは拒否します。短命のtokenを長命の資格情報へ変えさせないためです。
+
+`request` の結果は `{ ok: true, status, headers: { contentType }, body, truncated }` です。JSONの応答は解析した値、それ以外は文字列で返します。本文が1 MBを超えるときは先頭1 MBを文字列で返し、`truncated` をtrueにします。
+
+HTTP APIのレート制限は接続元IP単位です。RPCの要求には接続元IPが無いため、全てのRPC要求とIPの無い要求が一つの枠を共有します。Account単位の制限はまだありません。
 
 呼び出す側のWorkerは、wrangler設定で次のようにbindingを宣言します。`service` にはAPIのWorker名を指定します。
 
@@ -79,6 +89,12 @@ COMMAND_IDはUUIDを使用します。初期化後はBOOTSTRAP_TOKENを設定か
 ```ts
 const result = await env.API.whoami(accessToken)
 if (result.ok) console.log(result.account.accountId)
+
+const profile = await env.API.request(accessToken, {
+  method: "GET",
+  path: "/company/current-profile",
+})
+if (profile.ok && profile.status === 200) console.log(profile.body)
 ```
 
 ## CLIとMCP

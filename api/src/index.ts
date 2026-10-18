@@ -1,3 +1,8 @@
+import {
+  executeServiceBindingRequest,
+  type ServiceBindingRequestInput,
+  type ServiceBindingRequestResult,
+} from "@/api/http/service-binding/execute-service-binding-request"
 import { createRuntimeApp } from "@/api/runtime-app"
 import type { Bindings } from "@/env"
 import {
@@ -21,6 +26,23 @@ export class ServiceBindingEntrypoint extends WorkerEntrypoint<Bindings> {
       { env: this.env },
       { accessToken, now: new Date(this.env.NOW ?? Date.now()) },
     )
+  }
+
+  /**
+   * access tokenの本人として、HTTP APIと同じappへ要求を通す。認可はその本人のHTTP呼び出しと同じ。
+   * どの操作を利用者へ開くかは、bindingを持つWorkerが決める。
+   */
+  async request(
+    accessToken: string,
+    input: ServiceBindingRequestInput,
+  ): Promise<ServiceBindingRequestResult> {
+    return await executeServiceBindingRequest({
+      app,
+      env: this.env,
+      executionContext: this.ctx,
+      accessToken,
+      input,
+    })
   }
 }
 

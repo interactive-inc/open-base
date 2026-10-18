@@ -1,4 +1,7 @@
-import { ResolveExternalAccessTokenAccountAdapter } from "@system/infrastructure/adapters/auth/resolve-external-access-token-account.adapter"
+import {
+  ResolveExternalAccessTokenAccountAdapter,
+  type ExternalAccessTokenAccountResolution,
+} from "@system/infrastructure/adapters/auth/resolve-external-access-token-account.adapter"
 import type {
   SystemD1Context,
   SystemExternalIdentityContext,
@@ -84,48 +87,64 @@ async function resolveSystemSession(props: {
   return { kind: "rejected", reason: "invalid token" }
 }
 
+/** 署名とIdentity bindingを検証済みの外部access tokenの主体。 */
+export type VerifiedExternalAccessTokenAccount = Extract<
+  ExternalAccessTokenAccountResolution,
+  Readonly<{ kind: "accepted" }>
+>
+
 /** Bearerを外部access tokenまたは従来System sessionとしてAccountへ解決する。 */
 type Context = Readonly<{ env: Bindings }>
 export class ResolveBearerAccountAdapter {
   constructor(private readonly c: Context) {}
   async resolve(input: { token: string; now: Date }): Promise<BearerAccountResolution> {
-    const props = { ...input, env: this.c.env }
     const external = await new ResolveExternalAccessTokenAccountAdapter({
       env: this.c.env,
       purpose: "api",
     }).resolve(input)
     if (external.kind === "accepted") {
-      const accountId = zAccountId.safeParse(external.accountId)
-      if (!accountId.success) return { kind: "rejected", reason: "invalid token" }
-      const authentication = await new SystemAccessTokenStateAdapter({
-        database: props.env.DB,
-      }).resolve({
-        accountId: accountId.data,
-        tokenVersion: external.tokenVersion,
-        issuedAtMs: 0,
-        sessionFamilyId: null,
-        at: props.now,
-      })
-      if (authentication instanceof Error) return { kind: "unavailable" }
-      if (authentication.kind === "rejected") return { kind: "rejected", reason: "invalid token" }
-
-      return {
-        kind: "accepted",
-        accountId: accountId.data,
-        tokenVersion: external.tokenVersion,
-        readAuthentication: {
-          accountId: accountId.data,
-          tokenVersion: external.tokenVersion,
-          issuedAtMs: external.issuedAtMs,
-          expiresAtMs: external.expiresAtMs,
-          machineCredentialId: null,
-          identityBindingId: external.identityBindingId,
-        },
-      }
+      return await this.resolveVerifiedExternal({ external, now: input.now })
     }
     if (external.kind === "rejected") return { kind: "rejected", reason: "invalid token" }
     if (external.kind === "unavailable") return { kind: "unavailable" }
 
-    return await resolveSystemSession(props)
+    return await resolveSystemSession({ ...input, env: this.c.env })
+  }
+
+  /**
+   * 検証済みの外部access tokenの主体を、Accountの現在状態と照合して認証結果にする。
+   * HTTPのBearerとService Binding RPCが同じ照合を通るよう、ここだけで組み立てる。
+   */
+  async resolveVerifiedExternal(
+    input: Readonly<{ external: VerifiedExternalAccessTokenAccount; now: Date }>,
+  ): Promise<BearerAccountResolution> {
+    const external = input.external
+    const accountId = zAccountId.safeParse(external.accountId)
+    if (!accountId.success) return { kind: "rejected", reason: "invalid token" }
+    const authentication = await new SystemAccessTokenStateAdapter({
+      database: this.c.env.DB,
+    }).resolve({
+      accountId: accountId.data,
+      tokenVersion: external.tokenVersion,
+      issuedAtMs: 0,
+      sessionFamilyId: null,
+      at: input.now,
+    })
+    if (authentication instanceof Error) return { kind: "unavailable" }
+    if (authentication.kind === "rejected") return { kind: "rejected", reason: "invalid token" }
+
+    return {
+      kind: "accepted",
+      accountId: accountId.data,
+      tokenVersion: external.tokenVersion,
+      readAuthentication: {
+        accountId: accountId.data,
+        tokenVersion: external.tokenVersion,
+        issuedAtMs: external.issuedAtMs,
+        expiresAtMs: external.expiresAtMs,
+        machineCredentialId: null,
+        identityBindingId: external.identityBindingId,
+      },
+    }
   }
 }
