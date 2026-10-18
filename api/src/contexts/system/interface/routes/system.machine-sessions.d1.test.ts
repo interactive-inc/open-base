@@ -16,6 +16,7 @@ setDefaultTimeout(30_000)
 
 const secret = "machine-session-test-signing-secret"
 const rawCredential = "1".repeat(64)
+const adminAccountId = zAccountId.parse("3e7d1c2b-4a5f-4b6c-8d9e-0f1a2b3c4d5e")
 
 async function createFixture(kind: "agent" | "service" | "connector" = "service") {
   const fixture = await SystemSessionTestContext.create()
@@ -59,6 +60,15 @@ async function createFixture(kind: "agent" | "service" | "connector" = "service"
     INSERT INTO system_role_bindings
     (id, account_id, role_id, created_at, revoked_at)
     VALUES ('72da13a4-abc7-476f-8499-074d4f8a8854', '13943a8c-a101-4ba6-82d3-560dfa60c19b', '04635707-bd54-47ea-81d4-38426e3ce8a2', 1, NULL);
+    INSERT INTO system_accounts (id, status, token_version, created_at, updated_at)
+    VALUES ('${adminAccountId}', 'active', 0, 1, 1);
+    INSERT INTO system_iam_roles (id, key, kind, name, created_at, updated_at)
+    VALUES ('5b1f2a0e-7c3d-4e8f-9a6b-1c2d3e4f5a6b', 'system:operator', 'custom', 'Operator', 1, 1);
+    INSERT INTO system_iam_role_permissions (role_id, permission_key)
+    VALUES ('5b1f2a0e-7c3d-4e8f-9a6b-1c2d3e4f5a6b', 'system:admin');
+    INSERT INTO system_role_bindings
+    (id, account_id, role_id, created_at, revoked_at)
+    VALUES ('6c2a3b1f-8d4e-4f9a-8b7c-2d3e4f5a6b7c', '${adminAccountId}', '5b1f2a0e-7c3d-4e8f-9a6b-1c2d3e4f5a6b', 1, NULL);
   `,
   )
   const app = systemFactory.createApp()
@@ -112,6 +122,7 @@ describe("System machine access token", () => {
     expect((await context.read(secondToken)).status).toBe(200)
     expect(
       await new SystemMachineCredentialRepository(context.fixture.context).revoke(
+        adminAccountId,
         "9a98bc39-03b1-4115-9d64-7bd9817b3a8d",
         "ad6a0f96-902f-4999-84f6-2b9eb703c2ed",
         context.clock.at,
@@ -131,6 +142,7 @@ describe("System machine access token", () => {
       expect((await context.read(token)).status).toBe(200)
       expect(
         await new SystemMachineCredentialRepository(context.fixture.context).revoke(
+          adminAccountId,
           "9a98bc39-03b1-4115-9d64-7bd9817b3a8d",
           "ad6a0f96-902f-4999-84f6-2b9eb703c2ed",
           context.clock.at,

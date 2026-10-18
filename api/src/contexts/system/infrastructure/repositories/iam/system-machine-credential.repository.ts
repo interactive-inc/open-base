@@ -1,6 +1,7 @@
 import { zAccountId, type AccountId } from "@system/domain/schemas/iam/account-id.schema"
 import type { SystemD1Context } from "@system/configuration/system-context"
 import { SystemMachineCredentialEntity } from "@system/domain/entities/system-machine-credential.entity"
+import { SystemActorPrincipalGuardAdapter } from "@system/infrastructure/adapters/iam/system-actor-principal-guard.adapter"
 
 type CredentialRow = Readonly<{
   id: string
@@ -71,11 +72,16 @@ export class SystemMachineCredentialRepository {
   }
 
   async create(
+    actorAccountId: AccountId,
     credential: SystemMachineCredentialEntity,
     auditStatements: ReadonlyArray<D1PreparedStatement>,
-  ): Promise<"created" | "conflict" | Error> {
+  ): Promise<"created" | "conflict" | "forbidden" | Error> {
     try {
       const statements = [
+        new SystemActorPrincipalGuardAdapter(this.c).prepare(
+          actorAccountId,
+          credential.principalId,
+        ),
         this.c.env.DB.prepare(
           `INSERT INTO system_machine_credentials
              (id, principal_id, name, secret_hash, status, created_at, updated_at,
@@ -101,6 +107,9 @@ export class SystemMachineCredentialRepository {
       }
       return "created"
     } catch (caught) {
+      if (caught instanceof Error && caught.message.includes("integer overflow")) {
+        return "forbidden"
+      }
       if (caught instanceof Error && caught.message.toLowerCase().includes("unique")) {
         return "conflict"
       }
@@ -199,11 +208,12 @@ export class SystemMachineCredentialRepository {
   }
 
   async revoke(
+    actorAccountId: AccountId,
     principalId: string,
     credentialId: string,
     now: Date,
     auditStatements: ReadonlyArray<D1PreparedStatement>,
-  ): Promise<"revoked" | "unchanged" | "not_found" | Error> {
+  ): Promise<"revoked" | "unchanged" | "not_found" | "forbidden" | Error> {
     try {
       const row = await this.c.env.DB.prepare(
         `SELECT id, principal_id, name, secret_hash, status, created_at, updated_at,
@@ -222,13 +232,14 @@ export class SystemMachineCredentialRepository {
       if (revoked === credential) return "unchanged"
 
       const statements = [
+        new SystemActorPrincipalGuardAdapter(this.c).prepare(actorAccountId, principalId),
         this.c.env.DB.prepare(
           `UPDATE system_machine_credentials
            SET status = 'revoked', updated_at = ?2, revoked_at = ?2
            WHERE id = ?1 AND status = 'active' AND updated_at = ?3`,
         ).bind(credential.id, now.getTime(), credential.updatedAt.getTime()),
         this.c.env.DB.prepare(
-          "SELECT CASE WHEN changes() = 1 THEN 1 ELSE abs(-9223372036854775808) END AS ok",
+          "SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('', '$') END AS ok",
         ),
         ...auditStatements,
       ]
@@ -238,6 +249,9 @@ export class SystemMachineCredentialRepository {
       }
       return "revoked"
     } catch (caught) {
+      if (caught instanceof Error && caught.message.includes("integer overflow")) {
+        return "forbidden"
+      }
       return caught instanceof Error
         ? caught
         : new Error("failed to revoke System machine credential")

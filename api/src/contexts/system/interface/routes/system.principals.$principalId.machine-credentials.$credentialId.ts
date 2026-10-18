@@ -1,11 +1,13 @@
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
 import { SystemAuditEventEntity } from "@system/domain/entities/system-audit-event.entity"
+import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { StableSystemAuditJsonValue } from "@system/domain/values/audit/stable-system-audit-json.value"
 import { SystemAuditEventRepository } from "@system/infrastructure/repositories/audit/system-audit-event.repository"
 import { SystemMachineCredentialRepository } from "@system/infrastructure/repositories/iam/system-machine-credential.repository"
 import { authorizeSystemOperation } from "@system/interface/authorization/authorize-system-operation"
 import {
   SystemForbiddenError,
+  SystemInvalidSessionError,
   SystemPrincipalNotFoundError,
   SystemPrincipalUnavailableError,
 } from "@system/interface/errors"
@@ -22,7 +24,7 @@ const params = z
   })
   .strict()
 
-// @authorization permission iam:write - step-up後にcredentialを失効し履歴を保持する
+// @authorization permission iam:write - step-up後、対象Accountの全permissionを持つactorだけがcredentialを失効し履歴を保持する
 export const DELETE = systemFactory.createHandlers(
   authenticateSystemAccessToken,
   requireSystemStepUp,
@@ -33,6 +35,8 @@ export const DELETE = systemFactory.createHandlers(
     if (!authorizeSystemOperation(context.var.permissions, "iam:write", now)) {
       throw new SystemForbiddenError()
     }
+    const actorAccountId = zAccountId.safeParse(context.var.userId)
+    if (!actorAccountId.success) throw new SystemInvalidSessionError()
     const identifiers = context.req.valid("param")
     const metadata = StableSystemAuditJsonValue.create({ status: "revoked" })
     if (metadata === null || metadata instanceof Error) {
@@ -54,6 +58,7 @@ export const DELETE = systemFactory.createHandlers(
     if (event instanceof Error) throw new SystemPrincipalUnavailableError(event)
     const systemContext = { env: { DB: context.env.DB } }
     const result = await new SystemMachineCredentialRepository(systemContext).revoke(
+      actorAccountId.data,
       identifiers.principalId,
       identifiers.credentialId,
       now,
@@ -61,6 +66,7 @@ export const DELETE = systemFactory.createHandlers(
     )
     if (result instanceof Error) throw new SystemPrincipalUnavailableError(result)
     if (result === "not_found") throw new SystemPrincipalNotFoundError()
+    if (result === "forbidden") throw new SystemForbiddenError()
 
     return context.body(null, 204)
   },

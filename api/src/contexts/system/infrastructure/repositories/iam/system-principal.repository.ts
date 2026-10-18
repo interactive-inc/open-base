@@ -1,5 +1,7 @@
 import type { SystemD1Context } from "@system/configuration/system-context"
 import { SystemPrincipalEntity } from "@system/domain/entities/system-principal.entity"
+import type { AccountId } from "@system/domain/schemas/iam/account-id.schema"
+import { SystemActorPrincipalGuardAdapter } from "@system/infrastructure/adapters/iam/system-actor-principal-guard.adapter"
 
 type PrincipalRow = Readonly<{
   id: string
@@ -125,10 +127,11 @@ export class SystemPrincipalRepository {
   }
 
   async update(
+    actorAccountId: AccountId,
     principal: SystemPrincipalEntity,
     expectedRevision: number,
     auditStatements: ReadonlyArray<D1PreparedStatement>,
-  ): Promise<"updated" | "conflict" | "not_found" | Error> {
+  ): Promise<"updated" | "conflict" | "not_found" | "forbidden" | Error> {
     const current = await this.find({ principalId: principal.id })
     if (current === null) return "not_found"
     if (current instanceof Error) return current
@@ -136,6 +139,7 @@ export class SystemPrincipalRepository {
 
     try {
       const statements = [
+        new SystemActorPrincipalGuardAdapter(this.c).prepare(actorAccountId, principal.id),
         this.c.env.DB.prepare(
           `UPDATE system_principals
            SET name = ?2, revision = ?3, updated_at = ?4
@@ -148,7 +152,7 @@ export class SystemPrincipalRepository {
           expectedRevision,
         ),
         this.c.env.DB.prepare(
-          "SELECT CASE WHEN changes() = 1 THEN 1 ELSE abs(-9223372036854775808) END AS ok",
+          "SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('', '$') END AS ok",
         ),
         ...auditStatements,
       ]
@@ -158,7 +162,8 @@ export class SystemPrincipalRepository {
       }
       return "updated"
     } catch (caught) {
-      if (caught instanceof Error && caught.message.includes("integer overflow")) return "conflict"
+      if (caught instanceof Error && caught.message.includes("integer overflow")) return "forbidden"
+      if (caught instanceof Error && caught.message.includes("malformed JSON")) return "conflict"
       return caught instanceof Error ? caught : new Error("failed to update System Principal")
     }
   }
