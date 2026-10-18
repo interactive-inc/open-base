@@ -4,6 +4,7 @@ import {
 } from "@/contexts/company/domain/entities/company-resource-change.entity"
 import { CompanyResourceValidationError } from "@/contexts/company/domain/errors"
 import { basicWorkforceResourceTypes } from "@/contexts/company/domain/catalogs/company-resource-type.catalog"
+import { canApplyOrganizationChange } from "@/contexts/company/domain/policies/can-apply-organization-change.policy"
 import type { CompanyActorValue } from "@/contexts/company/domain/values/company-actor.value"
 import type {
   D1CompanyResourceRepository,
@@ -75,7 +76,10 @@ export class ApplyOrganizationChange {
     })
     if (
       !this.c.actor.canAccessOrganization(organizationId) ||
-      (!this.c.actor.hasCapability("company:write") &&
+      (!canApplyOrganizationChange(
+        this.c.actor,
+        change.resources.map((resource) => resource.type),
+      ) &&
         !(basicWorkforceUpdateOnly && this.c.actor.canUpdateWorkforce()))
     ) {
       return { kind: "forbidden" }

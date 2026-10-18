@@ -103,6 +103,7 @@ test.each(["read-only", "other-organization"])(
           ? ["01900060-0000-7000-8000-12268fccf2cc"]
           : [COMPANY_DEFAULT_ORGANIZATION_ID],
       capabilities: kind === "read-only" ? ["company:read"] : ["company:write"],
+      permissions: ["org:write"],
     })
     const request = createCompanyPlaceHttpTestClient(f.database, actor)
     const before = await f.saved()

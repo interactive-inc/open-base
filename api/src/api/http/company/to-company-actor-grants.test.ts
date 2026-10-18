@@ -114,6 +114,23 @@ describe("toCompanyActorGrants", () => {
     expect(grants).toEqual({ capabilities: [], permissions: [] })
   })
 
+  test("アカウント管理権限と管理者だけがaccount_link:writeになる", () => {
+    expect(toCompanyActorGrants((permission) => permission === "account:manage")).toEqual({
+      capabilities: [],
+      permissions: ["account_link:write"],
+    })
+    expect(
+      toCompanyActorGrants((permission) => permission === "system:admin").permissions,
+    ).toContain("account_link:write")
+    expect(
+      toCompanyActorGrants((permission) => organizationManagerPermissions.includes(permission))
+        .permissions,
+    ).not.toContain("account_link:write")
+    expect(
+      toCompanyActorGrants((permission) => managerPermissions.includes(permission)).permissions,
+    ).not.toContain("account_link:write")
+  })
+
   test("発令確定権限だけがemployee:writeになる", () => {
     const grants = toCompanyActorGrants((permission) => permission === "employee:lifecycle:apply")
 
@@ -181,7 +198,7 @@ describe("業務管理者相当のCompany Actor", () => {
 describe("管理者と組織管理者のCompany Actor", () => {
   for (const [label, granted] of [
     ["管理者", ["system:admin"]],
-    ["組織管理者", organizationManagerPermissions],
+    ["組織とアカウントの管理者", [...organizationManagerPermissions, "account:manage"]],
   ] as const) {
     test(`${label}は組織変更と紐付けを書き込み、発令を確定できる`, async () => {
       const actor = toActor(granted)
@@ -196,4 +213,28 @@ describe("管理者と組織管理者のCompany Actor", () => {
       expect(toCompanyPersonnelSession(actor)?.hasPermission("employee:lifecycle:apply")).toBe(true)
     })
   }
+
+  test("アカウント管理権限の無い組織管理者は組織変更できるが紐付けを書き込めない", async () => {
+    const actor = toActor(organizationManagerPermissions)
+    const repository = createRepository()
+
+    expect(
+      await new ApplyOrganizationChange({ actor, repository }).execute(organizationUnitChange),
+    ).toMatchObject({ kind: "applied" })
+    expect(
+      await new CreateAccountEmployeeLinks({ actor, repository }).execute(accountLinkChange),
+    ).toEqual({ kind: "forbidden" })
+    expect(repository.writes).toHaveLength(1)
+  })
+
+  test("アカウント管理権限だけでは会社全体の変更資格が無く紐付けを書き込めない", async () => {
+    const actor = toActor(["account:manage"])
+    const repository = createRepository()
+
+    expect(actor.hasPermission("account_link:write")).toBe(true)
+    expect(
+      await new CreateAccountEmployeeLinks({ actor, repository }).execute(accountLinkChange),
+    ).toEqual({ kind: "forbidden" })
+    expect(repository.writes).toHaveLength(0)
+  })
 })

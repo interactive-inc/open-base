@@ -30,7 +30,8 @@ export class UpdateAccountEmployeeLinks {
     const organizationId = change.resources[0]?.organizationId ?? ""
     if (
       !this.c.actor.canAccessOrganization(organizationId) ||
-      !this.c.actor.hasCapability("company:write")
+      !this.c.actor.hasCapability("company:write") ||
+      !this.c.actor.hasPermission("account_link:write")
     ) {
       return { kind: "forbidden" }
     }
