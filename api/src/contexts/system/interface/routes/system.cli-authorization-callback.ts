@@ -97,7 +97,9 @@ export const GET = systemFactory.createHandlers(
       return context.redirect(loopbackUrl.toString(), 302)
     }
 
-    const claims = await new SystemIdentityTokenVerifier().verify({
+    const claims = await new SystemIdentityTokenVerifier({
+      excludedAudience: context.env.SERVICE_BINDING_ACCESS_TOKEN_AUDIENCE,
+    }).verify({
       token,
       verificationKey,
       issuer,

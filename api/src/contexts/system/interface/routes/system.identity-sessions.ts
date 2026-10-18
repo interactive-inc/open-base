@@ -45,7 +45,9 @@ export const POST = systemFactory.createHandlers(
         jwks: context.env.IDENTITY_JWKS,
         issuer,
       }),
-      tokenVerifier: new SystemIdentityTokenVerifier(),
+      tokenVerifier: new SystemIdentityTokenVerifier({
+        excludedAudience: context.env.SERVICE_BINDING_ACCESS_TOKEN_AUDIENCE,
+      }),
       loginTokenRepository: new RecordSystemIdentityLoginTokenAdapter({
         env: { DB: context.env.DB },
       }),

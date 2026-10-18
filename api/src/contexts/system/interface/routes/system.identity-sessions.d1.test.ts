@@ -26,6 +26,7 @@ async function createFixture(
     jwks?: string
     issuer?: string
     audience?: string
+    serviceBindingAudience?: string
   }> = Object.freeze({
     jwks: identityKey.jwks,
     issuer: identityIssuer,
@@ -64,6 +65,7 @@ async function createFixture(
         IDENTITY_JWKS: configuration.jwks,
         IDENTITY_ISSUER: configuration.issuer,
         IDENTITY_AUDIENCE: configuration.audience,
+        SERVICE_BINDING_ACCESS_TOKEN_AUDIENCE: configuration.serviceBindingAudience,
       }),
   })
 
@@ -128,6 +130,32 @@ describe("POST /system/identity-sessions", () => {
           .all<Record<string, unknown>>()
       ).results,
     ).toEqual([{ action: "auth.session.identity_login_denied", reason_code: "invalid_token" }])
+  })
+
+  test("Service Binding RPC入口のaudを含むtokenはSystem Sessionへ交換しない", async () => {
+    const serviceBindingAudience = "urn:example:service-binding"
+    const cases = [
+      { serviceBindingAudience, audience: [identityAudience, serviceBindingAudience] },
+      { serviceBindingAudience: identityAudience, audience: identityAudience },
+    ]
+
+    for (const [index, item] of cases.entries()) {
+      const { client } = await createFixture({
+        jwks: identityKey.jwks,
+        issuer: identityIssuer,
+        audience: identityAudience,
+        serviceBindingAudience: item.serviceBindingAudience,
+      })
+      const token = await createSystemIdentityToken(identityKey.signingKey, nowEpoch, {
+        sub: subject,
+        jti: `identity-session-service-binding-${index}`,
+        audience: item.audience,
+      })
+
+      const response = await client.system["identity-sessions"].$post({ json: { token } })
+
+      expect(Number(response.status)).toBe(401)
+    }
   })
 
   test("rejects a token whose issuer does not match", async () => {

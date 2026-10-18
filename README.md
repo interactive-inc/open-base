@@ -52,6 +52,35 @@ bun cli/index.ts bootstrap --email you@example.com --password "$INITIAL_PASSWORD
 
 COMMAND_IDはUUIDを使用します。初期化後はBOOTSTRAP_TOKENを設定から除去してAPIを再起動します。Web UIで登録したメールアドレスとパスワードを使ってログインできます。外部IdPも環境変数で設定できます。
 
+## Service Bindingによる照会
+
+同じCloudflare accountの別Workerは、Service Binding RPCでAPIへaccess tokenを渡し、その本人のAccountを照会できます。RPC入口はWorkerの `ServiceBindingEntrypoint` で、公開URLやHTTP APIからは到達できません。現在のmethodは `whoami(accessToken)` だけです。
+
+受理するtokenは、外部IdPが発行したEdDSAの `at+jwt` で、`aud` が `SERVICE_BINDING_ACCESS_TOKEN_AUDIENCE` と一致する単一値のものだけです。発行者と検証鍵は `IDENTITY_ACCESS_TOKEN_ISSUER`（未設定なら `IDENTITY_ISSUER`）と `IDENTITY_JWKS`（未設定なら発行者のOpenID Connect discovery）を共有します。`sub`、`client_id`、`scope`、`iat`、`exp`、`jti` を必須とし、委任や交換を表す `act` を持つtokenは拒否します。`sub` は有効なIdentity bindingを通じてactiveな人のAccountへ対応付けます。
+
+`SERVICE_BINDING_ACCESS_TOKEN_AUDIENCE` が未設定、空、または `IDENTITY_ACCESS_TOKEN_AUDIENCE` や `IDENTITY_AUDIENCE` と同じ値のとき、RPC入口は全ての呼び出しを拒否します。HTTP APIは、Bearerとしても外部IdPのログインや再認証のtokenとしても、このaudienceを含むtokenを受理しません。そのため同じ値を設定すると、HTTP APIの外部access tokenや外部IdPのログインも拒否されます。
+
+結果は `{ ok: true, account: { accountId } }`、または `{ ok: false, reason: "rejected" | "unavailable" }` です。拒否の理由は返しません。`unavailable` は検証鍵やDBを一時的に使えない状態を表します。
+
+呼び出す側のWorkerは、wrangler設定で次のようにbindingを宣言します。`service` にはAPIのWorker名を指定します。
+
+```jsonc
+{
+  "services": [
+    {
+      "binding": "API",
+      "service": "your-api-worker-name",
+      "entrypoint": "ServiceBindingEntrypoint",
+    },
+  ],
+}
+```
+
+```ts
+const result = await env.API.whoami(accessToken)
+if (result.ok) console.log(result.account.accountId)
+```
+
 ## CLIとMCP
 
 CLIは `base` コマンド、`BASE_API` などの環境変数を使用します。API接続先ごとに認証情報を分けて保存します。

@@ -90,7 +90,10 @@ export class ResolveBearerAccountAdapter {
   constructor(private readonly c: Context) {}
   async resolve(input: { token: string; now: Date }): Promise<BearerAccountResolution> {
     const props = { ...input, env: this.c.env }
-    const external = await new ResolveExternalAccessTokenAccountAdapter(this.c).resolve(input)
+    const external = await new ResolveExternalAccessTokenAccountAdapter({
+      env: this.c.env,
+      purpose: "api",
+    }).resolve(input)
     if (external.kind === "accepted") {
       const accountId = zAccountId.safeParse(external.accountId)
       if (!accountId.success) return { kind: "rejected", reason: "invalid token" }

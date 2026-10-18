@@ -76,6 +76,11 @@ export type Bindings = {
   // resource-bound access tokenをAPI Bearerとして直接受理するときだけ設定する。
   // 未設定なら従来のSystem sessionだけを受理する。
   IDENTITY_ACCESS_TOKEN_AUDIENCE?: string
+  // 同じCloudflare accountのWorkerからService Binding RPCで照会されるときだけ受理するaccess tokenのaud。
+  // 発行者と検証鍵はIDENTITY_ACCESS_TOKEN_ISSUERとIDENTITY_JWKSを共有する。HTTP APIはこのaudのtokenを拒否する。
+  // 外部IdPのログインと再認証もこのaudを含むtokenを拒否する。
+  // 未設定、空、IDENTITY_ACCESS_TOKEN_AUDIENCEかIDENTITY_AUDIENCEと同じ値なら、RPC入口は全ての呼び出しを拒否する（fail closed）。
+  SERVICE_BINDING_ACCESS_TOKEN_AUDIENCE?: string
   // 初期 ROOT 作成用。`wrangler secret put BOOTSTRAP_TOKEN` で登録し、初期化完了後は削除を推奨。
   // 未設定時は機能無効（POST /system/bootstrap は 404 を返す）。
   BOOTSTRAP_TOKEN?: string

@@ -79,7 +79,9 @@ export const POST = systemFactory.createHandlers(
       if (verificationKey instanceof Error) {
         throw new SystemPrincipalUnavailableError(verificationKey)
       }
-      const claims = await new SystemIdentityTokenVerifier().verify({
+      const claims = await new SystemIdentityTokenVerifier({
+        excludedAudience: context.env.SERVICE_BINDING_ACCESS_TOKEN_AUDIENCE,
+      }).verify({
         token: body.token,
         verificationKey,
         issuer,

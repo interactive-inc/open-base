@@ -27,6 +27,9 @@ IDENTITY_ACCESS_TOKEN_ISSUER=
 # API access tokenを直接受理するときだけ、そのaudienceを設定する。
 # 署名鍵はIDENTITY_JWKS、未設定ならaccess token issuerのOpenID Connect discoveryから取得する。
 IDENTITY_ACCESS_TOKEN_AUDIENCE=
+# 同じCloudflare accountのWorkerからService Binding RPCで照会させるときだけ、そのaudienceを設定する。
+# IDENTITY_ACCESS_TOKEN_AUDIENCE、IDENTITY_AUDIENCEと異なる値にする。未設定ならRPC入口は全ての呼び出しを拒否する。
+SERVICE_BINDING_ACCESS_TOKEN_AUDIENCE=
 # 初期 ROOT の作成時だけ設定し、作成後は削除する。未設定なら POST /system/bootstrap は 404。
 BOOTSTRAP_TOKEN=
 # 有効化する opt-in App 機能。"all" か機能キーのカンマ区切り。正本は .docs/feature-tiers.md。
