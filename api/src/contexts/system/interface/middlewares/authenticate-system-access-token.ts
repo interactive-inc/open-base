@@ -3,6 +3,27 @@ import { SystemInvalidSessionError, SystemSessionUnavailableError } from "@syste
 import { systemFactory } from "@system/interface/request-environment/system-factory"
 import { SystemD1AuthorizationAdapter } from "@system/infrastructure/adapters/iam/system-authorization.adapter"
 import { readBearerAuthorization } from "@system/interface/operations/bearer-authorization"
+import { SystemServiceBindingAccountChannel } from "@system/interface/request-environment/system-service-binding-account-channel"
+
+/**
+ * Service Binding RPCが検証済みの主体を渡したときは、Authorization headerを読まずにそれを使う。
+ * それ以外はAuthorization headerのBearerだけを読む。
+ */
+async function authenticate(
+  env: ConstructorParameters<typeof ResolveBearerAccountAdapter>[0]["env"],
+  header: string | undefined,
+  now: Date,
+): Promise<Awaited<ReturnType<ResolveBearerAccountAdapter["resolve"]>>> {
+  const adapter = new ResolveBearerAccountAdapter({ env })
+  const serviceBindingAccount = new SystemServiceBindingAccountChannel({ env }).read()
+  if (serviceBindingAccount !== null) {
+    return await adapter.resolveVerifiedExternal({ external: serviceBindingAccount, now })
+  }
+
+  const authorization = readBearerAuthorization(header)
+  if (authorization.kind !== "token") throw new SystemInvalidSessionError()
+  return await adapter.resolve({ token: authorization.token, now })
+}
 
 /** access tokenと現在のAccount / IAM状態を検証してSystem主体だけを注入する。 */
 export const authenticateSystemAccessToken = systemFactory.createMiddleware(
@@ -12,15 +33,7 @@ export const authenticateSystemAccessToken = systemFactory.createMiddleware(
       throw new SystemSessionUnavailableError()
     }
 
-    const authorization = readBearerAuthorization(context.req.header("authorization"))
-    if (authorization.kind !== "token") {
-      throw new SystemInvalidSessionError()
-    }
-
-    const authentication = await new ResolveBearerAccountAdapter({ env: context.env }).resolve({
-      token: authorization.token,
-      now,
-    })
+    const authentication = await authenticate(context.env, context.req.header("authorization"), now)
     if (authentication.kind === "unavailable") throw new SystemSessionUnavailableError()
     if (authentication.kind === "rejected") throw new SystemInvalidSessionError()
 
