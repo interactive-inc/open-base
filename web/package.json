@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "opennextjs-cloudflare build --skipWranglerConfigCheck",
-    "deploy": "wrangler deploy .open-next/worker.js --minify --name base --compatibility-date 2026-05-24 --compatibility-flag nodejs_compat --assets .open-next/assets --keep-vars",
+    "deploy": "wrangler deploy .open-next/worker.js --minify --name open-base-app --compatibility-date 2026-05-24 --compatibility-flag nodejs_compat --assets .open-next/assets --keep-vars",
     "start": "next start",
     "check": "tsc --noEmit",
     "test": "vp test run",
