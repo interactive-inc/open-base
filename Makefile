@@ -1,7 +1,7 @@
 .PHONY: dependencies worktree dev cli ci
 
 dependencies:
-	bun install
+	vp install
 
 worktree: dependencies
 
@@ -12,7 +12,7 @@ cli:
 	bun cli/index.ts --help
 
 ci:
-	bun install --frozen-lockfile
+	vp install --frozen-lockfile
 	bun run --cwd api check
 	bun run --cwd cli check
 	bun run --cwd mcp check

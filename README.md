@@ -9,7 +9,7 @@ SystemとCompanyを独立して利用するためのオープンソース基盤�
 Bunとportlessを用意し、次を実行します。
 
 ```sh
-bun install
+vp install
 cp api/wrangler.example.jsonc api/wrangler.jsonc
 cp web/.env.local.example web/.env.local
 bun run --cwd api setup:dev-vars
