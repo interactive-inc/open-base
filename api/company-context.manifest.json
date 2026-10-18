@@ -205,6 +205,8 @@
     "src/contexts/company/domain/policies/find-workforce-employment.policy.ts",
     "src/contexts/company/domain/policies/has-valid-organization-change-audit-metadata.policy.ts",
     "src/contexts/company/domain/policies/is-eligible-workforce-state.policy.ts",
+    "src/contexts/company/domain/policies/is-excluded-decision-participant.policy.test.ts",
+    "src/contexts/company/domain/policies/is-excluded-decision-participant.policy.ts",
     "src/contexts/company/domain/policies/is-in-workforce-management-chain.policy.ts",
     "src/contexts/company/domain/policies/is-organizational-authority-state-eligible.policy.ts",
     "src/contexts/company/domain/policies/list-active-workforce-manager-relations.policy.ts",

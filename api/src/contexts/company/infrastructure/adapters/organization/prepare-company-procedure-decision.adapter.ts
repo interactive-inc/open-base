@@ -102,6 +102,8 @@ export class PrepareCompanyProcedureDecisionAdapter {
       ? null
       : await query.findDelegation({
           caseId: proposal.caseId,
+          taskKey: task.key,
+          round: task.round,
           actorAccountId: input.actorAccountId,
           candidateAccountIds: candidates,
           at: input.decidedAt,
