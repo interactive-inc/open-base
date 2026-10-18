@@ -9,6 +9,7 @@ import { CompanyAccountEmployeeLinksReadAdapter } from "@/contexts/company/infra
 import { COMPANY_DEFAULT_ORGANIZATION_ID } from "@/contexts/company/domain/definitions/company-organization-identity.definition"
 import { ApplyExternalIdentities } from "@/contexts/company/application/external-identities/apply-external-identities"
 import { ExternalIdentityImportRepository } from "@/contexts/company/infrastructure/repositories/external-identities/external-identity-import.repository"
+import { SystemIdentityAttachmentAdapter } from "@system/infrastructure/adapters/identity/system-identity-attachment.adapter"
 
 // ローカルD1のtemplate作成とDBごとの往復を含むため、既定の5秒を超えることがある。
 setDefaultTimeout(30_000)
@@ -140,6 +141,76 @@ describe("外部identityとCompany正本の同期", () => {
         .bind(accountId)
         .first<number>("token_version"),
     ).toBe(1)
+  })
+
+  test("操作主体が持たない権限のAccountへidentityを追加しない", async () => {
+    const c = await createExternalIdentityImportTestContext()
+    expect((await c.application.execute(c.input)).kind).toBe("applied")
+    const accountId = zAccountId.parse(
+      await c.database
+        .prepare(
+          "SELECT account_id FROM system_identity_bindings WHERE subject = 'external-person-1'",
+        )
+        .first<string>("account_id"),
+    )
+    await execSql(
+      c.database,
+      `INSERT INTO system_iam_roles (id, key, kind, resource_type, name, created_at, updated_at)
+         VALUES ('5d0b0f7e-3f5e-4b8e-9d55-2c1f4d0e8a11', 'custom:import-root', 'custom', NULL, 'Root', 0, 0);
+       INSERT INTO system_iam_role_permissions (role_id, permission_key)
+         VALUES ('5d0b0f7e-3f5e-4b8e-9d55-2c1f4d0e8a11', 'system:admin');
+       INSERT INTO system_role_bindings (id, account_id, role_id, resource_type, resource_id, created_at, revoked_at)
+         VALUES ('0e6c1a4f-8a3b-4c2d-9e7f-6b5a4c3d2e1f', '${accountId}', '5d0b0f7e-3f5e-4b8e-9d55-2c1f4d0e8a11', NULL, NULL, 0, NULL);`,
+    )
+    const attach = {
+      ...c.input,
+      commandId: "import:attach-root",
+      expectedRevision: c.input.expectedRevision + 1,
+      identities: c.input.identities.map((identity) => ({
+        ...identity,
+        subject: "controlled-external-subject",
+        accountId,
+        newEmployee: null,
+        initialRoleId: null,
+      })),
+    }
+    const countAttached = () =>
+      c.database
+        .prepare(
+          "SELECT count(*) AS total FROM system_identity_bindings WHERE subject = 'controlled-external-subject'",
+        )
+        .first<number>("total")
+    expect((await c.application.execute(attach)).kind).toBe("forbidden")
+    expect(await countAttached()).toBe(0)
+
+    // 事前判定を通っても、同じ変更単位のSQL guardで昇格を拒否する。
+    const bypass = spyOn(SystemIdentityAttachmentAdapter.prototype, "canAttach").mockResolvedValue(
+      true,
+    )
+    try {
+      expect((await c.application.execute(attach)).kind).not.toBe("applied")
+    } finally {
+      bypass.mockRestore()
+    }
+    expect(await countAttached()).toBe(0)
+    expect(
+      await c.database
+        .prepare("SELECT token_version FROM system_accounts WHERE id = ?1")
+        .bind(accountId)
+        .first<number>("token_version"),
+    ).toBe(0)
+
+    // 対象の全権限を持つ操作主体なら同じ追加を確定できる。
+    await execSql(
+      c.database,
+      `INSERT INTO system_iam_role_permissions (role_id, permission_key)
+         VALUES ('ac330a23-4c0c-4f72-8aa8-3c4a92f58ff8', 'system:admin')`,
+    )
+    expect(await c.application.execute(attach)).toMatchObject({
+      kind: "applied",
+      summary: { created: 1, updated: 0, skipped: 0 },
+    })
+    expect(await countAttached()).toBe(1)
   })
 
   test("更新監査の失敗で氏名・email・外部版をすべて旧値へ戻す", async () => {
