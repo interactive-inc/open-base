@@ -1,5 +1,6 @@
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
 import { SystemAuditEventEntity } from "@system/domain/entities/system-audit-event.entity"
+import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { SystemMachineCredentialEntity } from "@system/domain/entities/system-machine-credential.entity"
 import { StableSystemAuditJsonValue } from "@system/domain/values/audit/stable-system-audit-json.value"
 import { SystemAuditEventRepository } from "@system/infrastructure/repositories/audit/system-audit-event.repository"
@@ -9,6 +10,7 @@ import { SystemPrincipalSecretService } from "@system/lib/auth/system-principal-
 import { authorizeSystemOperation } from "@system/interface/authorization/authorize-system-operation"
 import {
   SystemForbiddenError,
+  SystemInvalidSessionError,
   SystemPrincipalConflictError,
   SystemPrincipalInvalidError,
   SystemPrincipalNotFoundError,
@@ -46,7 +48,7 @@ export const GET = systemFactory.createHandlers(
   },
 )
 
-// @authorization permission iam:write - step-up後に機械credentialを発行しraw secretを一度だけ返す
+// @authorization permission iam:write - step-up後、対象Accountの全permissionを持つactorだけが機械credentialを発行しraw secretを一度だけ返す
 export const POST = systemFactory.createHandlers(
   authenticateSystemAccessToken,
   requireSystemStepUp,
@@ -66,6 +68,8 @@ export const POST = systemFactory.createHandlers(
     if (!authorizeSystemOperation(context.var.permissions, "iam:write", now)) {
       throw new SystemForbiddenError()
     }
+    const actorAccountId = zAccountId.safeParse(context.var.userId)
+    if (!actorAccountId.success) throw new SystemInvalidSessionError()
     const principalId = context.req.valid("param").principalId
     const principal = await new SystemPrincipalRepository({
       env: { DB: context.env.DB },
@@ -112,11 +116,13 @@ export const POST = systemFactory.createHandlers(
     if (event instanceof Error) throw new SystemPrincipalUnavailableError(event)
     const systemContext = { env: { DB: context.env.DB } }
     const creation = await new SystemMachineCredentialRepository(systemContext).create(
+      actorAccountId.data,
       credential,
       new SystemAuditEventRepository(systemContext).prepareAppend(event),
     )
     if (creation instanceof Error) throw new SystemPrincipalUnavailableError(creation)
     if (creation === "conflict") throw new SystemPrincipalConflictError()
+    if (creation === "forbidden") throw new SystemForbiddenError()
 
     return context.json(
       { credential: systemMachineCredentialResponse(credential), secret: rawSecret },

@@ -134,7 +134,10 @@ export class SystemRoleCatalogRepository {
 
     try {
       const statements = [
-        this.prepareActorRoleGuard(actorAccountId, next.permissionKeys),
+        // 付与と剥奪の両方を、actorが持つpermissionの範囲に限る。
+        this.prepareActorRoleGuard(actorAccountId, [
+          ...new Set([...previous.permissionKeys, ...next.permissionKeys]),
+        ]),
         this.c.env.DB.prepare(
           `UPDATE system_iam_roles
            SET name = ?2, description = ?3, updated_at = ?4

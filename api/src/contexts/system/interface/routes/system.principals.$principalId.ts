@@ -1,11 +1,13 @@
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
 import { SystemAuditEventEntity } from "@system/domain/entities/system-audit-event.entity"
+import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { StableSystemAuditJsonValue } from "@system/domain/values/audit/stable-system-audit-json.value"
 import { SystemAuditEventRepository } from "@system/infrastructure/repositories/audit/system-audit-event.repository"
 import { SystemPrincipalRepository } from "@system/infrastructure/repositories/iam/system-principal.repository"
 import { authorizeSystemOperation } from "@system/interface/authorization/authorize-system-operation"
 import {
   SystemForbiddenError,
+  SystemInvalidSessionError,
   SystemPrincipalConflictError,
   SystemPrincipalInvalidError,
   SystemPrincipalNotFoundError,
@@ -38,7 +40,7 @@ export const GET = systemFactory.createHandlers(
   },
 )
 
-// @authorization permission iam:write - step-upとexpected revisionを満たす名称変更だけを許す
+// @authorization permission iam:write - step-up、expected revision、対象Accountの全permission保持を満たす名称変更だけを許す
 export const PATCH = systemFactory.createHandlers(
   authenticateSystemAccessToken,
   requireSystemStepUp,
@@ -58,6 +60,8 @@ export const PATCH = systemFactory.createHandlers(
     if (!authorizeSystemOperation(context.var.permissions, "iam:write", now)) {
       throw new SystemForbiddenError()
     }
+    const actorAccountId = zAccountId.safeParse(context.var.userId)
+    if (!actorAccountId.success) throw new SystemInvalidSessionError()
     const body = context.req.valid("json")
     const repository = new SystemPrincipalRepository({ env: { DB: context.env.DB } })
     const current = await repository.find({ principalId: context.req.valid("param").principalId })
@@ -89,6 +93,7 @@ export const PATCH = systemFactory.createHandlers(
     if (event instanceof Error) throw new SystemPrincipalUnavailableError(event)
     const systemContext = { env: { DB: context.env.DB } }
     const update = await new SystemPrincipalRepository(systemContext).update(
+      actorAccountId.data,
       changed,
       body.expected_revision,
       new SystemAuditEventRepository(systemContext).prepareAppend(event),
@@ -96,6 +101,7 @@ export const PATCH = systemFactory.createHandlers(
     if (update instanceof Error) throw new SystemPrincipalUnavailableError(update)
     if (update === "not_found") throw new SystemPrincipalNotFoundError()
     if (update === "conflict") throw new SystemPrincipalConflictError()
+    if (update === "forbidden") throw new SystemForbiddenError()
 
     return context.json({ principal: systemPrincipalResponse(changed) }, 200)
   },
