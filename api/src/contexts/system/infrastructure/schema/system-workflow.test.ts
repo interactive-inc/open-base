@@ -138,7 +138,11 @@ describe("System workflow schema", () => {
   test("released migrationとcanonical DDLはUUIDの主キーへの作り直しだけが異なる", () => {
     expect(readReleasedSystemMigration("system_decision_policy")).toBe(decisionPolicySchemaSql)
     expectReleasedSystemSchema({
-      released: [readReleasedSystemMigration("system_workflow"), decisionPolicySchemaSql],
+      released: [
+        readReleasedSystemMigration("system_workflow"),
+        decisionPolicySchemaSql,
+        readReleasedSystemMigration("system_human_attestations_actor_exclusion"),
+      ],
       canonical: [workflowSchemaSql, decisionPolicySchemaSql],
       rebuiltTables: [
         "system_decision_tasks",
@@ -413,6 +417,47 @@ describe("System workflow schema", () => {
         "UPDATE system_delegations SET revoked_at = 160 WHERE id = '6478384b-2355-44fc-841b-44e5033523c0'",
       ),
     ).toThrow()
+    database.close()
+  })
+
+  test("Taskから除外されたAccountは、他の候補の委任を受けても判断を記録できない", () => {
+    const database = createDatabase()
+    for (const accountId of [
+      "3d1063a4-6a8f-4d72-af2a-90c6e9594c0e",
+      "800004f4-f74e-455c-8f5b-7b8d0fcacb99",
+      "70880624-dc0d-4666-920d-25fe6073f6d3",
+    ]) {
+      insertAccount(database, accountId)
+    }
+    insertCase(database)
+    insertTask(database)
+    insertCandidate(database, { accountId: "800004f4-f74e-455c-8f5b-7b8d0fcacb99" })
+    database.run(
+      `INSERT INTO system_decision_task_exclusions
+         (case_id, task_key, round, excluded_account_id, reason)
+       VALUES ('9055d4a0-416c-40c4-814b-0c6df2d0f691', 'review', 1, '70880624-dc0d-4666-920d-25fe6073f6d3', 'policy')`,
+    )
+    database.run(
+      `INSERT INTO system_delegations
+         (id, delegator_account_id, delegate_account_id, scope_context, scope_kind,
+          scope_id, scope_version, starts_at, ends_at, created_at)
+       VALUES
+         ('6478384b-2355-44fc-841b-44e5033523c0', '800004f4-f74e-455c-8f5b-7b8d0fcacb99', '70880624-dc0d-4666-920d-25fe6073f6d3', 'request', 'change',
+          'resource-1', '1', 100, 200, 100)`,
+    )
+
+    expect(() =>
+      insertAttestation(database, {
+        id: "450f0cfe-4197-4a3c-8b71-6837136cb370",
+        actorAccountId: "70880624-dc0d-4666-920d-25fe6073f6d3",
+        representedAccountId: "800004f4-f74e-455c-8f5b-7b8d0fcacb99",
+        delegationId: "6478384b-2355-44fc-841b-44e5033523c0",
+      }),
+    ).toThrow("invalid human attestation")
+    insertAttestation(database, {
+      id: "913d3abc-038c-41b3-8547-da800c90904d",
+      actorAccountId: "800004f4-f74e-455c-8f5b-7b8d0fcacb99",
+    })
     database.close()
   })
 

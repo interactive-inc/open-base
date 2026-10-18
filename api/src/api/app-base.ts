@@ -18,7 +18,7 @@ import {
   CompanyActorValue,
   type CompanyCapability,
 } from "@/contexts/company/domain/values/company-actor.value"
-import type { CompanyPermissionKey } from "@/contexts/company/domain/catalogs/iam/company-permission-key.catalog"
+import { toCompanyActorGrants } from "@/api/http/company/to-company-actor-grants"
 import { OidcClientRegistryValue } from "@system/domain/values/oauth/oidc-client-registry.value"
 import { OidcIssuerConfigurationValue } from "@system/domain/values/oauth/oidc-issuer-configuration.value"
 import { SystemIdentityUnavailableError } from "@system/interface/errors"
@@ -120,53 +120,9 @@ const companyActorMiddleware = factory.createMiddleware(async (c, next) => {
   const session = c.var.session
   if (!session) throw new HTTPException(401, { message: "authentication required" })
 
-  const capabilities: CompanyCapability[] = []
-  const permissions: CompanyPermissionKey[] = []
-  if (
-    session.hasPermission("system:admin") ||
-    session.hasPermission("employee:read") ||
-    session.hasPermission("org:manage")
-  ) {
-    capabilities.push("company:read")
-  }
-  if (
-    session.hasPermission("system:admin") ||
-    session.hasPermission("employee:create") ||
-    session.hasPermission("employee:update") ||
-    session.hasPermission("org:manage")
-  ) {
-    capabilities.push("company:write")
-  }
-  if (session.hasPermission("system:admin")) capabilities.push("company:admin")
-
-  if (session.hasPermission("system:admin") || session.hasPermission("org:manage")) {
-    permissions.push("org:read", "org:write", "master:org:write")
-  } else if (session.hasPermission("employee:read")) {
-    permissions.push("org:read")
-  }
-  if (session.hasPermission("system:admin") || session.hasPermission("employee:read")) {
-    permissions.push("employee:read")
-  }
-  if (session.hasPermission("system:admin") || session.hasPermission("employee:attributes:read")) {
-    permissions.push("employee:attributes:read")
-  }
-  if (
-    session.hasPermission("system:admin") ||
-    session.hasPermission("employee:create") ||
-    session.hasPermission("employee:update") ||
-    session.hasPermission("employee:lifecycle:apply")
-  ) {
-    permissions.push("employee:write")
-  }
-  if (session.hasPermission("system:admin") || session.hasPermission("employee:update")) {
-    permissions.push("employee:write:basic")
-  }
-  if (session.hasPermission("system:admin") || session.hasPermission("employee_event:manage")) {
-    permissions.push("employee:write:attributes")
-  }
-
-  if (session.hasPermission("grade:manage")) permissions.push("master:grade:write")
-  if (session.hasPermission("position:manage")) permissions.push("master:position:write")
+  const { capabilities, permissions } = toCompanyActorGrants((permission) =>
+    session.hasPermission(permission),
+  )
 
   c.set(
     "companyActor",

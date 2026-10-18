@@ -17,7 +17,6 @@ import type { PersonnelActionInput } from "@/contexts/company/domain/definitions
 import { CompanyOperationError } from "@/contexts/company/domain/errors"
 import { SystemPasswordValue } from "@system/domain/values/auth/system-password.value"
 import { hashPassword } from "@system/lib/auth/hash-password"
-import { verifyPassword } from "@system/lib/auth/verify-password"
 import { openSystemAccountProvisioning } from "@system/interface/operations/open-system-account-provisioning"
 import { openSystemRoleCatalog } from "@system/interface/operations/open-system-role-catalog"
 import { isCompanyWriteAbortedByGuard as isAbortedByGuard } from "@/contexts/company/interface/operations/is-company-write-aborted-by-guard"
@@ -111,8 +110,6 @@ export class RegisterEmployee {
       employeeCode: input.action.employeeCode,
       employeeName: input.action.employeeName,
       email: input.email,
-      password: input.password,
-      pepper,
       roleKey: input.roleKey,
       departmentName: input.action.departmentCode ?? null,
       positionTitle: input.action.positionTitle ?? null,
@@ -239,8 +236,6 @@ export class RegisterEmployee {
     employeeCode: string
     employeeName: string
     email: string
-    password: string
-    pepper: string
     roleKey: "member" | "manager" | "hr" | "root"
     departmentName: string | null
     positionTitle: string | null
@@ -264,8 +259,10 @@ export class RegisterEmployee {
       )
       if (registered instanceof Error) throw registered
       if (registered === null) return null
+      // 再送の照合に現在のpasswordを使わない。登録後に変わったpasswordを推測する手段になるため、
+      // passwordを除いた登録内容だけで同じ要求かを判断し、応答もpasswordに依存させない。
       const credential = await this.c.env.DB.prepare(
-        `SELECT identity_profile.email, credential.password_hash,
+        `SELECT identity_profile.email,
                 EXISTS (
                   SELECT 1
                     FROM system_role_bindings AS binding
@@ -281,12 +278,10 @@ export class RegisterEmployee {
             AND identity.provider = 'password'
             AND identity.revoked_at IS NULL
            LEFT JOIN system_identity_profiles AS identity_profile
-             ON identity_profile.identity_id = identity.id
-           LEFT JOIN system_password_credentials AS credential
-             ON credential.identity_id = identity.id`,
+             ON identity_profile.identity_id = identity.id`,
       )
         .bind(registered.accountId, `company:${input.roleKey}`)
-        .first<{ email: string | null; password_hash: string | null; has_expected_role: number }>()
+        .first<{ email: string | null; has_expected_role: number }>()
       const row =
         credential === null
           ? null
@@ -297,11 +292,10 @@ export class RegisterEmployee {
               employee_code: registered.employeeCode,
               official_name: registered.officialName,
               email: credential.email,
-              password_hash: credential.password_hash,
               has_expected_role: credential.has_expected_role,
             }
       if (row === null) return null
-      if (row.password_hash === null || row.email === null) {
+      if (row.email === null) {
         return new UnexpectedError("完了済み従業員登録のSystem資格情報が見つかりません")
       }
       const matches =
@@ -311,8 +305,7 @@ export class RegisterEmployee {
         row.employee_code === input.employeeCode &&
         row.official_name === input.employeeName &&
         row.email.toLocaleLowerCase("en-US") === input.email.toLocaleLowerCase("en-US") &&
-        row.has_expected_role === 1 &&
-        (await verifyPassword(input.password, row.password_hash, input.pepper))
+        row.has_expected_role === 1
       if (!matches) {
         return new ConflictError(
           "Idempotency-Key is already used by another employee registration",

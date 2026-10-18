@@ -159,6 +159,7 @@ const schema = `
   CREATE TABLE system_cli_login_codes (
     code_hash TEXT PRIMARY KEY NOT NULL,
     account_id TEXT NOT NULL REFERENCES system_accounts(id) ON DELETE CASCADE,
+    token_version INTEGER NOT NULL,
     created_at INTEGER NOT NULL,
     expires_at INTEGER NOT NULL
   );

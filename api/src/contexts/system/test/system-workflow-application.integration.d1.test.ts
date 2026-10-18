@@ -556,6 +556,90 @@ describe("System workflow application", () => {
     })
   })
 
+  test("Taskから除外されたAccountは、候補の委任を受けても代理で判断できない", async () => {
+    const fixture = await createFixture()
+    const at = new Date(200)
+    const started = await new StartSystemProcedure({ writer: fixture.writer }).run({
+      seriesId: "0c9b7c2e-5d0f-4a51-9f4e-3f2a8d6b1c70",
+      version: 1,
+      procedureKey: "change",
+      procedureRevision: 1,
+      body: { reason: "Excluded delegate" },
+      createdByAccountId: zAccountId.parse("3d1063a4-6a8f-4d72-af2a-90c6e9594c0e"),
+      supersedesProposalId: null,
+      createdAt: at,
+      firstTask: {
+        key: "review",
+        requiredApprovals: 1,
+        openedAt: at,
+        dueAt: null,
+        candidates: [candidate("e8bd8dd1-e8a4-4bea-8588-11cca10715ea", at)],
+        excludedAccountIds: [zAccountId.parse("af28da7a-a120-4992-a8e2-992c936d18f1")],
+      },
+    })
+    if (started instanceof Error) throw started
+    await execSql(
+      fixture.database,
+      `INSERT INTO system_delegations
+        (id, delegator_account_id, delegate_account_id, starts_at, ends_at, created_at)
+        VALUES
+          ('5f0d8b9e-2a64-4c1b-9d7e-8a3c6f1e2b40', 'e8bd8dd1-e8a4-4bea-8588-11cca10715ea', 'af28da7a-a120-4992-a8e2-992c936d18f1', 100, 500, 100),
+          ('7a1e4c2d-9b38-4f60-8e5a-2d7c9b0f3a61', 'e8bd8dd1-e8a4-4bea-8588-11cca10715ea', '97d4c99b-22e3-4895-a7c9-255873cd66da', 100, 500, 100)`,
+    )
+    const proposals = new SystemD1ProposalAdapter({ env: { DB: fixture.database } })
+    const lookup = {
+      caseId: started.workflowCase.id,
+      taskKey: "review",
+      round: 1,
+      candidateAccountIds: [zAccountId.parse("e8bd8dd1-e8a4-4bea-8588-11cca10715ea")],
+      at: new Date(210),
+    }
+    expect(
+      await proposals.findDelegation({
+        ...lookup,
+        actorAccountId: zAccountId.parse("af28da7a-a120-4992-a8e2-992c936d18f1"),
+      }),
+    ).toBeNull()
+    expect(
+      await proposals.findDelegation({
+        ...lookup,
+        actorAccountId: zAccountId.parse("97d4c99b-22e3-4895-a7c9-255873cd66da"),
+      }),
+    ).toEqual({
+      id: "7a1e4c2d-9b38-4f60-8e5a-2d7c9b0f3a61",
+      representedAccountId: zAccountId.parse("e8bd8dd1-e8a4-4bea-8588-11cca10715ea"),
+    })
+
+    const command = {
+      caseId: started.workflowCase.id,
+      taskKey: "review",
+      round: 1,
+      actorAccountId: zAccountId.parse("af28da7a-a120-4992-a8e2-992c936d18f1"),
+      representedAccountId: zAccountId.parse("e8bd8dd1-e8a4-4bea-8588-11cca10715ea"),
+      delegationId: "5f0d8b9e-2a64-4c1b-9d7e-8a3c6f1e2b40",
+      proposalDigest: started.proposal.digest,
+      comment: null,
+      decidedAt: new Date(210),
+      nextTask: null,
+    }
+    const rejected = await new ApproveSystemTask(fixture.writer).execute(command)
+    expect(rejected).toBeInstanceOf(Error)
+    if (!(rejected instanceof Error)) throw new Error("expected excluded delegate rejection")
+    expect(rejected.message).toContain("invalid human attestation")
+    expect(
+      await fixture.database
+        .prepare("SELECT count(*) AS total FROM system_human_attestations")
+        .first<number>("total"),
+    ).toBe(0)
+    expect(
+      await new ApproveSystemTask(fixture.writer).execute({
+        ...command,
+        actorAccountId: zAccountId.parse("97d4c99b-22e3-4895-a7c9-255873cd66da"),
+        delegationId: "7a1e4c2d-9b38-4f60-8e5a-2d7c9b0f3a61",
+      }),
+    ).toEqual({ caseStatus: "approved", taskOutcome: "approved" })
+  })
+
   test("提案、Case、Taskを同時作成し、quorumと次TaskをSystemだけで進める", async () => {
     const fixture = await createFixture()
     const at = new Date(200)

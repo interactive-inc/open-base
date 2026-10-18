@@ -15,6 +15,7 @@ import { resolveSystemAccountIdsForEmployees } from "@/api/http/accounts/resolve
 import { isAbortedByGuard } from "@/lib/database/is-aborted-by-guard"
 import { type CompanyProcedureDecisionPolicy } from "@/contexts/company/domain/policies/company-procedure-decision.policy"
 import { parseCompanyProcedureDecisionPolicy } from "@/contexts/company/domain/policies/parse-company-procedure-decision.policy"
+import { isExcludedDecisionParticipant } from "@/contexts/company/domain/policies/is-excluded-decision-participant.policy"
 import { completeCompanyApprovedPersonnelActionRequest } from "@/contexts/company/interface/operations/complete-company-approved-personnel-action-request"
 import {
   CompanyOperationError,
@@ -420,6 +421,8 @@ export async function decideSystemApplication(
     }
     const delegation = await query.findDelegation({
       caseId: proposal.caseId,
+      taskKey: proposal.currentTaskKey,
+      round: proposal.currentTaskRound,
       actorAccountId,
       candidateAccountIds,
       at: input.decidedAt,
@@ -489,6 +492,16 @@ export async function decideSystemApplication(
         ? [personnelRequest.requestedByEmployeeId]
         : [personnelRequest.requestedByEmployeeId, personnelRequest.targetEmployeeId],
     )
+  }
+  if (
+    excludedEmployeeIds !== undefined &&
+    isExcludedDecisionParticipant({
+      actorEmployeeId: actor.employeeId,
+      representedEmployeeId: represented.employeeId,
+      excludedEmployeeIds,
+    })
+  ) {
+    return new ForbiddenError("excluded from deciding this application", "forbidden")
   }
   const hasCurrentAuthority = await revalidateCompanyProcedureAuthority(c, {
     step,

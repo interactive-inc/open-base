@@ -594,6 +594,14 @@ WHEN
       AND round = NEW.round
       AND excluded_account_id = NEW.represented_account_id
   )
+  OR EXISTS (
+    SELECT 1 FROM system_decision_task_exclusions
+    WHERE
+      case_id = NEW.case_id
+      AND task_key = NEW.task_key
+      AND round = NEW.round
+      AND excluded_account_id = NEW.actor_account_id
+  )
   OR (
     NEW.delegation_id IS NOT NULL
     AND NOT EXISTS (

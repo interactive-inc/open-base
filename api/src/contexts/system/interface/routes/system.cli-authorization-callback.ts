@@ -162,6 +162,7 @@ export const GET = systemFactory.createHandlers(
       {
         codeHash,
         accountId: login.account.id,
+        tokenVersion: login.account.tokenVersion,
         createdAt: now,
         expiresAt: new Date(now.getTime() + 60_000),
       },
