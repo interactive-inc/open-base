@@ -40,7 +40,13 @@ const actor = CompanyActorValue.restore({
   employeeId: "b4b9edaa-1e08-46d5-b0bc-1798cc369fd1",
   organizationIds: [COMPANY_DEFAULT_ORGANIZATION_ID],
   capabilities: ["company:read", "company:write"],
-  permissions: ["employee:read", "employee:attributes:read"],
+  permissions: [
+    "employee:read",
+    "employee:attributes:read",
+    "org:write",
+    "employee:write",
+    "employee:write:attributes",
+  ],
 })
 
 function createClient(database: D1Database, currentActor: CompanyActorValue = actor) {

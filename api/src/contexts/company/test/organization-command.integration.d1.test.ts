@@ -84,6 +84,7 @@ async function fixture() {
       employeeId: null,
       organizationIds: [COMPANY_DEFAULT_ORGANIZATION_ID],
       capabilities: ["company:write"],
+      permissions: ["org:write"],
     }),
   }
   const app = new Hono<CompanyHttpEnvironment>()
@@ -178,6 +179,7 @@ describe("organization command receipts and boundaries", () => {
       employeeId: null,
       organizationIds: ["01900060-0000-7000-8000-12268fccf2cc"],
       capabilities: ["company:write"],
+      permissions: ["org:write"],
     })
     expect((await f.post([root], 0, "root-create")).status).toBe(403)
     f.actors.current = CompanyActorValue.restore({

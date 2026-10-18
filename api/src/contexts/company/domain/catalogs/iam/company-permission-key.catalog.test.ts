@@ -14,6 +14,7 @@ test("Company権限キーは会社・組織・雇用の語彙だけを持つ", (
     "employee:write",
     "employee:write:basic",
     "employee:write:attributes",
+    "account_link:write",
   ])
   expect(new Set(COMPANY_PERMISSION_KEYS).size).toBe(COMPANY_PERMISSION_KEYS.length)
   expect(new Set(Object.values(CompanyPermission).map((permission) => permission.key))).toEqual(

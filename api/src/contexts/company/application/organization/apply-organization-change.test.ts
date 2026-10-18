@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { ApplyOrganizationChange } from "@/contexts/company/application/organization/apply-organization-change"
+import type { CompanyResourceChangeProps } from "@/contexts/company/domain/entities/company-resource-change.entity"
 import { restoreCalendarDate } from "@/contexts/company/domain/definitions/restore-calendar-date.definition"
 import { CompanyActorValue } from "@/contexts/company/domain/values/company-actor.value"
 import { COMPANY_DEFAULT_ORGANIZATION_ID } from "@/contexts/company/domain/definitions/company-organization-identity.definition"
@@ -9,6 +10,7 @@ const actor = CompanyActorValue.restore({
   employeeId: "b4b9edaa-1e08-46d5-b0bc-1798cc369fd1",
   organizationIds: [COMPANY_DEFAULT_ORGANIZATION_ID],
   capabilities: ["company:write"],
+  permissions: ["org:write"],
 })
 
 test("ApplyOrganizationChangeは永続化経路の例外をunavailableへ閉じる", async () => {
@@ -196,4 +198,101 @@ test("限定人事資格は根拠と訂正元を持つ雇用期間の取消・�
     await command.execute({ ...change, corrections: change.corrections.slice(0, 1) }),
   ).toMatchObject({ kind: "forbidden" })
   expect(writeAttempts).toBe(1)
+})
+
+test("company:writeだけでは組織・報告関係・等級割当を変更できず、資源種別の個別権限を要求する", async () => {
+  const resource = {
+    organizationId: COMPANY_DEFAULT_ORGANIZATION_ID,
+    revision: 1,
+    state: "active" as const,
+    effectiveFrom: restoreCalendarDate("2026-01-01"),
+    effectiveTo: null,
+  }
+  const cases: ReadonlyArray<{
+    resource: CompanyResourceChangeProps["resources"][number]
+    permission: "org:write" | "employee:write:attributes"
+  }> = [
+    {
+      resource: {
+        ...resource,
+        type: "organization-unit" as const,
+        id: "organization-unit-period:root",
+        attributes: {
+          organizationUnitId: "organization-unit:root",
+          code: "ROOT",
+          officialName: "Company",
+          kind: "COMPANY",
+          parentOrganizationUnitId: null,
+        },
+      },
+      permission: "org:write" as const,
+    },
+    {
+      resource: {
+        ...resource,
+        type: "reporting-relation" as const,
+        id: "reporting-relation:one",
+        attributes: {
+          employeeId: "employee:one",
+          managerEmployeeId: "employee:two",
+          organizationUnitId: "organization-unit:root",
+        },
+      },
+      permission: "org:write" as const,
+    },
+    {
+      resource: {
+        ...resource,
+        type: "grade-assignment" as const,
+        id: "grade-assignment:one",
+        attributes: {
+          employeeId: "employee:one",
+          employmentId: "employment:one",
+          gradeId: "grade:one",
+        },
+      },
+      permission: "employee:write:attributes" as const,
+    },
+  ]
+
+  for (const { resource: target, permission } of cases) {
+    let writeAttempts = 0
+    const repository = {
+      writeOrganizationChange: async () => {
+        writeAttempts += 1
+        return { kind: "applied" as const, organizationRevision: 1, replayed: false }
+      },
+    }
+    const change = {
+      commandId: `command:${target.type}`,
+      expectedRevision: 0,
+      reason: "権限を確認する",
+      recordedAt: 1,
+      resources: [target],
+    }
+    const withPermissions = (
+      permissions: ReadonlyArray<"org:write" | "employee:write:attributes">,
+    ) =>
+      new ApplyOrganizationChange({
+        actor: CompanyActorValue.restore({
+          accountId: "c0975461-26d2-43a1-86d2-124bd000d9c9",
+          employeeId: null,
+          organizationIds: [COMPANY_DEFAULT_ORGANIZATION_ID],
+          capabilities: ["company:write"],
+          permissions,
+        }),
+        repository,
+      })
+    const otherPermission = permission === "org:write" ? "employee:write:attributes" : "org:write"
+
+    expect(await withPermissions([]).execute(change)).toEqual({ kind: "forbidden" })
+    expect(await withPermissions([otherPermission]).execute(change)).toEqual({
+      kind: "forbidden",
+    })
+    expect(writeAttempts).toBe(0)
+    expect(await withPermissions([permission]).execute(change)).toMatchObject({
+      kind: "applied",
+    })
+    expect(writeAttempts).toBe(1)
+  }
 })

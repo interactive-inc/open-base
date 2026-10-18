@@ -74,4 +74,12 @@ export const COMPANY_PERMISSION_ENTRIES = [
     name: "労務属性編集",
     description: "会社内の全従業員について、等級、号俸、基本給などの労務情報を編集できます。",
   },
+  {
+    key: "account_link:write",
+    category: "hr",
+    appliesTo: "org",
+    name: "アカウント紐付け管理",
+    description:
+      "ログインアカウントと従業員の対応を登録・変更・解除できます。他の会社情報の変更資格は含みません。",
+  },
 ] as const

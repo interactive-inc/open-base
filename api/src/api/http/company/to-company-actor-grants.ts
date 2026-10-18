@@ -44,6 +44,8 @@ export function toCompanyActorGrants(
   if (isAdmin || hasPermission("employee_event:manage")) {
     permissions.push("employee:write:attributes")
   }
+  // アカウントと従業員の紐付けはアカウント管理の資格として扱い、組織管理からは導出しない。
+  if (isAdmin || hasPermission("account:manage")) permissions.push("account_link:write")
   if (hasPermission("grade:manage")) permissions.push("master:grade:write")
   if (hasPermission("position:manage")) permissions.push("master:position:write")
 

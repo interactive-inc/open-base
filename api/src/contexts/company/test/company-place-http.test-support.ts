@@ -19,6 +19,7 @@ export function createCompanyPlaceHttpTestClient(
     employeeId: null,
     organizationIds: [COMPANY_DEFAULT_ORGANIZATION_ID],
     capabilities: ["company:read", "company:write"],
+    permissions: ["org:write"],
   }),
 ) {
   const app = new Hono<CompanyHttpEnvironment>()

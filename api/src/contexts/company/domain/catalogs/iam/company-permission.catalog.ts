@@ -12,4 +12,5 @@ export const CompanyPermission = Object.freeze({
   EMPLOYEE_WRITE: PermissionValue.known("employee:write"),
   EMPLOYEE_WRITE_BASIC: PermissionValue.known("employee:write:basic"),
   EMPLOYEE_WRITE_ATTRIBUTES: PermissionValue.known("employee:write:attributes"),
+  ACCOUNT_LINK_WRITE: PermissionValue.known("account_link:write"),
 })
