@@ -307,12 +307,22 @@ export class ExternalIdentityImportRepository {
       .bind(organizationId, person.id)
       .first<number>("revision")
     if (latestRevision === null) return { kind: "conflict", reason: "person_period" }
+    const attachmentAdapter = new SystemIdentityAttachmentAdapter(this.c)
+    if (current === null) {
+      const canAttach = await attachmentAdapter.canAttach({
+        actorAccountId: context.actor.accountId,
+        accountId,
+        now: context.now,
+      })
+      if (canAttach instanceof Error) return { kind: "unavailable", cause: canAttach }
+      if (!canAttach) return { kind: "forbidden" }
+    }
     const before: D1PreparedStatement[] = [
       identityAdapter.prepareTargetGuard(accountId, account.tokenVersion),
     ]
     const attachment =
       current === null
-        ? new SystemIdentityAttachmentAdapter(this.c).prepare({
+        ? attachmentAdapter.prepare({
             actorAccountId: context.actor.accountId,
             accountId,
             provider: "oidc",
