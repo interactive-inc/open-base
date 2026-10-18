@@ -91,6 +91,8 @@ export type SystemExternalIdentityContext = Readonly<{
     IDENTITY_AUDIENCE?: string
     IDENTITY_ACCESS_TOKEN_ISSUER?: string
     IDENTITY_ACCESS_TOKEN_AUDIENCE?: string
+    // Service Binding RPC入口だけが受理するaud。未設定ならRPC入口は全て拒否する。
+    SERVICE_BINDING_ACCESS_TOKEN_AUDIENCE?: string
     IDENTITY_LOGIN_URL?: string
     API_ORIGIN?: string
   }>

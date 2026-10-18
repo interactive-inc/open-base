@@ -34,6 +34,39 @@ describe("SystemIdentityTokenVerifier", () => {
     expect(claims.jti).toBe("jti-1")
   })
 
+  test("rejects a token whose audiences include the excluded audience", async () => {
+    const excludedAudience = "urn:example:service-binding"
+    for (const tokenAudience of [[audience, excludedAudience], excludedAudience]) {
+      const token = await createSystemIdentityToken(identityKey.signingKey, nowEpoch, {
+        audience: tokenAudience,
+      })
+
+      expect(
+        await new SystemIdentityTokenVerifier({ excludedAudience }).verify({
+          token,
+          verificationKey: identityKey.verificationKey,
+          issuer,
+          audience: excludedAudience,
+          now,
+        }),
+      ).toEqual({ reason: "invalid_token" })
+    }
+  })
+
+  test("ignores an empty excluded audience", async () => {
+    const token = await createSystemIdentityToken(identityKey.signingKey, nowEpoch, { audience })
+
+    const claims = await new SystemIdentityTokenVerifier({ excludedAudience: "" }).verify({
+      token,
+      verificationKey: identityKey.verificationKey,
+      issuer,
+      audience,
+      now,
+    })
+
+    expect("reason" in claims).toBe(false)
+  })
+
   test("rejects a token signed with a key outside the JWKS", async () => {
     const token = await createSystemIdentityToken(wrongIdentityKey.signingKey, nowEpoch, {
       keyId: wrongIdentityKey.keyId,

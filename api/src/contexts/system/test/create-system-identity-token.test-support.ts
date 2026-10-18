@@ -9,7 +9,7 @@ export type SystemIdentityTokenOverrides = {
   name?: string
   jti?: string
   issuer?: string
-  audience?: string
+  audience?: string | string[]
   iat?: number
   /** 利用者が認証した時刻。null なら claim を載せない。 */
   authTime?: number | null
