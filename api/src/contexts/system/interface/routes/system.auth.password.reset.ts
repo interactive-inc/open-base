@@ -4,6 +4,8 @@ import { ResetPassword } from "@/contexts/system/application/auth/reset-password
 import { PasswordResetRequestApplicationError } from "@system/application/errors"
 import { EmailValue } from "@/contexts/system/domain/values/identity/email.value"
 import { identitySubjectSchema } from "@/contexts/system/domain/schemas/identity/identity-subject.schema"
+import { CreateSystemPasswordResetChallengeAdapter } from "@system/infrastructure/adapters/auth/create-system-password-reset-challenge.adapter"
+import { PasswordResetEmailAdapter } from "@system/infrastructure/adapters/auth/password-reset-email.adapter"
 import { FindSystemPasswordResetRecipientAdapter } from "@system/infrastructure/adapters/auth/find-system-password-reset-recipient.adapter"
 import { systemFactory } from "@/contexts/system/interface/request-environment/system-factory"
 import { SystemApplicationError, SystemInternalServerError } from "@system/interface/errors"
@@ -38,18 +40,23 @@ export const POST = systemFactory.createHandlers(
       throw new SystemApplicationError(error)
     }
 
-    const requestOutcome = await new CreatePasswordResetChallenge(c).execute({
+    const requestOutcome = new CreatePasswordResetChallenge({
+      now: c.var.now,
+      auditContext: c.var.auditContext,
+      createChallenge: (props) =>
+        new CreateSystemPasswordResetChallengeAdapter(c).createSystemPasswordResetChallenge(props),
+      sendEmail: (props) => new PasswordResetEmailAdapter(c).send(props),
+      runAfterResponse: (task) => {
+        try {
+          c.executionCtx.waitUntil(task)
+        } catch {
+          // ExecutionContextの無い実行環境ではtaskをそのまま継続させる。taskはrejectしない。
+        }
+      },
+    }).execute({
       origin: new URL(c.req.url).origin,
       recipient,
     })
-
-    if (requestOutcome instanceof Error) {
-      if (requestOutcome instanceof ApplicationError) {
-        throw new SystemApplicationError(requestOutcome)
-      }
-
-      throw new SystemInternalServerError(requestOutcome)
-    }
 
     return c.json(zAppAuthAcknowledgement.parse({ item: requestOutcome }))
   },
