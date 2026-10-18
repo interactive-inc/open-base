@@ -22,6 +22,8 @@ type Props = {
  *   ただし NEXT_PUBLIC_IDENTITY_LOGIN_URL が無い場合はロックアウト防止のため隠さない
  * - NEXT_PUBLIC_LOGIN_HIDDEN="1" … フォームもボタンも出さずタイトルだけ表示する。
  *   ログインを CLI など別経路に限定するデプロイ向け。タイトルは NEXT_PUBLIC_APP_NAME
+ * - NEXT_PUBLIC_DEMO_LOGIN_EMAIL と NEXT_PUBLIC_DEMO_LOGIN_PASSWORD … 両方設定時、
+ *   公開デモ用のアカウントをフォームに入力済みにして案内する。値は画面に公開される
  */
 export function LoginPage(props: Props) {
   const t = useTranslator()
@@ -37,6 +39,15 @@ export function LoginPage(props: Props) {
 
   const passwordLoginHidden =
     process.env.NEXT_PUBLIC_PASSWORD_LOGIN_HIDDEN === "1" && identityLoginUrl !== null
+
+  const demoEmail = process.env.NEXT_PUBLIC_DEMO_LOGIN_EMAIL?.trim() || null
+
+  const demoPassword = process.env.NEXT_PUBLIC_DEMO_LOGIN_PASSWORD?.trim() || null
+
+  const demoLogin =
+    demoEmail !== null && demoPassword !== null && passwordLoginHidden === false
+      ? { email: demoEmail, password: demoPassword }
+      : null
 
   if (loginHidden) {
     return (
@@ -60,12 +71,20 @@ export function LoginPage(props: Props) {
             <CardDescription>
               {passwordLoginHidden
                 ? t("組織のアカウントでログインしてください。")
-                : t("アカウントのメールアドレスとパスワードを入力してください。")}
+                : demoLogin !== null
+                  ? t("デモ用のアカウントを入力済みです。そのままログインして閲覧できます。")
+                  : t("アカウントのメールアドレスとパスワードを入力してください。")}
             </CardDescription>
           </CardHeader>
 
           <CardContent className="flex flex-col gap-4">
-            {passwordLoginHidden === false ? <LoginForm onAuthenticated={onAuthenticated} /> : null}
+            {passwordLoginHidden === false ? (
+              <LoginForm
+                onAuthenticated={onAuthenticated}
+                defaultEmail={demoLogin?.email}
+                defaultPassword={demoLogin?.password}
+              />
+            ) : null}
 
             {identityLoginUrl !== null ? (
               <Button nativeButton={false} render={<Link href="/auth/broker/login" />}>

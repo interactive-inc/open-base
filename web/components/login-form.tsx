@@ -23,6 +23,8 @@ const initialState: LoginState = { ok: false, error: null }
  */
 type Props = {
   onAuthenticated: () => void
+  defaultEmail?: string
+  defaultPassword?: string
 }
 
 export function LoginForm(props: Props) {
@@ -56,6 +58,7 @@ export function LoginForm(props: Props) {
             type="email"
             autoComplete="email"
             spellCheck={false}
+            defaultValue={props.defaultEmail}
             required
           />
         </Field>
@@ -69,6 +72,7 @@ export function LoginForm(props: Props) {
               name="password"
               type={showPassword ? "text" : "password"}
               autoComplete="current-password"
+              defaultValue={props.defaultPassword}
               required
             />
 

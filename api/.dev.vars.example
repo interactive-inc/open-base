@@ -32,5 +32,7 @@ IDENTITY_ACCESS_TOKEN_AUDIENCE=
 SERVICE_BINDING_ACCESS_TOKEN_AUDIENCE=
 # 初期 ROOT の作成時だけ設定し、作成後は削除する。未設定なら POST /system/bootstrap は 404。
 BOOTSTRAP_TOKEN=
+# "true" なら読み取り専用モード。ログインなどを除き、読み取り以外を403で拒否する。公開デモ向け。
+READ_ONLY_MODE=
 # 有効化する opt-in App 機能。"all" か機能キーのカンマ区切り。正本は .docs/feature-tiers.md。
 ENABLED_OPT_IN_APPS="all"

@@ -49,6 +49,9 @@ export type Bindings = {
   // CORS で許可する Origin をカンマ区切りで指定する（例: "https://app.example.com,https://admin.example.com"）。
   // 未設定時はローカル開発用 Origin のみ許可。本番では必ず設定する。
   CORS_ORIGIN?: string
+  // "true" なら読み取り専用モード。ログインなどのセッション系を除き、読み取り以外の要求を 403 で拒否する。
+  // 公開デモ向け。未設定・空・"false" なら通常どおり。それ以外の値は安全側に倒して読み取り専用にする。
+  READ_ONLY_MODE?: string
   // テストで現在時刻を固定するための注入点（本番では未設定 = 実時計）。
   NOW?: string
   // 外部業務台帳の停止世代を、同じデータ集合へ束縛する環境固有namespace。

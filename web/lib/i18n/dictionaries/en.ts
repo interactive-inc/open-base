@@ -6,6 +6,8 @@ export const en: Record<string, string> = {
   "Open Base にログイン": "Sign in to Open Base",
   "アカウントのメールアドレスとパスワードを入力してください。":
     "Enter your account email address and password.",
+  "デモ用のアカウントを入力済みです。そのままログインして閲覧できます。":
+    "The demo account is filled in. Sign in to browse.",
   メールアドレス: "Email address",
   パスワード: "Password",
   "ログイン中…": "Signing in...",

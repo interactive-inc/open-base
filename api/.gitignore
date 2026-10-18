@@ -36,3 +36,7 @@ lerna-debug.log*
 
 # misc
 .DS_Store
+
+# 公開デモなどの追加の配備設定（ドメイン・バインディング ID を含むためコミットしない）
+wrangler.*.jsonc
+!wrangler.example.jsonc

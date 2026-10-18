@@ -31,3 +31,26 @@ test("空の外部認証設定ではログインリンクを表示しない", ()
   expect(screen.queryByRole("link")).toBeNull()
   expect(screen.getByText("Open Base にログイン")).toBeDefined()
 })
+
+test("デモ用アカウントが両方設定されたときだけ入力済みの案内を出す", async () => {
+  const loginForm = await import("@/components/login-form")
+  const spy = vi.spyOn(loginForm, "LoginForm")
+  vi.stubEnv("NEXT_PUBLIC_DEMO_LOGIN_EMAIL", "demo@example.com")
+  vi.stubEnv("NEXT_PUBLIC_DEMO_LOGIN_PASSWORD", "demo-password-example")
+  render(<LoginPage />)
+  expect(
+    screen.getByText("デモ用のアカウントを入力済みです。そのままログインして閲覧できます。"),
+  ).toBeDefined()
+  expect(spy.mock.calls[0]?.[0]).toMatchObject({
+    defaultEmail: "demo@example.com",
+    defaultPassword: "demo-password-example",
+  })
+  cleanup()
+  spy.mockClear()
+  vi.stubEnv("NEXT_PUBLIC_DEMO_LOGIN_PASSWORD", "")
+  render(<LoginPage />)
+  expect(
+    screen.getByText("アカウントのメールアドレスとパスワードを入力してください。"),
+  ).toBeDefined()
+  expect(spy.mock.calls[0]?.[0]).toMatchObject({ defaultEmail: undefined })
+})

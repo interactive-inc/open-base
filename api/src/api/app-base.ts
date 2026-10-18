@@ -9,6 +9,7 @@ import { contextStorage } from "hono/context-storage"
 import { databaseMiddleware } from "@/api/database-middleware"
 import { featureGate } from "@/api/http/middlewares/feature-gate"
 import { rateLimitMiddleware } from "@/api/http/middlewares/rate-limit-middleware"
+import { readOnlyModeMiddleware } from "@/api/http/middlewares/read-only-mode-middleware"
 import { requestContextMiddleware } from "@/api/http/middlewares/request-context-middleware"
 import { factory } from "@/api/http/factory"
 import { auditNoStore } from "@/api/http/middlewares/audit-no-store"
@@ -188,6 +189,7 @@ export function createAppBase() {
       )
       .use("*", globalBodyLimitExceptAuditExport)
       .use("*", rateLimitMiddleware)
+      .use("*", readOnlyModeMiddleware)
       // nosniff / HSTS / X-Frame-Options 等のセキュリティヘッダを付与する。
       // COOP/CORP は別オリジンの正規クライアント（web/cli）からの利用を阻害しうるため無効化する
       // （クロスオリジンアクセスの制御は CORS が担う）。

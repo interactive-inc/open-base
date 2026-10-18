@@ -21,6 +21,7 @@
     "db:migrate:local": "wrangler d1 migrations apply base --local",
     "db:migrate": "bun run db:check:remote && wrangler d1 migrations apply base --remote",
     "db:seed:local": "echo \"Use the CLI bootstrap command to initialize System and Company.\"",
+    "seed:demo": "bun run scripts/seed-demo.ts",
     "db:check:remote": "bun scripts/check-remote-migration-journal.ts --config wrangler.jsonc",
     "ops:attachments:replicate": "bun run scripts/replicate-attachments.ts",
     "ops:attachments:erasure-ledger": "bun run scripts/attachment-erasure-ledger.ts",
