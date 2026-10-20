@@ -710,7 +710,7 @@
     "src/contexts/company/test/legacy-definition-records.api.integration.d1.test.ts": "1a80b97a58e333377f28cfe8295505ed15108d6d1c7bb3465b9866d65ccbd0bd",
     "src/contexts/company/test/legacy-manager-retirement.integration.d1.test.ts": "a683e1ae6ee127a585b0746347858ee2704b258072a65294e15105e557387568",
     "src/contexts/company/test/management-relations.integration.d1.test.ts": "66bd462cc3fd1055522e9a8960ed719392048fc3a4dd1fec4603f4cf464b6bc3",
-    "src/contexts/company/test/migrations-directory.test-support.ts": "d240e87177cc36b5284bfccdc524487782d58a467a5a7c31ec2cddaee57b8cb3",
+    "src/contexts/company/test/migrations-directory.test-support.ts": "2e39b05e6ee86a5a99049426aa3f27a2922059f9d5149a52d8681bc6da2172a2",
     "src/contexts/company/test/organization-command.integration.d1.test.ts": "9d30b718cc932fcc4936f3188f3154abeb912c018abfdb55c0bfd17d2e1fd2e2",
     "src/contexts/company/test/organization-observed-edit.integration.d1.test.ts": "821ad455692c4769abca821a002758846eea59e42720ac2f545d9f1fb3c83c1b",
     "src/contexts/company/test/organization-period-coverage.integration.d1.test.ts": "a9df05826874e1603d5596f018eb8cb22a089a16cad6ec29dc786e680662fafa",
