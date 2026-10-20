@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, spyOn, test } from "bun:test"
 import { Database } from "bun:sqlite"
+import { readFileSync } from "node:fs"
 import { drizzle } from "drizzle-orm/bun-sqlite"
 import type { DrizzleD1Database } from "drizzle-orm/d1"
 import type {
@@ -21,15 +22,15 @@ const MAX_ATTEMPTS = 10
 const MAX_ATTEMPTS_PER_ACCOUNT = MAX_ATTEMPTS * 2
 const MAX_ATTEMPTS_PER_IP = 50
 
+const coreSchema = readFileSync(new URL("../../schema/system-core.sql", import.meta.url), "utf8")
+const authenticationAttemptsSchema = coreSchema.match(
+  /CREATE TABLE system_authentication_attempts \([\s\S]*?CREATE INDEX system_authentication_attempts_ip_attempted_at_idx[\s\S]*?;/,
+)?.[0]
+if (authenticationAttemptsSchema === undefined) {
+  throw new Error("Authentication attempts schema was not found")
+}
 const sqlite = new Database(":memory:")
-sqlite.run(`
-  CREATE TABLE system_authentication_attempts (
-    id text PRIMARY KEY,
-    identifier text NOT NULL,
-    ip text,
-    attempted_at integer NOT NULL
-  )
-`)
+sqlite.run(authenticationAttemptsSchema)
 const db = drizzle(sqlite, { schema }) as unknown as DrizzleD1Database<typeof schema>
 const rateLimitContext: SystemDatabaseContext & SystemClockContext = {
   var: { database: db, now: () => new Date() },
@@ -261,6 +262,44 @@ describe("DB 障害時は fail-open", () => {
 })
 
 describe("recordAndCheckLoginAttempt (原子的 3 バケットゲート)", () => {
+  test.each([
+    { name: "空の identifier", identifier: "", ip: "203.0.113.1" },
+    { name: "2049 文字の identifier", identifier: "a".repeat(2049), ip: "203.0.113.1" },
+    { name: "256 文字の ip", identifier: "user@example.com", ip: "a".repeat(256) },
+    { name: "NUL だけの identifier", identifier: "\u0000", ip: "203.0.113.1" },
+    { name: "NUL で始まる identifier", identifier: "\u0000user@example.com", ip: "203.0.113.1" },
+    { name: "NUL を含む identifier", identifier: "user\u0000@example.com", ip: "203.0.113.1" },
+    { name: "NUL を含む ip", identifier: "user@example.com", ip: "\u0000203.0.113.1" },
+  ])("$name は DB に触らず拒否する", async ({ identifier, ip }) => {
+    const errors = spyOn(console, "error").mockImplementation(() => undefined)
+    const insert = spyOn(db, "insert")
+    const select = spyOn(db, "select")
+    const batch = spyOn(withBatch, "batch")
+    try {
+      expect(await rateLimit.recordAndCheck({ identifier, ip, now: 0 })).toEqual({ limited: true })
+      expect(
+        sqlite.query("SELECT count(*) AS total FROM system_authentication_attempts").get(),
+      ).toEqual({ total: 0 })
+      expect(insert).not.toHaveBeenCalled()
+      expect(select).not.toHaveBeenCalled()
+      expect(batch).not.toHaveBeenCalled()
+      expect(errors).not.toHaveBeenCalled()
+    } finally {
+      errors.mockRestore()
+      insert.mockRestore()
+      select.mockRestore()
+      batch.mockRestore()
+    }
+  })
+
+  test("上限の 2048 文字の identifier と 255 文字の ip は記録する", async () => {
+    const identifier = "a".repeat(2048)
+    expect(await rateLimit.recordAndCheck({ identifier, ip: "a".repeat(255), now: 0 })).toEqual({
+      limited: false,
+    })
+    expect(countRows(identifier)).toBe(1)
+  })
+
   test("同一 pair (IP+識別子) は 10 回まで許可、11 回目で拒否される", async () => {
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
       const result = await recordAndCheckLoginAttempt(db, "pair@example.com", "10.0.0.1", 0)

@@ -33,8 +33,11 @@ import { and, count, eq, gt, lte } from "drizzle-orm"
  * 削除して拒否するため、429 が続いても窓が延びない (最後に許可された失敗から WINDOW_MS 経過で
  * 自然に窓が空く)。
  *
- * DB 障害時は fail-open。record 系の best-effort な監査書き込み (record-auth-audit-log.ts) と同じく、
- * レートリミットの読み書き失敗でログイン処理自体を巻き戻さない。レートリミットは Basic 認証の背後に
+ * ログインゲートは表に記録できない入力を DB 操作前に拒否し、DB 障害だけを fail-open にする。
+ * identifier の上限 2048 文字と ip の上限 255 文字は、記録の制約違反を障害として扱わないよう schema の CHECK に揃える。
+ * SQLite の length() は最初の NUL までしか数えないので、NUL を含む値も CHECK に入らないものとして拒否する。
+ * record 系の best-effort な監査書き込み (record-auth-audit-log.ts) と同じく、
+ * DB 障害によるレートリミットの読み書き失敗でログイン処理自体を巻き戻さない。レートリミットは Basic 認証の背後に
  * 置く defense-in-depth であり、正の認証は verifyPassword 側で行われる。D1 が実際に落ちていれば
  * ログインの identity 参照も同じ DB で失敗するため、fail-open が認証バイパスを生むことはない。
  * ここでの throw 禁止 (T | Error でなく boolean/void を返す) はこの best-effort 方針に合わせたもの。
@@ -95,6 +98,11 @@ export class LoginRateLimitAdapter {
 
 function toIpPart(ip: string | null): string {
   return ip !== null && ip.length > 0 ? ip : "anonymous"
+}
+
+/** 試行の表の CHECK (1 文字以上 maxLength 文字以下) に入る値か。NUL を含む値は SQLite の length() で短く数えられる。 */
+function isRecordableAttemptText(value: string, maxLength: number): boolean {
+  return value.length >= 1 && value.length <= maxLength && !value.includes("\u0000")
 }
 
 /**
@@ -236,6 +244,9 @@ async function recordAndCheckLoginAttempt(
   now: number = Date.now(),
 ): Promise<LoginRateLimitGateResult> {
   const ipPart = toIpPart(ip)
+  if (!isRecordableAttemptText(identifier, 2048) || !isRecordableAttemptText(ipPart, 255)) {
+    return { limited: true }
+  }
   const id = crypto.randomUUID()
   const attemptedAt = new Date(now)
   const windowStart = new Date(now - WINDOW_MS)

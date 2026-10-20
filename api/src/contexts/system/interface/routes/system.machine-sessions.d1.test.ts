@@ -103,6 +103,17 @@ async function issuedToken(response: Response): Promise<string> {
 }
 
 describe("System machine access token", () => {
+  test("NULで始まるcredential_idは回数制限で止め、試行を記録しない", async () => {
+    const context = await createFixture()
+    const response = await context.issue("\u0000ad6a0f96-902f-4999-84f6-2b9eb703c2ed")
+    expect(response.status).toBe(429)
+    expect(
+      await context.fixture.database
+        .prepare("SELECT count(*) AS total FROM system_authentication_attempts")
+        .first<number>("total"),
+    ).toBe(0)
+  })
+
   test("一つのcredentialの失効で同じAccountの別credentialまで失効させない", async () => {
     const context = await createFixture()
     const firstToken = await issuedToken(await context.issue())
