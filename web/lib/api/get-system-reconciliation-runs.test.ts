@@ -18,7 +18,7 @@ const validRow = {
   assertion_id: "assertion-1",
   local_version: "v1",
   status: "matched",
-  created_at: 1_775_000_000_000,
+  created_at: "2026-04-01T00:00:00.000Z",
   item_count: 4,
 }
 
@@ -40,7 +40,7 @@ describe("getSystemReconciliationRuns", () => {
     stubResponse({
       reconciliations: [
         validRow,
-        { ...validRow, id: "run-2", created_at: "2026-04-01T00:00:00.000Z" },
+        { ...validRow, id: "run-2", created_at: 1_775_000_000_000 },
         { ...validRow, id: "run-3", item_count: null },
         { id: "run-4" },
       ],

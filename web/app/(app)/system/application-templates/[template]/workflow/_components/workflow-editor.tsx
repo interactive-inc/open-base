@@ -61,11 +61,11 @@ export function WorkflowEditor(props: {
   const workflow = draft.workflow
   const hasLegacySelectors = workflow.steps.some((step) =>
     [...step.approvers, ...step.escalation_approvers].some(
-      (selector) => selector.type === "role" || selector.type === "responsibility",
+      (selector) => selector.type === "responsibility",
     ),
   )
   const migrationError = hasLegacySelectors
-    ? "旧形式の承認者（組織責務・ロール）が含まれています。自動では変換されないため、「責務でステップを追加」から責務と適用範囲を設定し、旧ステップを削除してください。期限後の承認者も詳細設定で見直してください。"
+    ? "旧形式の承認者（組織責務）が含まれています。自動では変換されないため、「責務でステップを追加」から責務と適用範囲を設定し、旧ステップを削除してください。期限後の承認者も詳細設定で見直してください。"
     : null
   const definitionError = definition.success ? null : definition.error
   const [state, action, pending] = useActionState(

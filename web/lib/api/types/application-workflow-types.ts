@@ -1,7 +1,6 @@
 import type { companyOrganizationId } from "@/lib/api/company-organization-id"
 
 export type WorkflowApproverSelector =
-  | { type: "role"; role_key: string }
   | { type: "employee"; employee_code: string }
   | { type: "direct_manager" }
   | { type: "department_manager" }

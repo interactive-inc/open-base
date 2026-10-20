@@ -20,20 +20,18 @@ export async function getSystemIntegrationExchanges(
 
   const body = await response.json()
 
-  return body.exchanges.map(toExchange)
-}
-
-function toExchange(exchange: SystemIntegrationExchange): SystemIntegrationExchange {
-  return {
-    id: exchange.id,
-    connectorId: exchange.connectorId,
-    direction: exchange.direction,
-    operationKey: exchange.operationKey,
-    idempotencyKey: exchange.idempotencyKey,
-    payloadDigest: exchange.payloadDigest,
-    status: exchange.status,
-    attempt: exchange.attempt,
-    externalReference: exchange.externalReference,
-    lastErrorCode: exchange.lastErrorCode,
-  }
+  return body.exchanges.map(
+    (exchange): SystemIntegrationExchange => ({
+      id: exchange.id,
+      connectorId: exchange.connector_id,
+      direction: exchange.direction,
+      operationKey: exchange.operation_key,
+      idempotencyKey: exchange.idempotency_key,
+      payloadDigest: exchange.payload_digest,
+      status: exchange.status,
+      attempt: exchange.attempt,
+      externalReference: exchange.external_reference,
+      lastErrorCode: exchange.last_error_code,
+    }),
+  )
 }

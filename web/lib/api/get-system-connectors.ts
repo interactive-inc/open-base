@@ -3,7 +3,7 @@ import type { SystemConnector } from "@/lib/api/types/system-operation-types"
 
 /**
  * GET /system/connectors。外部境界の Connector 定義を返す。
- * api は entity をそのまま JSON にするので、時刻は応答に含まれない。
+ * 応答の作成・更新時刻は画面で使わないので落とす。
  */
 export async function getSystemConnectors(): Promise<ReadonlyArray<SystemConnector> | Error> {
   const client = await createClient()

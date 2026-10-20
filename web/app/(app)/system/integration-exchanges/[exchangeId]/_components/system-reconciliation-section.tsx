@@ -1,7 +1,7 @@
-import { formatEpochMilliseconds } from "@/app/(app)/system/integration-exchanges/[exchangeId]/_lib/format-epoch-milliseconds"
 import { FetchError } from "@/components/fetch-error"
 import { SystemResourceTable } from "@/components/system-resource-table"
 import { getSystemReconciliationRuns } from "@/lib/api/get-system-reconciliation-runs"
+import { formatDateTime } from "@/lib/format-date-time"
 
 type Props = {
   exchangeId: string
@@ -42,7 +42,7 @@ export async function SystemReconciliationSection(props: Props) {
           { header: "項目数", toValue: (run) => run.item_count },
           {
             header: "記録日時",
-            toValue: (run) => formatEpochMilliseconds(run.created_at),
+            toValue: (run) => formatDateTime(run.created_at),
           },
         ]}
       />

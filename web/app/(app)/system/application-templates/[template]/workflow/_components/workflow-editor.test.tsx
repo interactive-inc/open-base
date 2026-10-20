@@ -49,7 +49,7 @@ describe("WorkflowEditor", () => {
               value: 10_000,
             },
           ],
-          escalation_approvers: [{ type: "role", role_key: "root" }],
+          escalation_approvers: [{ type: "department_manager" }],
         },
       ],
     }
