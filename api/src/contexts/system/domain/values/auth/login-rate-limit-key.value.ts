@@ -15,6 +15,15 @@ export class LoginRateLimitKeyValue {
     )
   }
 
+  /**
+   * 認証済みの利用者が自分のパスワードを再入力する操作 (再認証・パスワード変更) の試行キー。
+   * 盗まれたセッションからの総当たりを Account 単位で止めるため IP を含めない。名前空間を分けて
+   * ログインの識別子 (メール・社員番号) と同じ行を数えないようにする。
+   */
+  static passwordReauthentication(accountId: string): LoginRateLimitKeyValue {
+    return new LoginRateLimitKeyValue(`password-reauthentication|${accountId}`)
+  }
+
   toString(): string {
     return this.value
   }

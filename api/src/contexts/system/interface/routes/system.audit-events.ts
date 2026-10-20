@@ -1,4 +1,5 @@
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
+import { readSystemAuditPageBoundarySchema } from "@system/interface/operations/read-system-audit-page-boundary-schema"
 import { prepareSystemAuditDisclosure } from "@system/interface/operations/prepare-system-audit-disclosure"
 import { systemAuditEventResponseSchema } from "@system/interface/http/audit-disclosure-response-schemas"
 import { SystemAuditUnavailableError, SystemForbiddenError } from "@system/interface/errors"
@@ -30,6 +31,8 @@ export const GET = systemFactory.createHandlers(
       occurred_to: z.iso.datetime().optional(),
       limit: z.coerce.number().int().min(1).max(100).default(50),
       offset: z.coerce.number().int().min(0).max(10_000).default(0),
+      // 最初のページの応答の boundary を続きのページへ渡すと、その後に追記された行で位置がずれない。
+      boundary: readSystemAuditPageBoundarySchema().optional(),
     }),
   ),
   async (context) => {
@@ -90,6 +93,7 @@ export const GET = systemFactory.createHandlers(
         occurredTo: query.occurred_to === undefined ? null : new Date(query.occurred_to),
         limit: query.limit,
         offset: query.offset,
+        boundary: query.boundary ?? null,
       },
       disclosure,
     )
@@ -100,6 +104,7 @@ export const GET = systemFactory.createHandlers(
       purpose: query.purpose ?? null,
       action: query.action ?? null,
       actor_account_id: query.actor_account_id ?? null,
+      boundary: query.boundary?.toString() ?? null,
       limit: query.limit,
       offset: query.offset,
       outcome: query.outcome ?? null,
@@ -135,6 +140,7 @@ export const GET = systemFactory.createHandlers(
         total: page.total,
         limit: query.limit,
         offset: query.offset,
+        boundary: page.boundary?.toString() ?? null,
       },
       200,
     )

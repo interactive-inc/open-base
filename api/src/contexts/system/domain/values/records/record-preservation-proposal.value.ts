@@ -9,7 +9,12 @@ import { AttachmentPreservationEntity } from "@system/domain/entities/attachment
 import { CanonicalSystemJsonValue } from "@system/domain/values/audit/canonical-system-json.value"
 import { ProposalDigestValue } from "@system/domain/values/workflow/proposal-digest.value"
 
-type Props = Readonly<{ canonical: CanonicalSystemJsonValue; digest: ProposalDigestValue }>
+type Props = Readonly<{
+  canonical: CanonicalSystemJsonValue
+  digest: ProposalDigestValue
+  recordId: string
+  actorAccountId: string
+}>
 
 /** 承認対象の原記録・保持条件・開示先を固定し、実行時の監査IDや確定日時から分離する。 */
 export class RecordPreservationProposalValue {
@@ -131,7 +136,14 @@ export class RecordPreservationProposalValue {
     if (canonical instanceof Error) return canonical
     const digest = await ProposalDigestValue.create(canonical)
     if (digest instanceof Error) return digest
-    return new RecordPreservationProposalValue(Object.freeze({ canonical, digest }))
+    return new RecordPreservationProposalValue(
+      Object.freeze({
+        canonical,
+        digest,
+        recordId: parsed.data.recordId,
+        actorAccountId: parsed.data.actorAccountId,
+      }),
+    )
   }
   /** 検証済みの提案から保存内容を組み立てる。承認資格と実行許可は別途検査する。 */
   toFinalization(input: Readonly<{ actorAccountId: string; at: Date }>):

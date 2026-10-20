@@ -252,7 +252,7 @@ export const systemSessions = sqliteTable(
 
 export type SystemSessionRow = InferSelectModel<typeof systemSessions>
 
-/** 外部Identity tokenのsingle-use jti。replay検知に必要な最小情報だけを保持する。 */
+/** 外部Identity tokenとMCP grantのsingle-use jti。replay検知に必要な最小情報だけを保持する。 */
 export const systemIdentityLoginTokens = sqliteTable(
   "system_identity_login_tokens",
   {

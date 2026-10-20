@@ -98,6 +98,17 @@ export class PrepareCompanyProcedureDecisionAdapter {
     })
     if (guard instanceof Error)
       return new CompanyUnexpectedError("会社資格を固定できません", { cause: guard })
+    const attestations = await query.listAttestations(proposal.caseId)
+    if (attestations instanceof Error)
+      return new CompanyUnexpectedError("判断履歴を取得できません", { cause: attestations })
+    // 新規判断だけ未判断の委任元を選び、再送で使う元の委任の照合は変えない。
+    const decidedAccountIds = new Set(
+      attestations
+        .filter(
+          (attestation) => attestation.taskKey === task.key && attestation.round === task.round,
+        )
+        .map((attestation) => attestation.representedAccountId),
+    )
     const delegation = candidates.includes(input.actorAccountId)
       ? null
       : await query.findDelegation({
@@ -105,7 +116,7 @@ export class PrepareCompanyProcedureDecisionAdapter {
           taskKey: task.key,
           round: task.round,
           actorAccountId: input.actorAccountId,
-          candidateAccountIds: candidates,
+          candidateAccountIds: candidates.filter((accountId) => !decidedAccountIds.has(accountId)),
           at: input.decidedAt,
         })
     if (delegation instanceof Error)

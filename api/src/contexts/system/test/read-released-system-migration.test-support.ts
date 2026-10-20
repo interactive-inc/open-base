@@ -10,24 +10,22 @@ export function readReleasedSystemMigration(stableName: string): string {
     throw new Error(`Invalid System migration name: ${stableName}`)
   }
 
-  const matches = ["tests/fixtures/released-migrations", "drizzle", "migrations"].flatMap(
-    (directory) => {
-      const migrationsUrl = new URL(`../../../../${directory}/`, import.meta.url)
+  const matches = ["drizzle", "migrations"].flatMap((directory) => {
+    const migrationsUrl = new URL(`../../../../${directory}/`, import.meta.url)
 
-      try {
-        const releasedFilename = new RegExp(`^\\d+_${stableName}\\.sql$`)
-        return readdirSync(migrationsUrl)
-          .filter((filename) => releasedFilename.test(filename))
-          .map((filename) => new URL(filename, migrationsUrl))
-      } catch (error) {
-        const code = error instanceof Error && "code" in error ? error.code : undefined
-        if (code === "ENOENT") {
-          return []
-        }
-        throw error
+    try {
+      const releasedFilename = new RegExp(`^\\d+_${stableName}\\.sql$`)
+      return readdirSync(migrationsUrl)
+        .filter((filename) => releasedFilename.test(filename))
+        .map((filename) => new URL(filename, migrationsUrl))
+    } catch (error) {
+      const code = error instanceof Error && "code" in error ? error.code : undefined
+      if (code === "ENOENT") {
+        return []
       }
-    },
-  )
+      throw error
+    }
+  })
 
   if (matches.length !== 1) {
     throw new Error(

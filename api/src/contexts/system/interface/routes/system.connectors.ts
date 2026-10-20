@@ -1,6 +1,7 @@
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
 /** /system/connectors */
 import { CreateSystemConnector } from "@system/application/integration/create-system-connector"
+import { SystemConnectorEntity } from "@system/domain/entities/system-connector.entity"
 import { SystemAuditEventEntity } from "@system/domain/entities/system-audit-event.entity"
 import { StableSystemAuditJsonValue } from "@system/domain/values/audit/stable-system-audit-json.value"
 import { SystemAuditEventRepository } from "@system/infrastructure/repositories/audit/system-audit-event.repository"
@@ -15,6 +16,8 @@ import {
 import { authenticateSystemAccessToken } from "@system/interface/middlewares/authenticate-system-access-token"
 import { requireSystemStepUp } from "@system/interface/middlewares/require-system-step-up"
 import { systemFactory } from "@system/interface/request-environment/system-factory"
+import { systemConnectorResponse } from "@system/interface/responses/system-connector-response"
+import { uuidSchema } from "@/lib/validation/uuid.schema"
 import { zValidator } from "@hono/zod-validator"
 import { z } from "zod"
 
@@ -25,7 +28,7 @@ export const GET = systemFactory.createHandlers(authenticateSystemAccessToken, a
   }
   const connectors = await new SystemConnectorRepository({ env: { DB: context.env.DB } }).findMany()
   if (connectors instanceof Error) throw new SystemIntegrationUnavailableError(connectors)
-  return context.json({ connectors }, 200)
+  return context.json({ connectors: connectors.map(systemConnectorResponse) }, 200)
 })
 
 // @authorization permission integration:write - secretを含まないConnector定義を作成する
@@ -36,7 +39,7 @@ export const POST = systemFactory.createHandlers(
     "json",
     z
       .object({
-        id: z.string().regex(/^\S{1,255}$/),
+        id: uuidSchema,
         key: z.string().regex(/^[a-z][a-z0-9_-]{0,62}$/),
         name: z.string().trim().min(1).max(200),
         direction: z.enum(["inbound", "outbound", "bidirectional"]),
@@ -50,7 +53,7 @@ export const POST = systemFactory.createHandlers(
       throw new SystemForbiddenError()
     }
     const body = context.req.valid("json")
-    const after = StableSystemAuditJsonValue.create({
+    const input = {
       id: body.id,
       key: body.key,
       name: body.name,
@@ -58,7 +61,12 @@ export const POST = systemFactory.createHandlers(
       transport: body.transport,
       status: "active",
       revision: 1,
-    })
+      createdAt: now,
+      updatedAt: now,
+    }
+    const connector = SystemConnectorEntity.create(input)
+    if (connector instanceof Error) throw new SystemIntegrationInvalidError(connector)
+    const after = StableSystemAuditJsonValue.create(systemConnectorResponse(connector))
     if (after === null || after instanceof Error) {
       throw new SystemIntegrationUnavailableError(after)
     }
@@ -81,22 +89,15 @@ export const POST = systemFactory.createHandlers(
     const auditStatements = new SystemAuditEventRepository(systemContext).prepareAppend(event)
     const result = await new CreateSystemConnector({
       write: (connector) => repository.write(connector, auditStatements),
-    }).execute({
-      id: body.id,
-      key: body.key,
-      name: body.name,
-      direction: body.direction,
-      transport: body.transport,
-      status: "active",
-      revision: 1,
-      createdAt: now,
-      updatedAt: now,
-    })
+    }).execute(input)
     if (result instanceof Error) throw new SystemIntegrationInvalidError(result)
     if (result.kind === "conflict") throw new SystemIntegrationConflictError()
     if (result.kind === "unavailable") throw new SystemIntegrationUnavailableError(result.cause)
     return context.json(
-      { connector: result.connector, replayed: result.kind === "replayed" },
+      {
+        connector: systemConnectorResponse(result.connector),
+        replayed: result.kind === "replayed",
+      },
       result.kind === "replayed" ? 200 : 201,
     )
   },

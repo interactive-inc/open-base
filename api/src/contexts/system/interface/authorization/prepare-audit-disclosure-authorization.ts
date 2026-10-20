@@ -13,6 +13,7 @@ export async function prepareAuditDisclosureAuthorization(
   const proof = await new SystemHumanOperationAuthorizationAdapter(context).prepare({
     accountId: context.var.userId,
     tokenVersion: context.var.accountTokenVersion,
+    sessionFamilyId: context.var.accountSessionFamilyId ?? null,
     permissions: ["system:admin"],
     now: input.now,
   })

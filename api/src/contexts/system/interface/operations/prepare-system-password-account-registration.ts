@@ -8,9 +8,15 @@ import {
   systemPasswordCredentials,
   systemRoleBindings,
 } from "@system/infrastructure/schema/system-core"
+import { prepareSystemHumanPrincipalCreation } from "@system/interface/operations/prepare-system-human-principal-creation"
 import { drizzle } from "drizzle-orm/d1"
 
-/** 招待受諾で作るSystem Account・Identity・Role bindingを同一batchに載せる。 */
+/**
+ * 招待受諾で作るSystem Account・Human Principal・Identity・Role bindingを同一batchに載せる。
+ *
+ * Human Principal が無い Account は、Human 認可を要求する操作で権限があっても拒否される。
+ * 既存 Account を再利用するときは、既にある Principal（機械主体を含む）を上書きせず、無いときだけ作る。
+ */
 export function prepareSystemPasswordAccountRegistration(
   database: D1Database,
   input: Readonly<{
@@ -58,6 +64,10 @@ export function prepareSystemPasswordAccountRegistration(
           createdAt: input.now,
           updatedAt: input.now,
         }),
+    principalCreation: prepareSystemHumanPrincipalCreation(database, {
+      accountId: accountId.data,
+      now: input.now,
+    }),
     identityCreation: db.insert(systemIdentityBindings).values({
       id: input.identityId,
       accountId: input.accountId,

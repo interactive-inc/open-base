@@ -6,6 +6,7 @@ export function prepareSystemServiceOperationAuthorization(
     database: D1Database
     accountId: string
     tokenVersion: number
+    sessionFamilyId: string | null
     permissions: ReadonlyArray<string>
     now: Date
   }>,
@@ -17,6 +18,7 @@ export function prepareSystemServiceOperationAuthorization(
   return new SystemServiceOperationAuthorizationAdapter({ env: { DB: input.database } }).prepare({
     accountId: input.accountId,
     tokenVersion: input.tokenVersion,
+    sessionFamilyId: input.sessionFamilyId,
     permissions: input.permissions,
     now: input.now,
   })

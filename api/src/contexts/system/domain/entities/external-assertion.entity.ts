@@ -1,14 +1,12 @@
 import { InvalidSystemIntegrationError } from "@system/domain/errors"
+import { uuidSchema } from "@/lib/validation/uuid.schema"
 import { z } from "zod"
 
 const assertionPropsSchema = z
   .object({
-    id: z.string().regex(/^\S{1,255}$/),
-    connectorId: z.string().regex(/^\S{1,255}$/),
-    exchangeId: z
-      .string()
-      .regex(/^\S{1,255}$/)
-      .nullable(),
+    id: uuidSchema,
+    connectorId: uuidSchema,
+    exchangeId: uuidSchema.nullable(),
     externalKey: z.string().trim().min(1).max(512),
     externalVersion: z.string().trim().min(1).max(255),
     payloadDigest: z.string().regex(/^[0-9a-f]{64}$/u),

@@ -16,6 +16,39 @@ describe("CanonicalSystemJsonValue", () => {
     expect(input).toEqual(snapshot)
   })
 
+  test("ルートと入れ子の特殊なキーをown data propertyとして直列化する", () => {
+    const input = JSON.parse(
+      '{"value":1,"__proto__":{"requested":"root"},"nested":{"__proto__":{"requested":"child"}},"constructor":"constructor","prototype":"prototype","toString":"toString","hasOwnProperty":"hasOwnProperty"}',
+    )
+    const serialized = serializeCanonicalSystemJson(input)
+
+    expect(serialized).toBe(
+      '{"__proto__":{"requested":"root"},"constructor":"constructor","hasOwnProperty":"hasOwnProperty","nested":{"__proto__":{"requested":"child"}},"prototype":"prototype","toString":"toString","value":1}',
+    )
+    if (typeof serialized !== "string") return
+    const normalized = JSON.parse(serialized)
+    expect(Object.hasOwn(normalized, "__proto__")).toBe(true)
+    expect(Object.hasOwn(normalized.nested, "__proto__")).toBe(true)
+    expect(normalized).toEqual(input)
+    expect(Object.getPrototypeOf(normalized)).toBe(Object.prototype)
+  })
+
+  test("__proto__の値の違いをcanonical JSONの違いとして保持する", () => {
+    const left = CanonicalSystemJsonValue.create(
+      JSON.parse('{"value":1,"__proto__":{"requested":"first"}}'),
+    )
+    const right = CanonicalSystemJsonValue.create(
+      JSON.parse('{"value":1,"__proto__":{"requested":"second"}}'),
+    )
+
+    expect(left).toBeInstanceOf(CanonicalSystemJsonValue)
+    expect(right).toBeInstanceOf(CanonicalSystemJsonValue)
+    if (!(left instanceof CanonicalSystemJsonValue) || !(right instanceof CanonicalSystemJsonValue))
+      return
+    expect(left.toString()).not.toBe(right.toString())
+    expect(left.equals(right)).toBe(false)
+  })
+
   test.each([undefined, Number.NaN, Number.POSITIVE_INFINITY, 1n, new Date()])(
     "JSONではない値を拒否する",
     (input) => {

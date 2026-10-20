@@ -3,24 +3,28 @@ import { SystemAuditEventEntity } from "@system/domain/entities/system-audit-eve
 import { SystemStepUpGrantEntity } from "@system/domain/entities/system-step-up-grant.entity"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { StableSystemAuditJsonValue } from "@system/domain/values/audit/stable-system-audit-json.value"
+import { LoginRateLimitAdapter } from "@system/infrastructure/adapters/auth/login-rate-limit.adapter"
 import { SystemPasswordCredentialAdapter } from "@system/infrastructure/adapters/auth/system-password-credential.adapter"
 import { RecordSystemIdentityLoginTokenAdapter } from "@system/infrastructure/adapters/auth/record-system-identity-login-token.adapter"
 import { SystemIdentityLoginAdapter } from "@system/infrastructure/adapters/auth/system-identity-login.adapter"
 import { SystemIdentityVerificationKeyAdapter } from "@system/infrastructure/adapters/auth/system-identity-verification-key.adapter"
 import { SystemAuditEventRepository } from "@system/infrastructure/repositories/audit/system-audit-event.repository"
 import { SystemStepUpGrantRepository } from "@system/infrastructure/repositories/iam/system-step-up-grant.repository"
+import { systemCoreSchema } from "@system/infrastructure/schema/system-core"
 import { decoySystemPasswordHash } from "@system/lib/auth/decoy-system-password-hash"
 import { passwordHashNeedsRehash } from "@system/lib/auth/password-hash-needs-rehash"
 import { SystemPrincipalSecretService } from "@system/lib/auth/system-principal-secret-service"
 import { SystemIdentityTokenVerifier } from "@system/lib/auth/system-identity-token-verifier"
 import { verifySystemPassword } from "@system/lib/auth/verify-system-password"
 import {
+  SystemAuthenticationRateLimitedError,
   SystemCredentialsInvalidError,
   SystemPrincipalUnavailableError,
 } from "@system/interface/errors"
 import { authenticateSystemAccessToken } from "@system/interface/middlewares/authenticate-system-access-token"
 import { systemFactory } from "@system/interface/request-environment/system-factory"
 import { zValidator } from "@hono/zod-validator"
+import { drizzle } from "drizzle-orm/d1"
 import { z } from "zod"
 
 const STEP_UP_LIFETIME_MILLISECONDS = 5 * 60 * 1_000
@@ -52,6 +56,15 @@ export const POST = systemFactory.createHandlers(
       if (pepper === undefined || pepper.length === 0) {
         throw new SystemPrincipalUnavailableError()
       }
+      // 盗まれたセッションから現在のパスワードを総当たりされないよう、検証より前にAccount単位で数える。
+      const rateLimit = new LoginRateLimitAdapter({
+        var: { database: drizzle(context.env.DB, { schema: systemCoreSchema }), now: () => now },
+      })
+      const gate = await rateLimit.recordAndCheckPasswordReauthentication({
+        accountId: accountId.data,
+        now: now.getTime(),
+      })
+      if (gate.limited) throw new SystemAuthenticationRateLimitedError()
       const authentication = await new SystemPasswordCredentialAdapter({
         database: context.env.DB,
       }).authenticateAccount(
@@ -66,6 +79,7 @@ export const POST = systemFactory.createHandlers(
         throw new SystemPrincipalUnavailableError(authentication)
       }
       if (authentication.kind === "rejected") throw new SystemCredentialsInvalidError()
+      await rateLimit.resetPasswordReauthentication({ accountId: accountId.data })
     } else {
       const issuer = context.env.IDENTITY_ISSUER
       const audience = context.env.IDENTITY_AUDIENCE

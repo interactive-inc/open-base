@@ -1,3 +1,12 @@
+import { createProcedureCandidatesTestContext } from "@/contexts/company/test/procedure-candidates.test-support"
+import { ResolveCompanyProcedureTaskAdapter } from "@/contexts/company/infrastructure/adapters/organization/resolve-company-procedure-task.adapter"
+import { createCompanyProcedureDecisionPolicy } from "@/contexts/company/domain/policies/company-procedure-decision.policy"
+import { StartSystemProcedure } from "@system/application/workflow/start-system-procedure"
+import { ProcedureDefinitionEntity } from "@system/domain/entities/procedure-definition.entity"
+import { SystemD1ProcedureRepository } from "@system/infrastructure/repositories/workflow/system-d1-procedure.repository"
+import { SystemD1ProposalAdapter } from "@system/infrastructure/adapters/workflow/system-d1-proposal.adapter"
+import { ApproveSystemTask } from "@system/application/workflow/approve-system-task"
+import { SystemD1WorkflowAdapter } from "@system/infrastructure/adapters/workflow/system-d1-workflow.adapter"
 import { execSql } from "@system/test/local-d1/exec-sql.test-support"
 import { CompanyResourceChangeEntity } from "@/contexts/company/domain/entities/company-resource-change.entity"
 import { D1CompanyResourceRepository } from "@/contexts/company/infrastructure/repositories/core/d1-company-resource.repository"
@@ -155,4 +164,159 @@ describe("Company Taskの判断時点の資格", () => {
         .first<string>("official_name"),
     ).toBe("Example Person")
   })
+})
+
+/** 通常の経路で最初の段階を解決し、公開した手続として開始する。 */
+async function startNormalProcedure(step: ApplicationWorkflowStep) {
+  const c = await createProcedureCandidatesTestContext()
+  const policy = createCompanyProcedureDecisionPolicy({
+    approverRoles: [],
+    workflow: { version: 1, steps: [step] },
+  })
+  if (policy instanceof Error) throw policy
+  const definition = ProcedureDefinitionEntity.create({
+    key: "authority_review",
+    revision: 1,
+    title: "Review",
+    category: "review",
+    description: null,
+    inputSchema: { fields: [] },
+    decisionPolicy: policy,
+    completionOperationKey: null,
+    createdByAccountId: c.creator.accountId,
+    createdAt: c.at,
+  })
+  if (definition instanceof Error) throw definition
+  const published = await new SystemD1ProcedureRepository(c.context).publish(definition, 0)
+  if (published !== true) throw published
+  const resolved = await new ResolveCompanyProcedureTaskAdapter({
+    c: c.context,
+    policy,
+    payload: {},
+    applicant: {
+      employeeId: c.creator.employeeId,
+      employeeCode: "APPLICANT",
+      employmentStatus: null,
+      organizationUnitId: null,
+      organizationUnitCode: null,
+      organizationUnitName: null,
+      positionTitle: null,
+    },
+    activatedAt: c.at,
+    afterTaskKey: null,
+  }).resolveCompanyProcedureTask()
+  if (resolved instanceof Error || resolved === null) throw resolved ?? new Error("task missing")
+  const other = c.people[2]
+  if (other === undefined) throw new Error("second reviewer missing")
+  const writer = new SystemD1WorkflowAdapter({ ...c.context, startGuards: resolved.guards })
+  const started = await new StartSystemProcedure({ writer }).run({
+    seriesId: crypto.randomUUID(),
+    version: 1,
+    procedureKey: definition.key,
+    procedureRevision: 1,
+    body: {},
+    createdByAccountId: c.creator.accountId,
+    supersedesProposalId: null,
+    createdAt: c.at,
+    firstTask: resolved.task,
+    subject: { context: "company", kind: "review", id: crypto.randomUUID(), version: "1" },
+  })
+  if (started instanceof Error) throw started
+  const approve = (accountId: typeof other.accountId) =>
+    new ApproveSystemTask(writer).execute({
+      caseId: started.workflowCase.id,
+      taskKey: step.key,
+      round: 1,
+      actorAccountId: accountId,
+      representedAccountId: accountId,
+      delegationId: null,
+      proposalDigest: started.proposal.digest,
+      comment: null,
+      decidedAt: c.at,
+      nextTask: null,
+    })
+  return { c, other, task: resolved.task, started, approve }
+}
+
+test.each([
+  { dueDays: 1, selector: "employee" },
+  { dueDays: 1, selector: "responsibility" },
+  { dueDays: null, selector: "employee" },
+  { dueDays: 1, selector: "distinct" },
+])("normal candidates start and approve before deadline: %j", async (scenario) => {
+  const { c, other, task, approve } = await startNormalProcedure({
+    key: "review",
+    name: "Review",
+    approvers: [{ type: "employee", employee_code: "REVIEWER_1" }],
+    escalation_approvers:
+      scenario.selector === "responsibility"
+        ? [{ type: "responsibility", responsibility_type: "APPROVE", organization_unit_code: null }]
+        : [
+            {
+              type: "employee",
+              employee_code: scenario.selector === "distinct" ? "REVIEWER_2" : "REVIEWER_1",
+            },
+          ],
+    due_days: scenario.dueDays,
+    approval_mode: "any",
+    condition_mode: "all",
+    conditions: [],
+    rejection_behavior: "reject",
+    allow_delegation: true,
+  })
+  const expected: Pick<
+    (typeof task.candidates)[number],
+    "accountId" | "source" | "eligibleFrom"
+  >[] = [{ accountId: c.reviewer.accountId, source: "primary", eligibleFrom: null }]
+  if (scenario.selector === "distinct")
+    expected.push({ accountId: other.accountId, source: "escalation", eligibleFrom: task.dueAt })
+  expect(
+    task.candidates.map((candidate) => ({
+      accountId: candidate.accountId,
+      source: candidate.source,
+      eligibleFrom: candidate.eligibleFrom,
+    })),
+  ).toEqual(expected)
+  const approved = await approve(c.reviewer.accountId)
+  if (approved instanceof Error) throw approved
+  expect(approved.caseStatus).toBe("approved")
+})
+
+test("a candidate consolidated from normal and escalation selectors holds a single vote", async () => {
+  const { c, other, task, started, approve } = await startNormalProcedure({
+    key: "review",
+    name: "Review",
+    approvers: [
+      { type: "employee", employee_code: "REVIEWER_1" },
+      { type: "employee", employee_code: "REVIEWER_2" },
+    ],
+    escalation_approvers: [
+      { type: "employee", employee_code: "REVIEWER_1" },
+      { type: "responsibility", responsibility_type: "APPROVE", organization_unit_code: null },
+    ],
+    due_days: 1,
+    approval_mode: "all",
+    condition_mode: "all",
+    conditions: [],
+    rejection_behavior: "reject",
+    allow_delegation: true,
+  })
+  expect(task.requiredApprovals).toBe(2)
+  expect(task.candidates.map((candidate) => candidate.accountId)).toEqual([
+    c.reviewer.accountId,
+    other.accountId,
+  ])
+  const first = await approve(c.reviewer.accountId)
+  if (first instanceof Error) throw first
+  expect(first.caseStatus).toBe("pending")
+  // 段階が開いたままでも、統合した候補の二票目は保存されない。
+  expect(await approve(c.reviewer.accountId)).toBeInstanceOf(Error)
+  const votes = await new SystemD1ProposalAdapter(c.context).listAttestations(
+    started.workflowCase.id,
+  )
+  if (votes instanceof Error) throw votes
+  expect(votes.map((vote) => vote.representedAccountId)).toEqual([c.reviewer.accountId])
+  const second = await approve(other.accountId)
+  if (second instanceof Error) throw second
+  expect(second.caseStatus).toBe("approved")
 })

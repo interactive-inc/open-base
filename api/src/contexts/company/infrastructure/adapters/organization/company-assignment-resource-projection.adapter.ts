@@ -52,9 +52,33 @@ export class CompanyAssignmentResourceProjectionAdapter {
     for (const resource of change.resources.filter((resource) => resource.type === "assignment")) {
       if (resource.organizationId !== COMPANY_DEFAULT_ORGANIZATION_ID)
         return new CompanyResourceValidationError("invalid_resource")
-      const history = await new CompanyAssignmentResourceHistoryAdapter(this.c).read(resource)
+      const history = await new CompanyAssignmentResourceHistoryAdapter(this.c).readRevisions(
+        resource,
+      )
       if (history instanceof Error) return history
-      const timeline = CompanyAssignmentResourceTimelineValue.create([...history, resource])
+      // 今回の版が訂正する版は、保存済みの履歴と同じく訂正元として渡す。渡さないと、発効日を直した訂正の
+      // 訂正元が有効な履歴に残り、正本の時点参照と違う期間を投影する。
+      const correctsRevision =
+        change.corrections.find(
+          (correction) =>
+            correction.type === resource.type &&
+            correction.id === resource.id &&
+            correction.revision === resource.revision,
+        )?.correctsRevision ?? null
+      const timeline = CompanyAssignmentResourceTimelineValue.create([
+        ...history,
+        {
+          organizationId: resource.organizationId,
+          type: resource.type,
+          id: resource.id,
+          revision: resource.revision,
+          state: resource.state,
+          effectiveFrom: resource.effectiveFrom,
+          effectiveTo: resource.effectiveTo,
+          attributes: resource.attributes,
+          correctsRevision,
+        },
+      ])
       if (timeline instanceof Error) return timeline
       const rows = await this.c.batch([
         this.c

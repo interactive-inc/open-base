@@ -31,6 +31,7 @@ export class PreparePreservedRecordDossierAuthorizationAdapter {
     const human = await new SystemHumanOperationAuthorizationAdapter(this.c).prepare({
       accountId: authentication.accountId,
       tokenVersion: authentication.tokenVersion,
+      sessionFamilyId: authentication.sessionFamilyId,
       permissions: ["system:admin"],
       now: at,
     })
@@ -39,6 +40,7 @@ export class PreparePreservedRecordDossierAuthorizationAdapter {
     const audit = await new SystemAuditDisclosureReadAdapter(this.c).prepare({
       accountId: authentication.accountId,
       tokenVersion: authentication.tokenVersion,
+      sessionFamilyId: authentication.sessionFamilyId,
       permission: SystemFeaturePermission.AUDIT_EXPORT.key,
       purpose: this.c.purpose,
       now: at,

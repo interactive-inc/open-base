@@ -1,9 +1,10 @@
 import { InvalidSystemIntegrationError } from "@system/domain/errors"
+import { uuidSchema } from "@/lib/validation/uuid.schema"
 import { z } from "zod"
 
 const connectorPropsSchema = z
   .object({
-    id: z.string().regex(/^\S{1,255}$/),
+    id: uuidSchema,
     key: z.string().regex(/^[a-z][a-z0-9_-]{0,62}$/u),
     name: z.string().trim().min(1).max(200),
     direction: z.enum(["inbound", "outbound", "bidirectional"]),

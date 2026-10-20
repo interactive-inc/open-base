@@ -15,7 +15,9 @@ import { POST as machineSessionPOST } from "@system/interface/routes/system.mach
 import { SystemPrincipalSecretService } from "@system/lib/auth/system-principal-secret-service"
 import { SystemSessionTestContext } from "@system/test/system-session-test-context.test-support"
 import { seedSystemStepUpGrant } from "@system/test/seed-system-step-up-grant.test-support"
-import { describe, expect, setDefaultTimeout, test } from "bun:test"
+import { describe, expect, setDefaultTimeout, spyOn, test } from "bun:test"
+import { HTTPException } from "hono/http-exception"
+import { PATCH as inboxPATCH } from "@system/interface/routes/system.inbox-messages.$messageId"
 import { hc } from "hono/client"
 import { z } from "zod"
 
@@ -54,7 +56,9 @@ describe("System delivery HTTP", () => {
       completedAt: null,
     })
     if (queued instanceof Error) throw queued
-    expect(await repository.create(queued, accountId, null, [])).toBe("created")
+    expect(await repository.create(queued, accountId, null, [])).toMatchObject({
+      status: "created",
+    })
     const app = systemFactory
       .createApp()
       .onError((error, context) =>
@@ -181,9 +185,12 @@ describe("System delivery HTTP", () => {
       },
     })
     expect(replayed.status).toBe(200)
+    const replayBody = await replayed.json()
+    if (!("delivery" in replayBody)) throw new Error("missing replay delivery")
+    expect(replayBody.delivery.id).toBe("01900054-0000-7000-8000-000000000001")
 
     const claimed = await client.system.deliveries[":deliveryId"].$patch({
-      param: { deliveryId: "01900054-0000-7000-8000-000000000001" },
+      param: { deliveryId: replayBody.delivery.id },
       json: { kind: "job", action: "claim", lease_seconds: 30 },
     })
     expect(claimed.status).toBe(200)
@@ -192,7 +199,7 @@ describe("System delivery HTTP", () => {
     const leaseToken = "lease_token" in claimedBody ? claimedBody.lease_token : undefined
     if (leaseToken === undefined) return
     const failed = await client.system.deliveries[":deliveryId"].$patch({
-      param: { deliveryId: "01900054-0000-7000-8000-000000000001" },
+      param: { deliveryId: replayBody.delivery.id },
       json: {
         kind: "job",
         action: "fail",
@@ -203,6 +210,22 @@ describe("System delivery HTTP", () => {
     })
     expect(failed.status).toBe(200)
     expect(await failed.json()).toMatchObject({ delivery: { status: "dead_letter" } })
+    const terminalReplay = await client.system.deliveries.$post({
+      json: {
+        kind: "job",
+        id: crypto.randomUUID(),
+        operation_key: "record.process",
+        payload_digest: "a".repeat(64),
+        idempotency_key: "command:1",
+        max_attempts: 1,
+        available_at: now.toISOString(),
+      },
+    })
+    expect(terminalReplay.status).toBe(200)
+    expect(await terminalReplay.json()).toMatchObject({
+      delivery: { id: replayBody.delivery.id, status: "dead_letter", attempt: 1 },
+      replayed: true,
+    })
     const deadLetters = await client.system["dead-letters"].$get()
     expect(deadLetters.status).toBe(200)
     expect(await deadLetters.json()).toMatchObject({
@@ -242,6 +265,302 @@ describe("System delivery HTTP", () => {
         .first<Record<string, unknown>>(),
     ).toEqual({ total: 1 })
   })
+  for (const kind of ["job", "outbox"] as const) {
+    test(`${kind}の別ID・期限後・lease後・完了後の再送は保存済み実体を返す`, async () => {
+      const fixture = await createHttpFixture()
+      const id = crypto.randomUUID()
+      const body = deliveryBody(kind, id)
+      const created = await fixture.request("/system/deliveries", "POST", body)
+      expect(created.status).toBe(201)
+      const initial = await deliveryJson(created)
+      fixture.setNow(new Date(now.getTime() + 1_000))
+      const sameBodyReplay = await fixture.request("/system/deliveries", "POST", body)
+      expect(sameBodyReplay.status).toBe(200)
+      expect(await deliveryJson(sameBodyReplay)).toEqual({ ...initial, replayed: true })
+      const replay = await fixture.request("/system/deliveries", "POST", {
+        ...body,
+        id: crypto.randomUUID(),
+      })
+      expect(replay.status).toBe(200)
+      const replayResult = await deliveryJson(replay)
+      expect(replayResult).toEqual({ ...initial, replayed: true })
+      const claimed = await fixture.request(
+        `/system/deliveries/${replayResult.delivery.id}`,
+        "PATCH",
+        {
+          kind,
+          action: "claim",
+          lease_seconds: 30,
+        },
+      )
+      expect(claimed.status).toBe(200)
+      const lease = await deliveryJson(claimed)
+      const leasedReplay = await fixture.request("/system/deliveries", "POST", body)
+      expect(leasedReplay.status).toBe(200)
+      expect(await deliveryJson(leasedReplay)).toEqual({ delivery: lease.delivery, replayed: true })
+      const completed = await fixture.request(`/system/deliveries/${lease.delivery.id}`, "PATCH", {
+        kind,
+        action: "succeed",
+        lease_token: lease.lease_token,
+      })
+      expect(completed.status).toBe(200)
+      const completion = await deliveryJson(completed)
+      const completedReplay = await fixture.request("/system/deliveries", "POST", body)
+      expect(completedReplay.status).toBe(200)
+      expect(await deliveryJson(completedReplay)).toEqual({
+        delivery: completion.delivery,
+        replayed: true,
+      })
+      expect(
+        (
+          await fixture.request("/system/deliveries", "POST", {
+            ...body,
+            payload_digest: "b".repeat(64),
+          })
+        ).status,
+      ).toBe(409)
+      expect(
+        (
+          await fixture.request("/system/deliveries", "POST", {
+            ...body,
+            id: crypto.randomUUID(),
+            idempotency_key: "new:past",
+          })
+        ).status,
+      ).toBe(400)
+      const table = kind === "job" ? "system_jobs" : "system_outbox_messages"
+      expect(
+        await fixture.database
+          .prepare(`SELECT count(*) AS total FROM ${table}`)
+          .first<Record<string, unknown>>(),
+      ).toEqual({ total: 1 })
+      expect(
+        await fixture.database
+          .prepare("SELECT count(*) AS total FROM system_audit_events WHERE action = ?1")
+          .bind(kind === "job" ? "system.job.queued" : "system.outbox.queued")
+          .first<Record<string, unknown>>(),
+      ).toEqual({ total: 1 })
+      const managed = SystemDeliveryEntity.create({
+        id: crypto.randomUUID(),
+        kind,
+        operationKey: "record.process",
+        handlerKey: "record.handler",
+        payloadDigest: "a".repeat(64),
+        idempotencyKey: "command:handler",
+        status: "queued",
+        attempt: 0,
+        maxAttempts: 3,
+        availableAt: now,
+        createdAt: now,
+        updatedAt: now,
+        leaseAccountId: null,
+        leaseTokenHash: null,
+        leaseExpiresAt: null,
+        lastErrorCode: null,
+        completedAt: null,
+      })
+      if (managed instanceof Error) throw managed
+      const repository = new SystemDeliveryRepository({ env: { DB: fixture.database } })
+      expect(
+        await repository.create(
+          managed,
+          accountId,
+          kind === "outbox"
+            ? {
+                topic: "record.process",
+                sourceContext: "example",
+                sourceKind: "record",
+                sourceId: "record:1",
+                sourceVersion: "1",
+              }
+            : null,
+          [],
+        ),
+      ).toMatchObject({ status: "created" })
+      expect(
+        (
+          await fixture.request("/system/deliveries", "POST", {
+            ...body,
+            idempotency_key: "command:handler",
+          })
+        ).status,
+      ).toBe(409)
+      await fixture.database
+        // 全権限を持つ管理者の権限も一緒に外す。残すと、対象の権限が無くても登録を通してしまう。
+        .prepare(
+          "DELETE FROM system_iam_role_permissions WHERE permission_key IN (?1, 'system:admin')",
+        )
+        .bind(kind === "job" ? "batch:write" : "integration:write")
+        .run()
+      expect((await fixture.request("/system/deliveries", "POST", body)).status).toBe(403)
+    })
+
+    test(`${kind}の並行登録後の再照合は保存済みIDを返す`, async () => {
+      const fixture = await createHttpFixture()
+      const body = deliveryBody(kind, crypto.randomUUID())
+      const restore = synchronizeCreationBatches(fixture.database)
+      try {
+        const responses = await Promise.all([
+          fixture.request("/system/deliveries", "POST", body),
+          fixture.request("/system/deliveries", "POST", { ...body, id: crypto.randomUUID() }),
+        ])
+        expect(responses.map((response) => response.status).sort()).toEqual([200, 201])
+        const results = await Promise.all(responses.map((response) => deliveryJson(response)))
+        expect(results[0].delivery).toEqual(results[1].delivery)
+        expect(
+          await fixture.database
+            .prepare("SELECT count(*) AS total FROM system_audit_events WHERE action = ?1")
+            .bind(kind === "job" ? "system.job.queued" : "system.outbox.queued")
+            .first<Record<string, unknown>>(),
+        ).toEqual({ total: 1 })
+      } finally {
+        restore()
+      }
+    })
+  }
+
+  for (const differentDigest of [false, true]) {
+    test(`inboxの事前SELECTを両要求が通る並行受信は${differentDigest ? "409" : "保存済みID"}へ収束する`, async () => {
+      const fixture = await createHttpFixture()
+      const body = {
+        kind: "inbox",
+        id: crypto.randomUUID(),
+        source_key: "source.messages",
+        external_message_id: "external:concurrent",
+        payload_digest: "a".repeat(64),
+        idempotency_key: "inbox:concurrent",
+        received_at: now.toISOString(),
+      }
+      const restore = synchronizeCreationBatches(fixture.database)
+      let savedId: string
+      try {
+        const responses = await Promise.all([
+          fixture.request("/system/deliveries", "POST", body),
+          fixture.request("/system/deliveries", "POST", {
+            ...body,
+            id: crypto.randomUUID(),
+            payload_digest: (differentDigest ? "b" : "a").repeat(64),
+          }),
+        ])
+        expect(responses.map((response) => response.status).sort()).toEqual(
+          differentDigest ? [201, 409] : [200, 201],
+        )
+        const accepted = responses.find((response) => response.status === 201)
+        if (accepted === undefined) throw new Error("missing accepted response")
+        savedId = (await inboxJson(accepted)).id
+        if (!differentDigest) {
+          const replay = responses.find((response) => response.status === 200)
+          if (replay === undefined) throw new Error("missing replay response")
+          expect(await inboxJson(replay)).toEqual({ id: savedId, kind: "inbox", replayed: true })
+        }
+      } finally {
+        restore()
+      }
+      expect(
+        await fixture.database
+          .prepare("SELECT count(*) AS total FROM system_inbox_messages")
+          .first<Record<string, unknown>>(),
+      ).toEqual({ total: 1 })
+      expect(
+        await fixture.database
+          .prepare(
+            "SELECT count(*) AS total FROM system_audit_events WHERE action = 'system.inbox.accepted'",
+          )
+          .first<Record<string, unknown>>(),
+      ).toEqual({ total: 1 })
+      const saved = await fixture.database
+        .prepare("SELECT payload_digest FROM system_inbox_messages WHERE id = ?1")
+        .bind(savedId)
+        .first<{ payload_digest: string }>()
+      if (saved === null) throw new Error("missing inbox")
+      const replay = await fixture.request("/system/deliveries", "POST", {
+        ...body,
+        id: crypto.randomUUID(),
+        payload_digest: saved.payload_digest,
+      })
+      expect(replay.status).toBe(200)
+      const replayBody = await inboxJson(replay)
+      expect(replayBody.id).toBe(savedId)
+      expect(
+        (
+          await fixture.request(`/system/inbox-messages/${replayBody.id}`, "PATCH", {
+            outcome: differentDigest ? "rejected" : "processed",
+            ...(differentDigest ? { reason_code: "remote.invalid" } : {}),
+          })
+        ).status,
+      ).toBe(204)
+    })
+  }
+
+  test("inboxの無関係なDB障害は503のままで受信と監査を保存しない", async () => {
+    const fixture = await createHttpFixture()
+    const failure = spyOn(fixture.database, "batch").mockRejectedValue(
+      new Error("database unavailable"),
+    )
+    try {
+      const response = await fixture.request("/system/deliveries", "POST", {
+        kind: "inbox",
+        id: crypto.randomUUID(),
+        source_key: "source.messages",
+        external_message_id: "external:failed",
+        payload_digest: "a".repeat(64),
+        idempotency_key: "inbox:failed",
+        received_at: now.toISOString(),
+      })
+      expect(response.status).toBe(503)
+      expect(
+        await fixture.database
+          .prepare("SELECT count(*) AS total FROM system_inbox_messages")
+          .first<Record<string, unknown>>(),
+      ).toEqual({ total: 0 })
+      expect(
+        await fixture.database
+          .prepare(
+            "SELECT count(*) AS total FROM system_audit_events WHERE action = 'system.inbox.accepted'",
+          )
+          .first<Record<string, unknown>>(),
+      ).toEqual({ total: 0 })
+    } finally {
+      failure.mockRestore()
+    }
+  })
+  for (const kind of ["job", "outbox"] as const) {
+    test(`${kind}の監査batch失敗は配送と監査を部分保存しない`, async () => {
+      const fixture = await createHttpFixture()
+      const batch = fixture.database.batch.bind(fixture.database)
+      const failure = spyOn(fixture.database, "batch").mockImplementation((statements) =>
+        batch([
+          ...statements,
+          fixture.database.prepare("INSERT INTO missing_audit_table (id) VALUES ('failed')"),
+        ]),
+      )
+      try {
+        expect(
+          (
+            await fixture.request(
+              "/system/deliveries",
+              "POST",
+              deliveryBody(kind, crypto.randomUUID()),
+            )
+          ).status,
+        ).toBe(503)
+        const table = kind === "job" ? "system_jobs" : "system_outbox_messages"
+        expect(
+          await fixture.database
+            .prepare(`SELECT count(*) AS total FROM ${table}`)
+            .first<Record<string, unknown>>(),
+        ).toEqual({ total: 0 })
+        expect(
+          await fixture.database
+            .prepare("SELECT count(*) AS total FROM system_audit_events WHERE action = ?1")
+            .bind(kind === "job" ? "system.job.queued" : "system.outbox.queued")
+            .first<Record<string, unknown>>(),
+        ).toEqual({ total: 0 })
+      } finally {
+        failure.mockRestore()
+      }
+    })
+  }
 })
 
 async function seedWorker(fixture: SystemSessionTestContext): Promise<void> {
@@ -265,6 +584,7 @@ async function seedWorker(fixture: SystemSessionTestContext): Promise<void> {
      VALUES ('fcc965d5-8be4-4a24-86fe-4453fb422bde', 'batch:view'),
             ('fcc965d5-8be4-4a24-86fe-4453fb422bde', 'batch:write'),
             ('fcc965d5-8be4-4a24-86fe-4453fb422bde', 'batch:execute'),
+            ('fcc965d5-8be4-4a24-86fe-4453fb422bde', 'integration:write'),
             ('fcc965d5-8be4-4a24-86fe-4453fb422bde', 'system:admin');
      INSERT INTO system_role_bindings
        (id, account_id, role_id, resource_type, resource_id, created_at, revoked_at)
@@ -297,4 +617,100 @@ async function issueAccessToken(fixture: SystemSessionTestContext): Promise<stri
   )
   expect(response.status).toBe(201)
   return z.object({ access_token: z.string() }).parse(await response.json()).access_token
+}
+
+async function createHttpFixture() {
+  const fixture = await SystemSessionTestContext.create()
+  await seedWorker(fixture)
+  const stepUpToken = await seedSystemStepUpGrant(fixture, accountId, now)
+  const accessToken = await issueAccessToken(fixture)
+  if (accessToken instanceof Error) throw accessToken
+  let currentNow = now
+  const app = systemFactory
+    .createApp()
+    .onError((error, context) =>
+      context.json({ message: error.message }, error instanceof HTTPException ? error.status : 500),
+    )
+    .use("*", async (context, next) => {
+      context.set("now", () => currentNow)
+      await next()
+    })
+    .post("/system/deliveries", ...deliveriesPOST)
+    .patch("/system/deliveries/:deliveryId", ...deliveryPATCH)
+    .patch("/system/inbox-messages/:messageId", ...inboxPATCH)
+  return {
+    database: fixture.database,
+    setNow: (at: Date) => {
+      currentNow = at
+    },
+    request: (path: string, method: string, body: unknown) =>
+      app.request(
+        path,
+        {
+          method,
+          headers: {
+            authorization: `Bearer ${accessToken}`,
+            "x-system-step-up": stepUpToken,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(body),
+        },
+        { DB: fixture.context.env.DB, JWT_SECRET: jwtSecret },
+      ),
+  }
+}
+
+function deliveryBody(kind: "job" | "outbox", id: string) {
+  return {
+    kind,
+    id,
+    payload_digest: "a".repeat(64),
+    idempotency_key: "command:replay",
+    max_attempts: 3,
+    available_at: now.toISOString(),
+    ...(kind === "job"
+      ? { operation_key: "record.process" }
+      : {
+          topic: "record.process",
+          source_context: "example",
+          source_kind: "record",
+          source_id: "record:1",
+          source_version: "1",
+        }),
+  }
+}
+
+function synchronizeCreationBatches(database: D1Database): () => void {
+  const batch = database.batch.bind(database)
+  let arrivals = 0
+  let release: () => void = () => {
+    throw new Error("barrier not initialized")
+  }
+  const barrier = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const synchronized = spyOn(database, "batch").mockImplementation(async (statements) => {
+    // 両要求がINSERT直前へ到達するまで待ち、事前SELECTが両方とも空を返す順序を固定する。
+    arrivals += 1
+    if (arrivals === 2) release()
+    await barrier
+    return batch(statements)
+  })
+  return () => synchronized.mockRestore()
+}
+
+async function deliveryJson(response: Response) {
+  return z
+    .object({
+      delivery: z.object({ id: z.uuid() }).passthrough(),
+      replayed: z.boolean().optional(),
+      lease_token: z.string().optional(),
+    })
+    .parse(await response.json())
+}
+
+async function inboxJson(response: Response) {
+  return z
+    .object({ id: z.uuid(), kind: z.literal("inbox"), replayed: z.boolean() })
+    .parse(await response.json())
 }

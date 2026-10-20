@@ -15,6 +15,7 @@ import {
 } from "@system/interface/errors"
 import { authenticateSystemAccessToken } from "@system/interface/middlewares/authenticate-system-access-token"
 import { systemFactory } from "@system/interface/request-environment/system-factory"
+import { uuidSchema } from "@/lib/validation/uuid.schema"
 import { systemIntegrationExchangeResponse } from "@system/interface/responses/system-integration-exchange-response"
 import { zValidator } from "@hono/zod-validator"
 import { z } from "zod"
@@ -29,7 +30,7 @@ const systemIntegrationExchangeAuditActions = Object.freeze({
 // @authorization permission integration:read - 一つの外部交換を読む
 export const GET = systemFactory.createHandlers(
   authenticateSystemAccessToken,
-  zValidator("param", z.object({ exchangeId: z.string().regex(/^\S{1,255}$/) })),
+  zValidator("param", z.object({ exchangeId: uuidSchema })),
   async (context) => {
     const exchange = await new SystemIntegrationExchangeRepository({
       env: { DB: context.env.DB },
@@ -44,14 +45,14 @@ export const GET = systemFactory.createHandlers(
     ) {
       throw new SystemForbiddenError()
     }
-    return context.json({ exchange }, 200)
+    return context.json({ exchange: systemIntegrationExchangeResponse(exchange) }, 200)
   },
 )
 
 // @authorization permission integration:write - 交換を成功・失敗・取消・retryへ進める
 export const PATCH = systemFactory.createHandlers(
   authenticateSystemAccessToken,
-  zValidator("param", z.object({ exchangeId: z.string().regex(/^\S{1,255}$/) })),
+  zValidator("param", z.object({ exchangeId: uuidSchema })),
   zValidator(
     "json",
     z.object({
@@ -109,9 +110,9 @@ export const PATCH = systemFactory.createHandlers(
     if (event instanceof Error) throw new SystemIntegrationUnavailableError(event)
     const auditStatements = new SystemAuditEventRepository(systemContext).prepareAppend(event)
     const result = await new UpdateIntegrationExchange({
-      find: (id) => repository.find(id),
-      write: (value, expectedUpdatedAt) =>
-        repository.write(value, expectedUpdatedAt, auditStatements),
+      find: () => Promise.resolve(current),
+      write: (value, expectedExchange) =>
+        repository.write(value, expectedExchange, auditStatements),
     }).execute({
       id: exchangeId,
       status: body.status,
@@ -123,6 +124,6 @@ export const PATCH = systemFactory.createHandlers(
     if (result instanceof Error) throw new SystemIntegrationInvalidError(result)
     if (result.kind === "conflict") throw new SystemIntegrationConflictError()
     if (result.kind === "unavailable") throw new SystemIntegrationUnavailableError(result.cause)
-    return context.json({ exchange: result.exchange }, 200)
+    return context.json({ exchange: systemIntegrationExchangeResponse(result.exchange) }, 200)
   },
 )

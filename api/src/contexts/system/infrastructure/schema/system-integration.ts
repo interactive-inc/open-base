@@ -9,6 +9,7 @@ import {
   unique,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core"
+import { uuidCheckPredicate } from "@/lib/validation/uuid.schema"
 
 export const systemConnectors = sqliteTable(
   "system_connectors",
@@ -26,6 +27,7 @@ export const systemConnectors = sqliteTable(
   (table) => [
     index("system_connectors_status_idx").on(table.status, table.key),
     check("system_connectors_id_length", sql`length(${table.id}) BETWEEN 1 AND 255`),
+    check("system_connectors_id_uuid", sql.raw(uuidCheckPredicate("id"))),
     check("system_connectors_key_length", sql`length(${table.key}) BETWEEN 1 AND 63`),
     check("system_connectors_name", sql`length(${table.name}) BETWEEN 1 AND 200`),
     check("system_connectors_revision", sql`${table.revision} >= 1`),
@@ -66,6 +68,7 @@ export const systemIntegrationExchanges = sqliteTable(
       table.status,
       table.updatedAt,
     ),
+    check("system_integration_exchanges_id_uuid", sql.raw(uuidCheckPredicate("id"))),
     check("system_integration_exchanges_digest", sql`length(${table.payloadDigest}) = 64`),
     check("system_integration_exchanges_attempt", sql`${table.attempt} BETWEEN 1 AND 100`),
     check("system_integration_exchanges_chronology", sql`${table.updatedAt} >= ${table.createdAt}`),
@@ -97,6 +100,7 @@ export const systemExternalAssertions = sqliteTable(
       table.externalVersion,
     ),
     index("system_external_assertions_exchange_idx").on(table.exchangeId, table.receivedAt),
+    check("system_external_assertions_id_uuid", sql.raw(uuidCheckPredicate("id"))),
     check("system_external_assertions_digest", sql`length(${table.payloadDigest}) = 64`),
     check("system_external_assertions_chronology", sql`${table.receivedAt} >= ${table.observedAt}`),
   ],
@@ -125,6 +129,7 @@ export const systemReconciliationRuns = sqliteTable(
       table.localVersion,
     ),
     index("system_reconciliation_runs_status_idx").on(table.status, table.createdAt),
+    check("system_reconciliation_runs_id_uuid", sql.raw(uuidCheckPredicate("id"))),
   ],
 )
 
@@ -146,6 +151,7 @@ export const systemReconciliationItems = sqliteTable(
   },
   (table) => [
     unique("system_reconciliation_items_run_item_uniq").on(table.runId, table.itemKey),
+    check("system_reconciliation_items_id_uuid", sql.raw(uuidCheckPredicate("id"))),
     check(
       "system_reconciliation_items_local_digest",
       sql`${table.localDigest} IS NULL OR length(${table.localDigest}) = 64`,

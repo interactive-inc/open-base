@@ -1,4 +1,5 @@
 import { execSql } from "@system/test/local-d1/exec-sql.test-support"
+import { prepareSystemServiceOperationAuthorization } from "@system/interface/operations/prepare-system-service-operation-authorization"
 import { expect, setDefaultTimeout, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { createLocalD1Database } from "@system/test/local-d1/create-local-d1-database.test-support"
@@ -38,6 +39,7 @@ async function fixture() {
   const input = {
     accountId: "55823b7f-711d-4dbd-af39-039ee6e1b4ff",
     tokenVersion: 0,
+    sessionFamilyId: null,
     permissions: ["records:read", "records:write"],
     now: new Date(1000),
   }
@@ -117,5 +119,72 @@ test("検査後の状態・付与元の変化で、保存transaction全体を取
         .prepare("SELECT count(*) AS count FROM test_records")
         .first<Record<string, unknown>>(),
     ).toEqual({ count: 0 })
+  }
+})
+
+test("同じSession familyのlogout後は時刻に関係なく保存全体を取り消す", async () => {
+  const fixtureContext = await fixture()
+  await execSql(
+    fixtureContext.database,
+    `INSERT INTO system_accounts (id, status, token_version, created_at, updated_at)
+      VALUES ('f43d89f4-ac52-411f-828b-78838556ce92', 'active', 0, 100, 100);
+    INSERT INTO system_sessions (id, account_id, family_id, token_hash, token_version, created_at, expires_at, rotated_at)
+      VALUES ('449e3a89-ac7e-4a90-a083-36ce303735c0', '55823b7f-711d-4dbd-af39-039ee6e1b4ff', 'operator-family', '${"1".repeat(64)}', 0, 100, 10000, 500),
+        ('882f3422-7ee8-4b6e-b506-834985982cd6', '55823b7f-711d-4dbd-af39-039ee6e1b4ff', 'operator-family', '${"2".repeat(64)}', 0, 500, 10000, NULL),
+        ('f2d02a9d-42fb-492d-a853-a9b3599ec267', '55823b7f-711d-4dbd-af39-039ee6e1b4ff', 'other-family', '${"3".repeat(64)}', 0, 100, 10000, NULL),
+        ('3a3d68d1-65d0-45c7-9e2d-4b648968d516', 'f43d89f4-ac52-411f-828b-78838556ce92', 'foreign-family', '${"4".repeat(64)}', 0, 100, 10000, NULL);`,
+  )
+  for (const familyId of ["missing-family", "foreign-family"])
+    expect(
+      await fixtureContext.adapter.prepare({ ...fixtureContext.input, sessionFamilyId: familyId }),
+    ).toBe("forbidden")
+
+  const proof = await prepareSystemServiceOperationAuthorization({
+    database: fixtureContext.database,
+    ...fixtureContext.input,
+    sessionFamilyId: "operator-family",
+  })
+  if (proof === "forbidden" || proof instanceof Error)
+    throw new Error("authorization failed", { cause: proof })
+
+  await fixtureContext.database.batch([...proof.assertions])
+  await execSql(
+    fixtureContext.database,
+    "UPDATE system_sessions SET revoked_at = 1001 WHERE family_id = 'operator-family'",
+  )
+  const failure = await fixtureContext.database
+    .batch([
+      fixtureContext.database.prepare("INSERT INTO test_records VALUES ('new')"),
+      ...proof.assertions,
+    ])
+    .catch((cause: unknown) => cause)
+  expect(SystemServiceOperationAuthorizationAdapter.rejected(failure)).toBe(true)
+  expect(
+    await fixtureContext.database
+      .prepare("SELECT count(*) AS count FROM test_records")
+      .first<Record<string, unknown>>(),
+  ).toEqual({ count: 0 })
+  expect(
+    await fixtureContext.database
+      .prepare("SELECT token_version, updated_at FROM system_accounts WHERE id = ?1")
+      .bind(fixtureContext.input.accountId)
+      .first<Record<string, unknown>>(),
+  ).toEqual({ token_version: 0, updated_at: 100 })
+  expect(
+    await fixtureContext.adapter.prepare({
+      ...fixtureContext.input,
+      sessionFamilyId: "operator-family",
+    }),
+  ).toBe("forbidden")
+
+  for (const familyId of [null, "other-family"]) {
+    const remaining = await fixtureContext.adapter.prepare({
+      ...fixtureContext.input,
+      sessionFamilyId: familyId,
+    })
+    if (remaining === "forbidden" || remaining instanceof Error)
+      throw new Error("unrelated authorization failed", { cause: remaining })
+
+    await fixtureContext.database.batch([...remaining.assertions])
   }
 })

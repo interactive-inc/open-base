@@ -86,15 +86,21 @@ export class SystemMachineCredentialEntity {
     )
   }
 
+  /**
+   * 利用を記録する。並行した別の認証が先に新しい利用時刻を記録していても、正しい認証を拒否しない。
+   * 利用時刻と更新時刻は大きい方へ進め、時刻を逆行させない。
+   */
   recordUse(at: Date): SystemMachineCredentialEntity | InvalidSystemPrincipalError {
-    if (!this.isUsableAt(at) || at.getTime() < this.#updatedAtEpochMilliseconds) {
+    if (!this.isUsableAt(at)) {
       return new InvalidSystemPrincipalError("invalid_transition")
     }
+    const updatedAt = Math.max(at.getTime(), this.#updatedAtEpochMilliseconds)
+    const lastUsedAt = Math.max(at.getTime(), this.#lastUsedAtEpochMilliseconds ?? at.getTime())
 
     return SystemMachineCredentialEntity.create({
       ...this.toProps(),
-      updatedAt: at,
-      lastUsedAt: at,
+      updatedAt: new Date(updatedAt),
+      lastUsedAt: new Date(lastUsedAt),
     })
   }
 

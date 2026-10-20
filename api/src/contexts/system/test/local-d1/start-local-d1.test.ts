@@ -4,8 +4,11 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync }
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
+  D1_OBJECT_DIRECTORY,
+  RUNTIME_MIGRATED_SLOT_COUNT,
   SCRATCH_OWNER_FILE,
   type StartableRuntime,
+  publishTemplate,
   removeAbandonedScratchDirectories,
   startRuntime,
 } from "@system/test/local-d1/start-local-d1.test-support"
@@ -227,5 +230,67 @@ describe("強制終了で残った作業ディレクトリの片付け", () => {
     removeAbandonedScratchDirectories(root)
     expect(existsSync(cache)).toBe(true)
     expect(existsSync(other)).toBe(true)
+  })
+})
+
+describe("publishTemplate", () => {
+  let root = ""
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "local-d1-test-publish-"))
+  })
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true })
+  })
+
+  /** Miniflareが作る形（templateのDBと枠のDB）を持つ、公開前のtemplateを作る。 */
+  function built(name: string) {
+    const directory = join(root, name)
+    const objects = join(directory, D1_OBJECT_DIRECTORY)
+    mkdirSync(objects, { recursive: true })
+    const file = `${name}-template.sqlite`
+    const slotFiles = Array.from(
+      { length: RUNTIME_MIGRATED_SLOT_COUNT },
+      (_, index) => `${name}-slot-${index}.sqlite`,
+    )
+    for (const entry of [file, ...slotFiles]) writeFileSync(join(objects, entry), name)
+    return { directory, file, objectCount: 3, slotFiles }
+  }
+
+  test("template.jsonだけが消えたcacheが残っていても、作り直して公開する", () => {
+    const cache = join(root, "cache", "key")
+    mkdirSync(join(cache, "persist"), { recursive: true })
+    writeFileSync(join(cache, "persist", "leftover"), "stale")
+
+    const published = publishTemplate(cache, built("fresh"))
+
+    expect(existsSync(join(cache, "template.json"))).toBe(true)
+    expect(existsSync(join(cache, "persist", "leftover"))).toBe(false)
+    expect(published.directory).toBe(join(cache, "persist"))
+    expect(published.file).toBe("fresh-template.sqlite")
+  })
+
+  test("枠のDBが欠けたcacheは読めないものとして作り直す", () => {
+    const cache = join(root, "cache", "key")
+    publishTemplate(cache, built("first"))
+    rmSync(join(cache, "persist", D1_OBJECT_DIRECTORY, "first-slot-0.sqlite"))
+
+    const published = publishTemplate(cache, built("second"))
+
+    expect(published.file).toBe("second-template.sqlite")
+    expect(existsSync(join(cache, "persist", D1_OBJECT_DIRECTORY, "second-slot-0.sqlite"))).toBe(
+      true,
+    )
+  })
+
+  test("別のプロセスが先に公開した読めるtemplateは置き換えない", () => {
+    const cache = join(root, "cache", "key")
+    publishTemplate(cache, built("first"))
+
+    const published = publishTemplate(cache, built("second"))
+
+    expect(published.file).toBe("first-template.sqlite")
+    expect(existsSync(join(root, "second"))).toBe(false)
   })
 })

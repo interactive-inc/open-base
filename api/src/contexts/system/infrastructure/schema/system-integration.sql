@@ -7,7 +7,8 @@ CREATE TABLE system_connectors (
   status TEXT NOT NULL CHECK (status IN ('active', 'disabled')),
   revision INTEGER NOT NULL CHECK (revision >= 1),
   created_at INTEGER NOT NULL CHECK (created_at >= 0),
-  updated_at INTEGER NOT NULL CHECK (updated_at >= created_at)
+  updated_at INTEGER NOT NULL CHECK (updated_at >= created_at),
+  CHECK (length(id) = 36 AND id NOT GLOB '*[^0-9a-f-]*' AND substr(id, 9, 1) = '-' AND substr(id, 14, 1) = '-' AND substr(id, 19, 1) = '-' AND substr(id, 24, 1) = '-' AND length(replace(id, '-', '')) = 32 AND substr(id, 15, 1) GLOB '[1-8]' AND substr(id, 20, 1) GLOB '[89ab]')
 );
 
 CREATE INDEX system_connectors_status_idx ON system_connectors (status, key);
@@ -26,7 +27,8 @@ CREATE TABLE system_integration_exchanges (
   created_at INTEGER NOT NULL CHECK (created_at >= 0),
   updated_at INTEGER NOT NULL CHECK (updated_at >= created_at),
   completed_at INTEGER CHECK (completed_at IS NULL OR completed_at >= created_at),
-  CHECK ((status = 'pending' AND completed_at IS NULL) OR (status <> 'pending' AND completed_at IS NOT NULL))
+  CHECK ((status = 'pending' AND completed_at IS NULL) OR (status <> 'pending' AND completed_at IS NOT NULL)),
+  CHECK (length(id) = 36 AND id NOT GLOB '*[^0-9a-f-]*' AND substr(id, 9, 1) = '-' AND substr(id, 14, 1) = '-' AND substr(id, 19, 1) = '-' AND substr(id, 24, 1) = '-' AND length(replace(id, '-', '')) = 32 AND substr(id, 15, 1) GLOB '[1-8]' AND substr(id, 20, 1) GLOB '[89ab]')
 );
 
 CREATE UNIQUE INDEX system_integration_exchanges_idempotency_uniq
@@ -42,7 +44,8 @@ CREATE TABLE system_external_assertions (
   external_version TEXT NOT NULL CHECK (length(external_version) BETWEEN 1 AND 255),
   payload_digest TEXT NOT NULL CHECK (length(payload_digest) = 64 AND payload_digest NOT GLOB '*[^0-9a-f]*'),
   observed_at INTEGER NOT NULL CHECK (observed_at >= 0),
-  received_at INTEGER NOT NULL CHECK (received_at >= observed_at)
+  received_at INTEGER NOT NULL CHECK (received_at >= observed_at),
+  CHECK (length(id) = 36 AND id NOT GLOB '*[^0-9a-f-]*' AND substr(id, 9, 1) = '-' AND substr(id, 14, 1) = '-' AND substr(id, 19, 1) = '-' AND substr(id, 24, 1) = '-' AND length(replace(id, '-', '')) = 32 AND substr(id, 15, 1) GLOB '[1-8]' AND substr(id, 20, 1) GLOB '[89ab]')
 );
 
 CREATE UNIQUE INDEX system_external_assertions_version_uniq
@@ -56,7 +59,8 @@ CREATE TABLE system_reconciliation_runs (
   assertion_id TEXT NOT NULL REFERENCES system_external_assertions(id) ON DELETE RESTRICT,
   local_version TEXT NOT NULL CHECK (length(local_version) BETWEEN 1 AND 255),
   status TEXT NOT NULL CHECK (status IN ('matched', 'mismatched')),
-  created_at INTEGER NOT NULL CHECK (created_at >= 0)
+  created_at INTEGER NOT NULL CHECK (created_at >= 0),
+  CHECK (length(id) = 36 AND id NOT GLOB '*[^0-9a-f-]*' AND substr(id, 9, 1) = '-' AND substr(id, 14, 1) = '-' AND substr(id, 19, 1) = '-' AND substr(id, 24, 1) = '-' AND length(replace(id, '-', '')) = 32 AND substr(id, 15, 1) GLOB '[1-8]' AND substr(id, 20, 1) GLOB '[89ab]')
 );
 
 CREATE UNIQUE INDEX system_reconciliation_runs_input_uniq
@@ -77,7 +81,8 @@ CREATE TABLE system_reconciliation_items (
     OR (status = 'different' AND local_digest <> external_digest AND local_digest IS NOT NULL AND external_digest IS NOT NULL)
     OR (status = 'missing_local' AND local_digest IS NULL AND external_digest IS NOT NULL)
     OR (status = 'missing_external' AND local_digest IS NOT NULL AND external_digest IS NULL)
-  )
+  ),
+  CHECK (length(id) = 36 AND id NOT GLOB '*[^0-9a-f-]*' AND substr(id, 9, 1) = '-' AND substr(id, 14, 1) = '-' AND substr(id, 19, 1) = '-' AND substr(id, 24, 1) = '-' AND length(replace(id, '-', '')) = 32 AND substr(id, 15, 1) GLOB '[1-8]' AND substr(id, 20, 1) GLOB '[89ab]')
 );
 
 DROP TRIGGER IF EXISTS system_connectors_revision_step;
@@ -136,3 +141,10 @@ BEFORE DELETE ON system_reconciliation_items
 BEGIN
   SELECT RAISE(ABORT, 'system_reconciliation_items_are_immutable');
 END;
+
+DROP TRIGGER IF EXISTS system_reconciliation_items_identity_update;
+
+CREATE TRIGGER system_reconciliation_items_identity_update
+BEFORE UPDATE OF id ON system_reconciliation_items
+WHEN NEW.id IS NOT OLD.id
+BEGIN SELECT RAISE(ABORT, 'record_identity_immutable'); END;

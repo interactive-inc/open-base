@@ -1,5 +1,6 @@
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
 import {
+  SystemAccountConflictError,
   SystemAccountNotFoundError,
   SystemAccountUnavailableError,
   SystemForbiddenError,
@@ -124,18 +125,18 @@ export const PATCH = systemFactory.createHandlers(
     const auditStatements = new SystemAuditEventRepository({
       env: { DB: context.env.DB },
     }).prepareAppend(auditEvent)
-    const update = await repository.setStatus(
-      actorAccountId.data,
-      targetAccountId.data,
-      body.status,
+    const update = await repository.setStatus({
+      actorAccountId: actorAccountId.data,
+      expected: before,
+      status: body.status,
       now,
       auditStatements,
-    )
+    })
     if (update instanceof Error) {
       throw new SystemAccountUnavailableError()
     }
-    if (update === "not_found") {
-      throw new SystemAccountNotFoundError()
+    if (update === "conflict") {
+      throw new SystemAccountConflictError()
     }
     if (update === "forbidden") {
       throw new SystemForbiddenError()

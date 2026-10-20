@@ -1,3 +1,4 @@
+import { SystemLastRootGuardAdapter } from "@system/infrastructure/adapters/iam/system-last-root-guard.adapter"
 import type { AccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 import type { AccountStatus } from "@system/domain/schemas/iam/account-status.schema"
@@ -30,7 +31,7 @@ export type SystemAccountCatalogView = Readonly<{
 export type SystemAccountStatusUpdate =
   | "updated"
   | "unchanged"
-  | "not_found"
+  | "conflict"
   | "forbidden"
   | "last_root"
 type Context = SystemD1Context
@@ -137,16 +138,19 @@ export class SystemAccountCatalogRepository {
   }
 
   async setStatus(
-    actorAccountId: AccountId,
-    targetAccountId: AccountId,
-    status: AccountStatus,
-    now: Date,
-    auditStatements: ReadonlyArray<D1PreparedStatement>,
+    input: Readonly<{
+      actorAccountId: AccountId
+      expected: Pick<
+        SystemAccountCatalogView,
+        "id" | "status" | "tokenVersion" | "createdAt" | "updatedAt"
+      >
+      status: AccountStatus
+      now: Date
+      auditStatements: ReadonlyArray<D1PreparedStatement>
+    }>,
   ): Promise<SystemAccountStatusUpdate | Error> {
-    const target = await this.find(targetAccountId)
-    if (target === null) return "not_found"
-    if (target instanceof Error) return target
-    if (actorAccountId === targetAccountId && status !== "active") return "forbidden"
+    const target = input.expected
+    if (input.actorAccountId === target.id && input.status !== "active") return "forbidden"
 
     const account = AccountEntity.create({
       id: target.id,
@@ -157,17 +161,17 @@ export class SystemAccountCatalogRepository {
     })
     if (account instanceof Error) return account
     const changed =
-      status === "active"
-        ? account.activate(now)
-        : status === "suspended"
-          ? account.suspend(now)
-          : account.lock(now)
+      input.status === "active"
+        ? account.activate(input.now)
+        : input.status === "suspended"
+          ? account.suspend(input.now)
+          : account.lock(input.now)
     if (changed instanceof Error) return changed
     if (changed.tokenVersion === account.tokenVersion) return "unchanged"
 
     try {
       const statements = [
-        this.prepareActorAccountGuard(actorAccountId, targetAccountId),
+        this.prepareActorAccountGuard(input.actorAccountId, target.id),
         this.c.env.DB.prepare(
           `UPDATE system_accounts
            SET status = ?2,
@@ -179,7 +183,7 @@ export class SystemAccountCatalogRepository {
              AND token_version = ?6
              AND updated_at = ?7`,
         ).bind(
-          targetAccountId,
+          target.id,
           changed.status,
           changed.tokenVersion,
           changed.updatedAt.getTime(),
@@ -188,10 +192,10 @@ export class SystemAccountCatalogRepository {
           account.updatedAt.getTime(),
         ),
         this.c.env.DB.prepare(
-          "SELECT CASE WHEN changes() = 1 THEN 1 ELSE abs(-9223372036854775808) END AS ok",
+          "SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('{}', 'system_account_status_conflict') END AS ok",
         ),
         this.prepareLastRootGuard(),
-        ...auditStatements,
+        ...input.auditStatements,
       ]
       const executions = await this.c.env.DB.batch(statements)
       if (executions.length !== statements.length || executions.some((entry) => !entry.success)) {
@@ -200,6 +204,9 @@ export class SystemAccountCatalogRepository {
 
       return "updated"
     } catch (caught) {
+      if (caught instanceof Error && caught.message.includes("system_account_status_conflict")) {
+        return "conflict"
+      }
       if (caught instanceof Error && caught.message.includes("integer overflow")) {
         return "forbidden"
       }
@@ -251,21 +258,9 @@ export class SystemAccountCatalogRepository {
   }
 
   private prepareLastRootGuard(): D1PreparedStatement {
-    return this.c.env.DB.prepare(
-      `SELECT CASE WHEN EXISTS (
-         SELECT 1
-         FROM system_accounts account
-         INNER JOIN system_identity_bindings identity ON identity.account_id = account.id
-         INNER JOIN system_role_bindings binding ON binding.account_id = account.id
-         INNER JOIN system_iam_role_permissions permission ON permission.role_id = binding.role_id
-         WHERE account.status = 'active'
-           AND identity.activated_at IS NOT NULL
-           AND identity.revoked_at IS NULL
-           AND binding.resource_type IS NULL
-           AND binding.revoked_at IS NULL
-           AND permission.permission_key = 'system:admin'
-       ) THEN 1 ELSE json_extract('', '$') END AS ok`,
-    )
+    return new SystemLastRootGuardAdapter({
+      database: this.c.env.DB,
+    }).prepare()
   }
 
   private toView(

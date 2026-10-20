@@ -615,6 +615,7 @@ test("encrypted original is verified before atomic finalization and failed sourc
         expiresAtMs: now.getTime() + 3600000,
         machineCredentialId: null,
         identityBindingId: null,
+        sessionFamilyId: null,
       },
       at: now,
     })
@@ -834,7 +835,7 @@ test("encrypted original is verified before atomic finalization and failed sourc
         if (kind === "connector")
           await execSql(
             context.env.DB,
-            "INSERT INTO system_connectors(id,key,name,direction,transport,status,revision,created_at,updated_at) VALUES ('record-connector','record-connector','Record connector','bidirectional','api','active',1,100,100)",
+            "INSERT INTO system_connectors(id,key,name,direction,transport,status,revision,created_at,updated_at) VALUES ('6f1c2a0e-5b7d-4c3a-9e21-8a4d0b6c7e15','record-connector','Record connector','bidirectional','api','active',1,100,100)",
           )
         await context.env.DB.prepare(
           "INSERT INTO system_accounts(id,status,token_version,created_at,updated_at) VALUES (?1,'active',0,100,100)",
@@ -844,7 +845,11 @@ test("encrypted original is verified before atomic finalization and failed sourc
         await context.env.DB.prepare(
           "INSERT INTO system_principals(id,account_id,kind,name,connector_id,revision,created_at,updated_at) VALUES (?1,?1,?2,'Reader',?3,1,100,100)",
         )
-          .bind(accountId, kind, kind === "connector" ? "record-connector" : null)
+          .bind(
+            accountId,
+            kind,
+            kind === "connector" ? "6f1c2a0e-5b7d-4c3a-9e21-8a4d0b6c7e15" : null,
+          )
           .run()
         await context.env.DB.prepare(
           "INSERT INTO system_machine_credentials(id,principal_id,name,secret_hash,status,created_at,updated_at,last_used_at,expires_at) VALUES (?1,?2,'Reader credential',?3,'active',100,?4,?4,?5)",

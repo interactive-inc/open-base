@@ -40,6 +40,49 @@ describe("ProposalEntity", () => {
     expect(left.digest).toMatch(/^[0-9a-f]{64}$/)
   })
 
+  test("__proto__の値が異なる本文を異なるcanonical bodyとdigestへ固定する", async () => {
+    const input = {
+      id: proposalIdSchema.parse(testLiteralId("proposal-1")),
+      seriesId: testLiteralId("series-1"),
+      version: 1,
+      procedureKey: "change",
+      procedureRevision: 3,
+      createdByAccountId: accountId,
+      supersedesProposalId: null,
+      createdAt: new Date(100),
+    }
+    const left = await ProposalEntity.create({
+      ...input,
+      body: JSON.parse('{"value":1,"__proto__":{"requested":"first"}}'),
+    })
+    const right = await ProposalEntity.create({
+      ...input,
+      body: JSON.parse('{"value":1,"__proto__":{"requested":"second"}}'),
+    })
+
+    expect(left).toBeInstanceOf(ProposalEntity)
+    expect(right).toBeInstanceOf(ProposalEntity)
+    if (!(left instanceof ProposalEntity) || !(right instanceof ProposalEntity)) return
+    expect(left.bodyJson).not.toBe(right.bodyJson)
+    expect(left.digest).not.toBe(right.digest)
+    expect(left.bodyJson).toBe('{"__proto__":{"requested":"first"},"value":1}')
+    expect(right.bodyJson).toBe('{"__proto__":{"requested":"second"},"value":1}')
+    expect(left.body).toEqual(JSON.parse(left.bodyJson))
+    const restored = await ProposalEntity.restore({ ...left, createdAt: left.createdAt })
+    expect(restored).toBeInstanceOf(ProposalEntity)
+    if (!(restored instanceof ProposalEntity)) return
+    expect(restored.bodyJson).toBe(left.bodyJson)
+    expect(restored.digest).toBe(left.digest)
+    const replaced = await ProposalEntity.restore({
+      ...left,
+      createdAt: left.createdAt,
+      bodyJson: right.bodyJson,
+    })
+    expect(replaced).toBeInstanceOf(InvalidSystemProposalError)
+    if (replaced instanceof InvalidSystemProposalError)
+      expect(replaced.code).toBe("digest_mismatch")
+  })
+
   test("restore時にbody差替えとdigest不一致を拒否する", async () => {
     const result = await ProposalEntity.restore({
       id: testLiteralId("proposal-1"),

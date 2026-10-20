@@ -122,3 +122,223 @@ describe("System password authentication", () => {
     ).toBeInstanceOf(Error)
   })
 })
+
+const ownerAccountId = zAccountId.parse("0f3c2d64-5a1e-4c7b-9e2f-6d8a1b3c5e70")
+const otherAccountId = zAccountId.parse("7a9e4b12-3c5d-4f6a-8b7c-9d0e1f2a3b4c")
+const firstIdentity = testLiteralId("account-password-first")
+const secondIdentity = testLiteralId("account-password-second")
+
+type PasswordIdentitySeed = Readonly<{
+  id: string
+  accountId: string
+  subject: string
+  password: string
+  createdAt: number
+  activatedAt: number | null
+  revokedAt: number | null
+}>
+
+function hashOf(password: string) {
+  return `hash-of:${password}`
+}
+
+function createAccountService(database: D1Database, verifiedHashes: string[]) {
+  const material: SystemPasswordMaterialService = {
+    dummyHash: "dummy-password-hash-for-constant-work",
+    needsRehash: () => false,
+    verify: async (password, passwordHash) => {
+      verifiedHashes.push(passwordHash)
+      return passwordHash === hashOf(password)
+    },
+  }
+  const repository = new SystemPasswordCredentialAdapter({ database })
+  return {
+    execute: (command: Parameters<typeof repository.authenticateAccount>[0]) =>
+      repository.authenticateAccount(command, material),
+  }
+}
+
+async function insertAccount(database: D1Database, accountId: string) {
+  await database
+    .prepare(
+      `INSERT INTO system_accounts
+         (id, status, token_version, closed_at, created_at, updated_at)
+       VALUES (?1, 'active', 2, NULL, ?2, ?2)`,
+    )
+    .bind(accountId, now.getTime() - 10_000)
+    .run()
+}
+
+async function insertPasswordIdentity(database: D1Database, seed: PasswordIdentitySeed) {
+  await database
+    .prepare(
+      `INSERT INTO system_identity_bindings
+       VALUES (?1, ?2, 'password', ?3, ?4, ?5, ?6)`,
+    )
+    .bind(seed.id, seed.accountId, seed.subject, seed.createdAt, seed.activatedAt, seed.revokedAt)
+    .run()
+  await database
+    .prepare(`INSERT INTO system_password_credentials VALUES (?1, ?2, ?3, ?3, ?3)`)
+    .bind(seed.id, hashOf(seed.password), seed.createdAt)
+    .run()
+}
+
+function activeIdentity(
+  id: string,
+  password: string,
+  createdAt: number,
+  accountId: string = ownerAccountId,
+): PasswordIdentitySeed {
+  return {
+    id,
+    accountId,
+    subject: `${id}@example.com`,
+    password,
+    createdAt,
+    activatedAt: createdAt,
+    revokedAt: null,
+  }
+}
+
+describe("System account password authentication", () => {
+  test("同じAccountの有効なlogin IDのどちらのpasswordでも、照合できたIDで認証する", async () => {
+    const database = await createLocalD1Database({ schema })
+    await insertAccount(database, ownerAccountId)
+    await insertPasswordIdentity(
+      database,
+      activeIdentity(firstIdentity, "first-password", now.getTime() - 2_000),
+    )
+    await insertPasswordIdentity(
+      database,
+      activeIdentity(secondIdentity, "second-password", now.getTime() - 1_000),
+    )
+
+    for (const [password, identityId] of [
+      ["first-password", firstIdentity],
+      ["second-password", secondIdentity],
+    ] as const) {
+      const verifiedHashes: string[] = []
+      expect(
+        await createAccountService(database, verifiedHashes).execute({
+          accountId: ownerAccountId,
+          password,
+          now,
+        }),
+      ).toEqual({
+        kind: "authenticated",
+        accountId: ownerAccountId,
+        identityId: zIdentityId.parse(identityId),
+        requiresPasswordRehash: false,
+        tokenVersion: 2,
+      })
+      expect(verifiedHashes.at(-1)).toBe(hashOf(password))
+    }
+  })
+
+  test.each([
+    ["pending", null, null],
+    ["revoked", now.getTime() - 1_000, now.getTime() - 500],
+  ] as const)(
+    "%sのlogin IDのpasswordは受理せず、照合もしない",
+    async (_, activatedAt, revokedAt) => {
+      const database = await createLocalD1Database({ schema })
+      await insertAccount(database, ownerAccountId)
+      await insertPasswordIdentity(
+        database,
+        activeIdentity(firstIdentity, "first-password", now.getTime() - 2_000),
+      )
+      await insertPasswordIdentity(database, {
+        ...activeIdentity(secondIdentity, "second-password", now.getTime() - 1_000),
+        activatedAt,
+        revokedAt,
+      })
+      const verifiedHashes: string[] = []
+
+      expect(
+        await createAccountService(database, verifiedHashes).execute({
+          accountId: ownerAccountId,
+          password: "second-password",
+          now,
+        }),
+      ).toEqual({ kind: "rejected", reason: "invalid_credentials" })
+      expect(verifiedHashes).toEqual([hashOf("first-password")])
+    },
+  )
+
+  test("別Accountのpasswordと誤ったpasswordを拒否し、有効なIDを1回ずつだけ照合する", async () => {
+    const database = await createLocalD1Database({ schema })
+    await insertAccount(database, ownerAccountId)
+    await insertAccount(database, otherAccountId)
+    await insertPasswordIdentity(
+      database,
+      activeIdentity(firstIdentity, "first-password", now.getTime() - 2_000),
+    )
+    await insertPasswordIdentity(
+      database,
+      activeIdentity(secondIdentity, "second-password", now.getTime() - 1_000),
+    )
+    await insertPasswordIdentity(
+      database,
+      activeIdentity(
+        testLiteralId("other-account-password"),
+        "other-password",
+        now.getTime() - 1_000,
+        otherAccountId,
+      ),
+    )
+
+    for (const password of ["other-password", "wrong-password"]) {
+      const verifiedHashes: string[] = []
+      expect(
+        await createAccountService(database, verifiedHashes).execute({
+          accountId: ownerAccountId,
+          password,
+          now,
+        }),
+      ).toEqual({ kind: "rejected", reason: "invalid_credentials" })
+      // password を最近変えた ID から照合する。
+      expect(verifiedHashes).toEqual([hashOf("second-password"), hashOf("first-password")])
+    }
+  })
+
+  test("有効なlogin IDが6件以上でも拒否せず、passwordを最近変えた5件を照合する", async () => {
+    const database = await createLocalD1Database({ schema })
+    await insertAccount(database, ownerAccountId)
+    for (let index = 0; index < 6; index += 1) {
+      await insertPasswordIdentity(
+        database,
+        activeIdentity(
+          testLiteralId(`account-password-${index}`),
+          `password-${index}`,
+          now.getTime() - 10_000 + index,
+        ),
+      )
+    }
+
+    const latest: string[] = []
+    expect(
+      await createAccountService(database, latest).execute({
+        accountId: ownerAccountId,
+        password: "password-1",
+        now,
+      }),
+    ).toMatchObject({
+      kind: "authenticated",
+      identityId: zIdentityId.parse(testLiteralId("account-password-1")),
+    })
+    expect(latest).toEqual(
+      ["password-5", "password-4", "password-3", "password-2", "password-1"].map(hashOf),
+    )
+
+    // 最も古く変えた 6 件目は照合の対象外。1回の試行の照合は 5 回に収まる。
+    const oldest: string[] = []
+    expect(
+      await createAccountService(database, oldest).execute({
+        accountId: ownerAccountId,
+        password: "password-0",
+        now,
+      }),
+    ).toEqual({ kind: "rejected", reason: "invalid_credentials" })
+    expect(oldest).toHaveLength(5)
+  })
+})

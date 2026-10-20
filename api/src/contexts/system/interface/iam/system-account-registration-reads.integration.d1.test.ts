@@ -65,7 +65,7 @@ test("初期password発行のSystem読取はcredentialを返さず有効なroot�
   )
   await execSql(
     fixture.database,
-    "INSERT INTO system_identity_bindings (id, account_id, provider, subject, created_at) VALUES ('637b1ce9-daa9-4063-8cb0-1190607a2ceb', '59d1cf87-ae64-4e2f-8316-d3b1505c96ed', 'password', 'person@example.com', 100)",
+    "INSERT INTO system_identity_bindings (id, account_id, provider, subject, created_at, activated_at) VALUES ('637b1ce9-daa9-4063-8cb0-1190607a2ceb', '59d1cf87-ae64-4e2f-8316-d3b1505c96ed', 'password', 'person@example.com', 100, 100)",
   )
   await execSql(
     fixture.database,
@@ -73,7 +73,7 @@ test("初期password発行のSystem読取はcredentialを返さず有効なroot�
   )
   await execSql(
     fixture.database,
-    "INSERT INTO system_password_credentials (identity_id, password_hash, changed_at, created_at, updated_at) VALUES ('637b1ce9-daa9-4063-8cb0-1190607a2ceb', 'secret-hash', 100, 100, 100)",
+    "INSERT INTO system_password_credentials (identity_id, password_hash, changed_at, created_at, updated_at) VALUES ('637b1ce9-daa9-4063-8cb0-1190607a2ceb', 'secret-password-hash-placeholder', 100, 100, 100)",
   )
   await execSql(
     fixture.database,
@@ -113,12 +113,59 @@ test("初期password発行のSystem読取はcredentialを返さず有効なroot�
   })
   await execSql(
     fixture.database,
-    "UPDATE system_accounts SET status = 'locked' WHERE id = '59d1cf87-ae64-4e2f-8316-d3b1505c96ed'",
+    "UPDATE system_accounts SET status = 'locked', token_version = token_version + 1 WHERE id = '59d1cf87-ae64-4e2f-8316-d3b1505c96ed'",
   )
   expect(
     await readSystemInitialPasswordTarget(database, "59d1cf87-ae64-4e2f-8316-d3b1505c96ed"),
   ).toMatchObject({
     user: { disabledAt: new Date(200) },
+  })
+})
+
+test("初期password発行のSystem読取はログインできる有効化済み・未削除のIdentityだけを返す", async () => {
+  const fixture = await SystemSessionTestContext.create()
+  await execSql(
+    fixture.database,
+    "INSERT INTO system_accounts (id, status, token_version, created_at, updated_at) VALUES ('59d1cf87-ae64-4e2f-8316-d3b1505c96ed', 'active', 0, 100, 200)",
+  )
+  await execSql(
+    fixture.database,
+    "INSERT INTO system_identity_bindings (id, account_id, provider, subject, created_at, activated_at, revoked_at) VALUES ('3b0bc0c5-5a8e-4d59-9a53-0c8a4c6f1a01', '59d1cf87-ae64-4e2f-8316-d3b1505c96ed', 'password', 'old@example.com', 100, 100, 150)",
+  )
+  await execSql(
+    fixture.database,
+    "INSERT INTO system_identity_profiles (identity_id, email, can_receive_email, updated_at) VALUES ('3b0bc0c5-5a8e-4d59-9a53-0c8a4c6f1a01', 'old@example.com', 0, 100)",
+  )
+  await execSql(
+    fixture.database,
+    "INSERT INTO system_identity_bindings (id, account_id, provider, subject, created_at) VALUES ('3b0bc0c5-5a8e-4d59-9a53-0c8a4c6f1a02', '59d1cf87-ae64-4e2f-8316-d3b1505c96ed', 'password', 'pending@example.com', 110)",
+  )
+  await execSql(
+    fixture.database,
+    "INSERT INTO system_identity_profiles (identity_id, email, can_receive_email, updated_at) VALUES ('3b0bc0c5-5a8e-4d59-9a53-0c8a4c6f1a02', 'pending@example.com', 0, 110)",
+  )
+  await execSql(
+    fixture.database,
+    "INSERT INTO system_identity_bindings (id, account_id, provider, subject, created_at, activated_at) VALUES ('3b0bc0c5-5a8e-4d59-9a53-0c8a4c6f1a03', '59d1cf87-ae64-4e2f-8316-d3b1505c96ed', 'password', 'current@example.com', 120, 130)",
+  )
+  await execSql(
+    fixture.database,
+    "INSERT INTO system_identity_profiles (identity_id, email, can_receive_email, updated_at) VALUES ('3b0bc0c5-5a8e-4d59-9a53-0c8a4c6f1a03', 'current@example.com', 1, 120)",
+  )
+
+  expect(
+    await readSystemInitialPasswordTarget(
+      fixture.context.env.DB,
+      "59d1cf87-ae64-4e2f-8316-d3b1505c96ed",
+    ),
+  ).toMatchObject({
+    identities: [
+      {
+        id: "3b0bc0c5-5a8e-4d59-9a53-0c8a4c6f1a03",
+        email: "current@example.com",
+        canReceiveEmail: true,
+      },
+    ],
   })
 })
 

@@ -1,4 +1,5 @@
 import { InvalidSystemIntegrationError } from "@system/domain/errors"
+import { uuidSchema } from "@/lib/validation/uuid.schema"
 import { z } from "zod"
 
 const digestSchema = z.string().regex(/^[0-9a-f]{64}$/u)
@@ -11,9 +12,9 @@ const itemInputSchema = z
   .strict()
 const runInputSchema = z
   .object({
-    id: z.string().regex(/^\S{1,255}$/),
-    exchangeId: z.string().regex(/^\S{1,255}$/),
-    assertionId: z.string().regex(/^\S{1,255}$/),
+    id: uuidSchema,
+    exchangeId: uuidSchema,
+    assertionId: uuidSchema,
     localVersion: z.string().trim().min(1).max(255),
     createdAt: z.date(),
     items: z.array(itemInputSchema).min(1).max(10_000),

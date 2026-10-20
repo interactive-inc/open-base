@@ -57,6 +57,16 @@ export type SystemDeadLetterRequeueResult = Readonly<{
   jobId: string
 }>
 
+type DeliveryIdentity = Pick<
+  SystemDeliveryEntity,
+  "kind" | "operationKey" | "idempotencyKey" | "payloadDigest" | "handlerKey"
+>
+
+export type SystemDeliveryCreateResult = Readonly<{
+  status: "created" | "replayed"
+  delivery: SystemDeliveryEntity
+}>
+
 type Context = SystemD1Context
 
 /** 汎用job・outbox・inbox・dead letterを同じleaseと冪等性規則で保存する。 */
@@ -150,15 +160,9 @@ export class SystemDeliveryRepository {
     createdByAccountId: AccountId,
     outboxSource: SystemOutboxSource | null,
     auditStatements: ReadonlyArray<D1PreparedStatement>,
-  ): Promise<"created" | "replayed" | "conflict" | Error> {
-    const existing = await this.findByIdempotency(delivery)
-    if (existing instanceof Error) return existing
-    if (existing !== null) {
-      return existing.payloadDigest === delivery.payloadDigest &&
-        existing.handlerKey === delivery.handlerKey
-        ? "replayed"
-        : "conflict"
-    }
+  ): Promise<SystemDeliveryCreateResult | "conflict" | Error> {
+    const existing = await this.replay(delivery)
+    if (existing !== null) return existing
     if ((delivery.kind === "outbox") !== (outboxSource !== null)) {
       return new Error("System outbox source is invalid")
     }
@@ -170,18 +174,24 @@ export class SystemDeliveryRepository {
       if (results.length !== statements.length || results.some((result) => !result.success)) {
         return new Error("System delivery creation batch did not succeed")
       }
-      return "created"
+      return { status: "created", delivery }
     } catch (caught) {
-      const replay = await this.findByIdempotency(delivery)
-      if (replay instanceof Error) return replay
-      if (replay !== null) {
-        return replay.payloadDigest === delivery.payloadDigest &&
-          replay.handlerKey === delivery.handlerKey
-          ? "replayed"
-          : "conflict"
-      }
+      const replay = await this.replay(delivery)
+      if (replay !== null) return replay
       return caught instanceof Error ? caught : new Error("failed to create System delivery")
     }
+  }
+
+  /** 新規登録の時刻検証とは独立して、保存済みの実体へ再送を収束させる。 */
+  async replay(
+    input: DeliveryIdentity,
+  ): Promise<SystemDeliveryCreateResult | "conflict" | null | Error> {
+    const existing = await this.findByIdempotency(input)
+    if (existing instanceof Error || existing === null) return existing
+    return existing.payloadDigest === input.payloadDigest &&
+      existing.handlerKey === input.handlerKey
+      ? { status: "replayed", delivery: existing }
+      : "conflict"
   }
 
   /** 業務の保存とjob登録を同じtransactionへ組み込む。 */
@@ -354,16 +364,18 @@ export class SystemDeliveryRepository {
       receivedAt: Date
     }>,
     auditStatements: ReadonlyArray<D1PreparedStatement>,
-  ): Promise<"accepted" | "replayed" | "conflict" | Error> {
+  ): Promise<
+    | Readonly<{ status: "accepted" | "replayed"; message: SystemInboxMessageView }>
+    | "conflict"
+    | Error
+  > {
     try {
-      const existing = await this.c.env.DB.prepare(
-        `SELECT payload_digest FROM system_inbox_messages
-         WHERE source_key = ?1 AND external_message_id = ?2 LIMIT 1`,
-      )
-        .bind(input.sourceKey, input.externalMessageId)
-        .first<{ payload_digest: string }>()
+      const existing = await this.findInboxByExternalMessage(input)
+      if (existing instanceof Error) return existing
       if (existing !== null) {
-        return existing.payload_digest === input.payloadDigest ? "replayed" : "conflict"
+        return existing.payloadDigest === input.payloadDigest
+          ? { status: "replayed", message: existing }
+          : "conflict"
       }
       const statements = [
         this.c.env.DB.prepare(
@@ -384,8 +396,26 @@ export class SystemDeliveryRepository {
       if (results.length !== statements.length || results.some((result) => !result.success)) {
         return new Error("System inbox acceptance batch did not succeed")
       }
-      return "accepted"
+      return {
+        status: "accepted",
+        message: { ...input, status: "accepted", processedAt: null, reasonCode: null },
+      }
     } catch (caught) {
+      if (
+        !(caught instanceof Error) ||
+        !caught.message.includes("UNIQUE constraint failed") ||
+        !caught.message.includes("system_inbox_messages.source_key") ||
+        !caught.message.includes("system_inbox_messages.external_message_id")
+      ) {
+        return caught instanceof Error ? caught : new Error("failed to accept System inbox message")
+      }
+      const existing = await this.findInboxByExternalMessage(input)
+      if (existing instanceof Error) return existing
+      if (existing !== null) {
+        return existing.payloadDigest === input.payloadDigest
+          ? { status: "replayed", message: existing }
+          : "conflict"
+      }
       return caught instanceof Error ? caught : new Error("failed to accept System inbox message")
     }
   }
@@ -565,6 +595,22 @@ export class SystemDeliveryRepository {
     }
   }
 
+  private async findInboxByExternalMessage(
+    input: Readonly<{ sourceKey: string; externalMessageId: string }>,
+  ): Promise<SystemInboxMessageView | null | Error> {
+    try {
+      const row = await this.c.env.DB.prepare(
+        `SELECT id FROM system_inbox_messages
+         WHERE source_key = ?1 AND external_message_id = ?2 LIMIT 1`,
+      )
+        .bind(input.sourceKey, input.externalMessageId)
+        .first<{ id: string }>()
+      return row === null ? null : this.findInbox(row.id)
+    } catch (caught) {
+      return caught instanceof Error ? caught : new Error("failed to replay System inbox message")
+    }
+  }
+
   private async findInbox(id: string): Promise<SystemInboxMessageView | null | Error> {
     try {
       const row = await this.c.env.DB.prepare(
@@ -601,7 +647,7 @@ export class SystemDeliveryRepository {
   }
 
   private async findByIdempotency(
-    delivery: SystemDeliveryEntity,
+    delivery: DeliveryIdentity,
   ): Promise<SystemDeliveryEntity | null | Error> {
     const table = delivery.kind === "job" ? "system_jobs" : "system_outbox_messages"
     const operationColumn = delivery.kind === "job" ? "operation_key" : "topic"

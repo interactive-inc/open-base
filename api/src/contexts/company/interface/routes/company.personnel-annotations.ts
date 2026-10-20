@@ -57,7 +57,10 @@ export const GET = factory.createHandlers(
       })
       const employee = await directory.findByCode(query.employee_code)
       if (employee instanceof Error) throw new CompanyReadUnavailableError(employee)
-      if (employee === null) throw new CompanyEmployeeNotFoundError()
+      if (employee === null) {
+        if (!actor.hasPermission("employee:read")) throw new CompanyReadForbiddenError()
+        throw new CompanyEmployeeNotFoundError()
+      }
       employeeId = employee.id
     }
     if (

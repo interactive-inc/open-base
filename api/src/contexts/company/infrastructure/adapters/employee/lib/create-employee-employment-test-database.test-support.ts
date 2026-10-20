@@ -63,5 +63,9 @@ export async function createEmployeeEmploymentTestDatabase(
         ('${COMPANY_DEFAULT_ORGANIZATION_ID}', 'employee', 'employee:1', 1, 'active', '2026-01-01', NULL, '{"personId":"person:1","employeeCode":"E001"}');
     `
     : ""
-  return await createLocalD1Database({ schema: schema + resources + additionalSql })
+  // 版を選ぶ読み取りは訂正元の列を見る。列の並びに依存する既存の INSERT を保つため、行を入れた後に足す。
+  return await createLocalD1Database({
+    schema: `${schema}${resources}${additionalSql}
+      ALTER TABLE company_resource_revisions ADD COLUMN corrects_revision INTEGER;`,
+  })
 }

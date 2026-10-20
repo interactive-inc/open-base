@@ -1,4 +1,6 @@
 import { CreateSystemBrowserLoginCode } from "@system/application/auth/create-system-browser-login-code"
+import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
+import { systemLoginCodeHash } from "@system/lib/auth/system-login-code-hash"
 import type { SystemHonoEnv } from "@system/interface/request-environment/system-factory"
 import { POST } from "@system/interface/routes/system.browser-sessions"
 import { createLocalD1Database } from "@system/test/local-d1/create-local-d1-database.test-support"
@@ -36,13 +38,30 @@ async function createFixture() {
       app.request(input, init, { DB: database, JWT_SECRET: "browser-session-route-jwt-secret" }),
   })
 
-  async function issueCode(sessionFamilyId: string | null): Promise<string> {
+  async function tryIssueCode(sessionFamilyId: string | null): Promise<string | null> {
     const creation = await new CreateSystemBrowserLoginCode({
       env: { DB: database },
       var: { now: () => now },
-    }).execute({ accountId, tokenVersion: 0, sessionFamilyId })
+    }).execute({
+      authentication: {
+        accountId: zAccountId.parse(accountId),
+        tokenVersion: 0,
+        issuedAtMs: now.getTime(),
+        expiresAtMs: now.getTime() + 60_000,
+        machineCredentialId: null,
+        identityBindingId: null,
+        sessionFamilyId,
+      },
+      sessionFamilyId,
+    })
     if (creation instanceof Error) throw creation
-    return creation.code
+    return creation === null ? null : creation.code
+  }
+
+  async function issueCode(sessionFamilyId: string | null): Promise<string> {
+    const code = await tryIssueCode(sessionFamilyId)
+    if (code === null) throw new Error("browser login code was rejected")
+    return code
   }
 
   async function countSessions(): Promise<number> {
@@ -52,7 +71,7 @@ async function createFixture() {
     return row?.count ?? -1
   }
 
-  return Object.freeze({ client, database, issueCode, countSessions })
+  return Object.freeze({ client, database, issueCode, tryIssueCode, countSessions })
 }
 
 describe("POST /system/browser-sessions", () => {
@@ -104,8 +123,22 @@ describe("POST /system/browser-sessions", () => {
   })
 
   test("存在しないSession familyへ束縛したcodeを拒否する", async () => {
-    const { client, issueCode, countSessions } = await createFixture()
-    const code = await issueCode("0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d")
+    const { client, database, tryIssueCode, countSessions } = await createFixture()
+    const missingFamilyId = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"
+    // 発行の時点で発行元を照合するので、存在しないfamilyからはcodeを発行しない。
+    expect(await tryIssueCode(missingFamilyId)).toBeNull()
+    // 発行の照合を経ずに保存されたcodeも、交換の時点でfamilyを照合して拒否する。
+    const code = crypto.randomUUID()
+    const codeHash = await systemLoginCodeHash(code)
+    if (codeHash instanceof Error) throw codeHash
+    await database
+      .prepare(
+        `INSERT INTO system_browser_login_codes
+           (code_hash, account_id, token_version, session_family_id, created_at, expires_at)
+         VALUES (?1, ?2, 0, ?3, ?4, ?5)`,
+      )
+      .bind(codeHash, accountId, missingFamilyId, now.getTime(), now.getTime() + 60_000)
+      .run()
 
     const response = await client.system["browser-sessions"].$post({ json: { code } })
 

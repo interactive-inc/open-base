@@ -3,6 +3,7 @@ import type { EmployeeProfileSnapshot } from "@/contexts/company/domain/entities
 import { CompanyResourceEntity } from "@/contexts/company/domain/entities/company-resource.entity"
 import { restoreCalendarDate } from "@/contexts/company/domain/definitions/restore-calendar-date.definition"
 import { COMPANY_DEFAULT_ORGANIZATION_ID } from "@/contexts/company/domain/definitions/company-organization-identity.definition"
+import { companyEffectiveResourceRevisionSql } from "@/contexts/company/infrastructure/adapters/employee/lib/company-effective-resource-revision-sql"
 
 type Context = D1Database
 const rowSchema = z.object({
@@ -23,7 +24,10 @@ const attributesSchema = z
   })
   .strict()
 
-/** 人物表示と編集対象の版を、一つの会社snapshotから読む。 */
+/**
+ * 人物表示と編集対象の版を、一つの会社snapshotから読む。
+ * 従業員と人物の版は正本の時点参照と同じ規則で選び、訂正された版を表示と部分変更の基準にしない。
+ */
 export class EmployeeProfileSnapshotAdapter {
   constructor(private readonly c: Context) {
     Object.freeze(this)
@@ -50,6 +54,7 @@ export class EmployeeProfileSnapshotAdapter {
         WHERE binding.employee_id = ?1 AND resource.organization_id = '${COMPANY_DEFAULT_ORGANIZATION_ID}'
           AND resource.resource_type = 'employee' AND resource.organization_revision <= snapshot.revision
           AND resource.effective_from <= ?2
+          AND ${companyEffectiveResourceRevisionSql("resource", "snapshot.revision")}
         ORDER BY resource.effective_from DESC, resource.revision DESC LIMIT 1
       ), person AS (
         SELECT resource.* FROM company_resource_revisions AS resource CROSS JOIN snapshot
@@ -57,6 +62,7 @@ export class EmployeeProfileSnapshotAdapter {
         WHERE resource.organization_id = '${COMPANY_DEFAULT_ORGANIZATION_ID}' AND resource.resource_type = 'person'
           AND resource.organization_revision <= snapshot.revision AND resource.effective_from <= ?2
           AND employee.state = 'active' AND (employee.effective_to IS NULL OR employee.effective_to > ?2)
+          AND ${companyEffectiveResourceRevisionSql("resource", "snapshot.revision")}
         ORDER BY resource.effective_from DESC, resource.revision DESC LIMIT 1
       ) SELECT snapshot.revision AS organization_revision,
         (SELECT max(revision) FROM company_resource_revisions

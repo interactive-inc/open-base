@@ -1,3 +1,4 @@
+import { consolidateCompanyProcedureCandidates } from "@/contexts/company/domain/policies/consolidate-company-procedure-candidates.policy"
 import type { ApplicationWorkflowStep } from "@/contexts/company/domain/definitions/company-procedure-workflow.definition"
 import type {
   WorkflowApproverMatch,
@@ -51,12 +52,14 @@ async function resolveWorkflowStepSnapshot(props: {
       },
     }))
 
-  const primaryCandidates = candidateRows({
-    matches: primaryMatches,
-    source: "primary",
-    eligibleFrom: null,
-    resolvedAt,
-  }).filter((candidate) => props.excludedEmployeeIds?.has(candidate.employeeId) !== true)
+  const primaryCandidates = consolidateCompanyProcedureCandidates(
+    candidateRows({
+      matches: primaryMatches,
+      source: "primary",
+      eligibleFrom: null,
+      resolvedAt,
+    }).filter((candidate) => props.excludedEmployeeIds?.has(candidate.employeeId) !== true),
+  )
   const primaryEmployeeIds = [
     ...new Set(primaryCandidates.map((candidate) => candidate.employeeId)),
   ]
@@ -66,7 +69,7 @@ async function resolveWorkflowStepSnapshot(props: {
     return new UnresolvableWorkflowStepError(props.step.key)
   }
 
-  const candidates = [
+  const candidates = consolidateCompanyProcedureCandidates([
     ...primaryCandidates,
     ...candidateRows({
       matches: escalationMatches,
@@ -74,7 +77,7 @@ async function resolveWorkflowStepSnapshot(props: {
       eligibleFrom: stepDueAt,
       resolvedAt,
     }).filter((candidate) => props.excludedEmployeeIds?.has(candidate.employeeId) !== true),
-  ]
+  ])
 
   return {
     requiredApprovals,

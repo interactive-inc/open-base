@@ -1,27 +1,16 @@
+import { hasManagementCycle } from "@/contexts/company/domain/definitions/has-management-cycle.definition"
 import type { WorkforceManagerRelation } from "@/contexts/company/domain/definitions/workforce-manager-relation.definition"
 import type { EmployeeId } from "@/contexts/company/domain/definitions/workforce-id.definition"
 
+/** 上長関係を従業員ごとにまとめ、経路を列挙しない共通の検査で循環を判定する。 */
 export function workforceManagerRelationsHaveCycle(
   relations: ReadonlyArray<WorkforceManagerRelation>,
 ): boolean {
-  const graph = new Map<EmployeeId, Set<EmployeeId>>()
+  const managersByEmployee = new Map<EmployeeId, EmployeeId[]>()
   for (const relation of relations) {
-    const managers = graph.get(relation.employeeId) ?? new Set<EmployeeId>()
-    managers.add(relation.managerEmployeeId)
-    graph.set(relation.employeeId, managers)
+    const managers = managersByEmployee.get(relation.employeeId) ?? []
+    managers.push(relation.managerEmployeeId)
+    managersByEmployee.set(relation.employeeId, managers)
   }
-
-  for (const employeeId of graph.keys()) {
-    const pending = [{ employeeId, path: new Set<EmployeeId>() }]
-    while (pending.length > 0) {
-      const current = pending.pop()
-      if (current === undefined) break
-      if (current.path.has(current.employeeId)) return true
-      const path = new Set(current.path).add(current.employeeId)
-      for (const managerEmployeeId of graph.get(current.employeeId) ?? []) {
-        pending.push({ employeeId: managerEmployeeId, path })
-      }
-    }
-  }
-  return false
+  return hasManagementCycle(managersByEmployee)
 }

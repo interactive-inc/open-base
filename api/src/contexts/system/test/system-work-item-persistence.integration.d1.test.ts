@@ -395,3 +395,35 @@ test("外部Identityで準備した作業認可は保存直前のIdentity失効�
     await adapter.prepare({ permission: "system:work:create", stepUpToken: null }),
   ).toBeInstanceOf(SystemWorkItemError)
 })
+
+test("Sessionから発行したtokenの作業認可は保存直前のfamily失効を拒否する", async () => {
+  const f = await createSystemWorkTestFixture()
+  await f.db
+    .prepare(`INSERT INTO system_sessions
+    (id,account_id,family_id,token_hash,token_version,created_at,expires_at)
+    VALUES ('7a3e1c5b-2d4f-4e6a-9b8c-0d1e2f3a4b5c','45712a13-6a79-4dff-b2b0-d518052d6101','owner-family',?1,0,100,?2)`)
+    .bind("d".repeat(64), f.clock.now.getTime() + 3_600_000)
+    .run()
+  expect(
+    await f
+      .adapter("45712a13-6a79-4dff-b2b0-d518052d6101", null, "missing-family")
+      .prepare({ permission: "system:work:create", stepUpToken: null }),
+  ).toBeInstanceOf(SystemWorkItemError)
+  const adapter = f.adapter("45712a13-6a79-4dff-b2b0-d518052d6101", null, "owner-family")
+  const authorization = await adapter.prepare({
+    permission: "system:work:create",
+    stepUpToken: null,
+  })
+  if (authorization instanceof Error) throw authorization
+  const assertions = authorization.assertions()
+  if (assertions instanceof Error) throw assertions
+  await f.db.batch([...assertions])
+  await f.db
+    .prepare("UPDATE system_sessions SET revoked_at=?1 WHERE family_id='owner-family'")
+    .bind(f.clock.now.getTime())
+    .run()
+  await expect(f.db.batch([...assertions])).rejects.toThrow()
+  expect(
+    await adapter.prepare({ permission: "system:work:create", stepUpToken: null }),
+  ).toBeInstanceOf(SystemWorkItemError)
+})

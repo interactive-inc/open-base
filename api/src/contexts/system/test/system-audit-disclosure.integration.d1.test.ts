@@ -100,6 +100,7 @@ async function fixture() {
   })
   if (applications instanceof Error) throw applications
   const sessions = applications
+  const rawTokens = new Map<string, string>()
   async function headers(id: string) {
     const session = await sessions.issue.execute({
       accountId: zAccountId.parse(id),
@@ -109,6 +110,7 @@ async function fixture() {
     })
     if (session instanceof Error || session.kind === "rejected")
       throw new Error("session issuance failed")
+    rawTokens.set(id, session.rawToken)
     const raw = `${crypto.randomUUID()}${crypto.randomUUID()}`.replaceAll("-", "")
     const hash = await new SystemPrincipalSecretService().hashRawSecret(raw)
     if (hash instanceof Error) throw hash
@@ -148,7 +150,18 @@ async function fixture() {
     })
   const read = (query = "", actor = reader) =>
     request(`/system/audit-events?action=records.updated${query}`, { headers: actor })
-  return { db, clock, admin, reader, other, command, request, publish, read }
+  const logout = async (accountId: string) => {
+    const rawToken = rawTokens.get(accountId)
+    if (rawToken === undefined) throw new Error("session missing")
+
+    const revoked = await sessions.revoke.execute({
+      rawToken,
+      now: new Date(),
+      auditContext: { authorizationJson: null, metadataJson: null },
+    })
+    if (revoked instanceof Error) throw revoked
+  }
+  return { db, clock, admin, reader, other, command, request, publish, read, logout }
 }
 
 test.each([false, true])(
@@ -389,6 +402,7 @@ test("読取資格のsnapshotは付与元・Account変更をtransactionで再検
   const proof = await new SystemAuditDisclosureReadAdapter({ env: { DB: f.db } }).prepare({
     accountId: "f43d89f4-ac52-411f-828b-78838556ce92",
     tokenVersion: 0,
+    sessionFamilyId: null,
     permission: "audit:read",
     purpose: null,
     now: at,
@@ -481,4 +495,127 @@ test("設定のINSERTが無変更でも成功とせず、監査だけの保存�
   ).toEqual({ count: 0 })
   await f.db.prepare("DROP TRIGGER test_disclosure_ignore").run()
   expect((await f.publish()).status).toBe(201)
+})
+
+test("入口の認証後・設定保存前のlogoutで変更と成功監査を保存しない", async () => {
+  const fixtureContext = await fixture()
+  // oxlint-disable-next-line typescript/unbound-method -- call below preserves the repository receiver.
+  const append = SystemAuditDisclosurePolicyRepository.prototype.append
+  const interception = spyOn(
+    SystemAuditDisclosurePolicyRepository.prototype,
+    "append",
+  ).mockImplementationOnce(async function (this: SystemAuditDisclosurePolicyRepository, ...args) {
+    await fixtureContext.logout("282b84eb-787d-4655-a88b-c072960fc970")
+    return append.apply(this, args)
+  })
+  try {
+    expect((await fixtureContext.publish()).status).toBe(403)
+    expect(
+      await fixtureContext.db
+        .prepare("SELECT count(*) AS count FROM system_audit_disclosure_policy_revisions")
+        .first<Record<string, unknown>>(),
+    ).toEqual({ count: 0 })
+    expect(
+      await fixtureContext.db
+        .prepare(
+          "SELECT count(*) AS count FROM system_audit_events WHERE action = 'system.audit.disclosure.published' AND outcome = 'succeeded'",
+        )
+        .first<Record<string, unknown>>(),
+    ).toEqual({ count: 0 })
+    expect(
+      await fixtureContext.db
+        .prepare(
+          "SELECT token_version, updated_at FROM system_accounts WHERE id = '282b84eb-787d-4655-a88b-c072960fc970'",
+        )
+        .first<Record<string, unknown>>(),
+    ).toEqual({ token_version: 0, updated_at: 100 })
+  } finally {
+    interception.mockRestore()
+  }
+})
+
+test.each(["list", "detail", "after-list"])(
+  "入口の認証後のlogoutで監査情報と成功監査を開示しない: %s",
+  async (stage) => {
+    const fixtureContext = await fixture()
+    // oxlint-disable-next-line typescript/unbound-method -- call below preserves the adapter receiver.
+    const list = SystemAuditEventQueryAdapter.prototype.list
+    // oxlint-disable-next-line typescript/unbound-method -- call below preserves the adapter receiver.
+    const findById = SystemAuditEventQueryAdapter.prototype.findById
+    const detailInterception = spyOn(
+      SystemAuditEventQueryAdapter.prototype,
+      "findById",
+    ).mockImplementationOnce(async function (this: SystemAuditEventQueryAdapter, ...args) {
+      await fixtureContext.logout("f43d89f4-ac52-411f-828b-78838556ce92")
+      return findById.apply(this, args)
+    })
+    const listInterception = spyOn(
+      SystemAuditEventQueryAdapter.prototype,
+      "list",
+    ).mockImplementationOnce(async function (this: SystemAuditEventQueryAdapter, ...args) {
+      if (stage === "list") await fixtureContext.logout("f43d89f4-ac52-411f-828b-78838556ce92")
+      const page = await list.apply(this, args)
+      if (stage === "after-list")
+        await fixtureContext.logout("f43d89f4-ac52-411f-828b-78838556ce92")
+      return page
+    })
+    const request = () => {
+      if (stage === "detail")
+        return fixtureContext.request(`/system/audit-events/${eventId}`, {
+          headers: fixtureContext.reader,
+        })
+      return fixtureContext.read()
+    }
+    try {
+      const response = await request()
+      expect(response.status).toBe(503)
+      expect(await response.text()).not.toContain("private-")
+      expect(
+        await fixtureContext.db
+          .prepare(
+            "SELECT count(*) AS count FROM system_audit_events WHERE action IN ('system.audit.list', 'system.audit.detail') AND outcome = 'succeeded'",
+          )
+          .first<Record<string, unknown>>(),
+      ).toEqual({ count: 0 })
+      expect(
+        await fixtureContext.db
+          .prepare(
+            "SELECT token_version, updated_at FROM system_accounts WHERE id = 'f43d89f4-ac52-411f-828b-78838556ce92'",
+          )
+          .first<Record<string, unknown>>(),
+      ).toEqual({ token_version: 0, updated_at: 100 })
+    } finally {
+      detailInterception.mockRestore()
+      listInterception.mockRestore()
+    }
+  },
+)
+
+test("監査開示は別Accountと不在のfamilyを拒否し、sidのない資格は従来どおり扱う", async () => {
+  const fixtureContext = await fixture()
+  const adapter = new SystemAuditDisclosureReadAdapter({ env: { DB: fixtureContext.db } })
+  const foreignFamily = await fixtureContext.db
+    .prepare(
+      "SELECT family_id FROM system_sessions WHERE account_id = '28689052-c77f-42e5-8f85-1b461d9f5514'",
+    )
+    .first<string>("family_id")
+  if (foreignFamily === null) throw new Error("session missing")
+
+  const input = {
+    accountId: "f43d89f4-ac52-411f-828b-78838556ce92",
+    tokenVersion: 0,
+    permission: "audit:read",
+    purpose: null,
+    now: at,
+  }
+  for (const familyId of ["missing-family", foreignFamily])
+    expect(await adapter.prepare({ ...input, sessionFamilyId: familyId })).toMatchObject({
+      kind: "forbidden",
+    })
+
+  await fixtureContext.logout(input.accountId)
+  const proof = await adapter.prepare({ ...input, sessionFamilyId: null })
+  if (proof instanceof Error) throw proof
+
+  await fixtureContext.db.batch([...proof.assertions])
 })

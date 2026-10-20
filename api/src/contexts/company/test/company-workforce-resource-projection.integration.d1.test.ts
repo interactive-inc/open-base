@@ -966,6 +966,166 @@ describe("公開Company APIから実際の従業員台帳と在籍判定まで",
     expect(await f.listPersonnelActions()).not.toBeInstanceOf(Error)
   })
 
+  describe("休職の開始日を一般の変更で訂正する", () => {
+    type Fixture = Awaited<ReturnType<typeof fixture>>
+    const revised = (revision: number, effectiveFrom: string, status: "ACTIVE" | "ON_LEAVE") => ({
+      ...employment,
+      revision,
+      effectiveFrom,
+      attributes: { ...employment.attributes, status },
+    })
+    const correcting = (revision: number, correctsRevision: number) => [
+      { type: "employment" as const, id: employment.id, revision, correctsRevision },
+    ]
+    const organizationRevision = async (f: Fixture) => {
+      const revision = await f.database
+        .prepare("SELECT revision FROM company_organizations WHERE id = ?1")
+        .bind(organizationId)
+        .first<number>("revision")
+      if (revision === null) throw new Error("missing company revision")
+      return revision
+    }
+    /** 正本・一覧・在籍判定が、同じ会社営業日に同じ状態を返すことを確かめる。 */
+    const expectStatus = async (f: Fixture, date: string, status: "ACTIVE" | "ON_LEAVE") => {
+      expect(await (await f.readEmployment(date)).json()).toMatchObject({
+        resources: [{ id: employment.id, attributes: { status } }],
+      })
+      expect(await f.directory(`${date}T03:00:00Z`)).toMatchObject({ employment: { status } })
+      expect(await f.access(`${date}T03:00:00Z`)).toMatchObject({ status })
+    }
+    /** 在籍状態の期間ごとに、最も新しい版を開始日の順で読む。 */
+    const statusPeriods = async (f: Fixture) =>
+      (
+        await f.database
+          .prepare(`SELECT period.status, period.starts_on, period.ends_on, period.is_void
+          FROM company_employee_status_period_versions AS period
+          WHERE period.employment_period_id = ?1 AND NOT EXISTS (
+            SELECT 1 FROM company_employee_status_period_versions AS newer
+            WHERE newer.period_id = period.period_id AND newer.revision > period.revision)
+          ORDER BY period.starts_on`)
+          .bind(employment.id)
+          .all<{ status: string; starts_on: string; ends_on: string | null; is_void: number }>()
+      ).results
+    const statusPeriodVersionCount = (f: Fixture) =>
+      f.database
+        .prepare(
+          "SELECT count(*) AS total FROM company_employee_status_period_versions WHERE employment_period_id = ?1",
+        )
+        .bind(employment.id)
+        .first<number>("total")
+
+    test("後ろへ直した開始日で正本・状態の期間・一覧・在籍判定が揃い、後続の復職を消さない", async () => {
+      const f = await fixture()
+      await f.initialize()
+      expect(
+        (
+          await f.writeBatch(
+            [revised(2, "2026-05-01", "ON_LEAVE"), revised(3, "2026-08-01", "ACTIVE")],
+            3,
+            "leave:mistaken-start",
+          )
+        ).status,
+      ).toBe(201)
+      await expectStatus(f, "2026-05-15", "ON_LEAVE")
+
+      const correction = [revised(4, "2026-06-01", "ON_LEAVE")]
+      const corrected = await f.writeBatch(correction, 4, "leave:correct-start", correcting(4, 2))
+      expect({ status: corrected.status, body: await corrected.json() }).toMatchObject({
+        status: 201,
+      })
+      const expectCorrected = async (
+        later: ReadonlyArray<Awaited<ReturnType<typeof statusPeriods>>[number]> = [
+          { status: "active", starts_on: "2026-08-01", ends_on: null, is_void: 0 },
+        ],
+      ) => {
+        await expectStatus(f, "2026-04-15", "ACTIVE")
+        await expectStatus(f, "2026-05-15", "ACTIVE")
+        await expectStatus(f, "2026-06-15", "ON_LEAVE")
+        await expectStatus(f, "2026-08-15", "ACTIVE")
+        expect(await statusPeriods(f)).toEqual([
+          { status: "active", starts_on: "2026-01-01", ends_on: "2026-06-01", is_void: 0 },
+          { status: "leave", starts_on: "2026-05-01", ends_on: "2026-08-01", is_void: 1 },
+          { status: "leave", starts_on: "2026-06-01", ends_on: "2026-08-01", is_void: 0 },
+          ...later,
+        ])
+        expect(
+          await f.database
+            .prepare("SELECT hire_date FROM company_employments WHERE id = ?1")
+            .bind(employment.id)
+            .first<{ hire_date: string }>(),
+        ).toEqual({ hire_date: "2026-01-01" })
+      }
+      await expectCorrected()
+
+      const versions = await statusPeriodVersionCount(f)
+      expect(
+        (await f.writeBatch(correction, 4, "leave:correct-start", correcting(4, 2))).status,
+      ).toBe(200)
+      expect(await statusPeriodVersionCount(f)).toBe(versions)
+      await expectCorrected()
+
+      expect(
+        (
+          await f.writeBatch(
+            [revised(5, "2026-10-01", "ON_LEAVE")],
+            await organizationRevision(f),
+            "leave:next-change",
+          )
+        ).status,
+      ).toBe(201)
+      await expectCorrected([
+        { status: "active", starts_on: "2026-08-01", ends_on: "2026-10-01", is_void: 0 },
+        { status: "leave", starts_on: "2026-10-01", ends_on: null, is_void: 0 },
+      ])
+      await expectStatus(f, "2026-10-15", "ON_LEAVE")
+    })
+
+    test("前へ直した開始日でも正本・状態の期間・一覧・在籍判定が揃う", async () => {
+      const f = await fixture()
+      await f.initialize()
+      expect(
+        (await f.writeBatch([revised(2, "2026-06-01", "ON_LEAVE")], 3, "leave:mistaken-start"))
+          .status,
+      ).toBe(201)
+      expect(
+        (
+          await f.writeBatch(
+            [revised(3, "2026-05-01", "ON_LEAVE")],
+            4,
+            "leave:correct-start",
+            correcting(3, 2),
+          )
+        ).status,
+      ).toBe(201)
+      await expectStatus(f, "2026-04-15", "ACTIVE")
+      await expectStatus(f, "2026-05-15", "ON_LEAVE")
+      await expectStatus(f, "2026-06-15", "ON_LEAVE")
+      expect(await statusPeriods(f)).toEqual([
+        { status: "active", starts_on: "2026-01-01", ends_on: "2026-05-01", is_void: 0 },
+        { status: "leave", starts_on: "2026-05-01", ends_on: null, is_void: 0 },
+        { status: "leave", starts_on: "2026-06-01", ends_on: null, is_void: 1 },
+      ])
+    })
+
+    test("訂正を伴わない状態の版は、これまでどおり先の発効日から続く", async () => {
+      const f = await fixture()
+      await f.initialize()
+      expect(
+        (await f.writeBatch([revised(2, "2026-05-01", "ON_LEAVE")], 3, "leave:first")).status,
+      ).toBe(201)
+      expect(
+        (await f.writeBatch([revised(3, "2026-06-01", "ON_LEAVE")], 4, "leave:second")).status,
+      ).toBe(201)
+      await expectStatus(f, "2026-04-15", "ACTIVE")
+      await expectStatus(f, "2026-05-15", "ON_LEAVE")
+      await expectStatus(f, "2026-06-15", "ON_LEAVE")
+      expect(await statusPeriods(f)).toEqual([
+        { status: "active", starts_on: "2026-01-01", ends_on: "2026-05-01", is_void: 0 },
+        { status: "leave", starts_on: "2026-05-01", ends_on: null, is_void: 0 },
+      ])
+    })
+  })
+
   test("再入社とその訂正の契約区分を保存し、以前の契約の区分を変更しない", async () => {
     const f = await fixture()
     await f.initialize()

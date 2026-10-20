@@ -2,9 +2,8 @@ import { execSql } from "@system/test/local-d1/exec-sql.test-support"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { ConsumeSystemBrowserLoginCodeAdapter } from "@system/infrastructure/adapters/auth/consume-system-browser-login-code.adapter"
 import { CreateSystemBrowserLoginCodeAdapter } from "@system/infrastructure/adapters/auth/create-system-browser-login-code.adapter"
-import { createLocalD1Database } from "@system/test/local-d1/create-local-d1-database.test-support"
+import { createSystemAttachmentTestDatabase } from "@system/test/create-system-attachment-test-database.test-support"
 import { describe, expect, setDefaultTimeout, test } from "bun:test"
-import { readFileSync } from "node:fs"
 
 // ローカルD1のtemplate作成とDBごとの往復を含むため、既定の5秒を超えることがある。
 setDefaultTimeout(30_000)
@@ -13,14 +12,16 @@ const accountId = zAccountId.parse("fcd3b186-db56-4b04-8df7-acf9afd0c292")
 const codeHash = "a".repeat(64)
 const createdAt = new Date(1_000)
 const expiresAt = new Date(61_000)
+const origin = {
+  accountId,
+  tokenVersion: 0,
+  sessionFamilyId: null,
+  machineCredentialId: null,
+  identityBindingId: null,
+}
 
 async function createDatabase(): Promise<D1Database> {
-  const database = await createLocalD1Database({
-    schema: readFileSync(
-      new URL("../infrastructure/schema/system-core.sql", import.meta.url),
-      "utf8",
-    ),
-  })
+  const database = await createSystemAttachmentTestDatabase()
   await execSql(
     database,
     `INSERT INTO system_accounts (id, status, token_version, closed_at, created_at, updated_at) VALUES ('fcd3b186-db56-4b04-8df7-acf9afd0c292', 'active', 0, NULL, 1, 1);`,
@@ -47,13 +48,11 @@ describe("System browser login code audit", () => {
     expect(
       await new CreateSystemBrowserLoginCodeAdapter(context).createSystemBrowserLoginCode({
         codeHash,
-        accountId,
-        tokenVersion: 0,
-        sessionFamilyId: null,
+        origin,
         createdAt,
         expiresAt,
       }),
-    ).toBeNull()
+    ).toBe("created")
     const consumer = new ConsumeSystemBrowserLoginCodeAdapter(context)
     expect(await consumer.consumeSystemBrowserLoginCode(codeHash, new Date(2_000))).toEqual({
       accountId,
@@ -87,9 +86,7 @@ describe("System browser login code audit", () => {
     const context = { env: { DB: database } }
     await new CreateSystemBrowserLoginCodeAdapter(context).createSystemBrowserLoginCode({
       codeHash,
-      accountId,
-      tokenVersion: 0,
-      sessionFamilyId: null,
+      origin,
       createdAt,
       expiresAt,
     })
@@ -101,6 +98,28 @@ describe("System browser login code audit", () => {
       ),
     ).toBeNull()
     expect(await readAudits(database)).toHaveLength(1)
+  })
+
+  test("発行を要求した認証のtoken versionが変わっていればcodeも発行監査も保存しない", async () => {
+    const database = await createDatabase()
+    const context = { env: { DB: database } }
+    await execSql(
+      database,
+      "UPDATE system_accounts SET token_version = token_version + 1 WHERE id = 'fcd3b186-db56-4b04-8df7-acf9afd0c292';",
+    )
+
+    expect(
+      await new CreateSystemBrowserLoginCodeAdapter(context).createSystemBrowserLoginCode({
+        codeHash,
+        origin,
+        createdAt,
+        expiresAt,
+      }),
+    ).toBe("rejected")
+    expect(
+      await database.prepare("SELECT code_hash FROM system_browser_login_codes").all(),
+    ).toMatchObject({ results: [] })
+    expect(await readAudits(database)).toEqual([])
   })
 
   test("監査を記録できないときはcodeの発行も消費も確定しない", async () => {
@@ -115,9 +134,7 @@ describe("System browser login code audit", () => {
     expect(
       await new CreateSystemBrowserLoginCodeAdapter(context).createSystemBrowserLoginCode({
         codeHash,
-        accountId,
-        tokenVersion: 0,
-        sessionFamilyId: null,
+        origin,
         createdAt,
         expiresAt,
       }),

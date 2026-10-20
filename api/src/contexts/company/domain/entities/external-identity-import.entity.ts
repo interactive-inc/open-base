@@ -70,6 +70,17 @@ export class ExternalIdentityImportEntity {
     return new ExternalIdentityImportEntity(parsed.data)
   }
 
+  /** DBで未登録と判定された新規Account候補だけを検証し、既存identityの更新を含めない。 */
+  validateNewAccountEmails(emails: ReadonlyArray<string>): Error | null {
+    // SQLiteのlower()と同じくASCIIの大小文字だけを揃える。
+    const normalized = emails.map((email) =>
+      email.replace(/[A-Z]/g, (character) => character.toLowerCase()),
+    )
+    return new Set(normalized).size === normalized.length
+      ? null
+      : new Error("duplicate new Account email")
+  }
+
   async fingerprint(actorAccountId: string): Promise<string | Error> {
     const canonical = CanonicalSystemJsonValue.create({
       provider: "oidc",

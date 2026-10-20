@@ -11,6 +11,7 @@ export function prepareSystemHumanOperationAuthorization(
     database: D1Database
     accountId: string
     tokenVersion: number
+    sessionFamilyId: string | null
     permissions: ReadonlyArray<string>
     now: Date
     requireExplicitPermissions?: boolean
@@ -19,6 +20,7 @@ export function prepareSystemHumanOperationAuthorization(
   return new SystemHumanOperationAuthorizationAdapter({ env: { DB: input.database } }).prepare({
     accountId: input.accountId,
     tokenVersion: input.tokenVersion,
+    sessionFamilyId: input.sessionFamilyId,
     permissions: input.permissions,
     now: input.now,
     requireExplicitPermissions: input.requireExplicitPermissions,

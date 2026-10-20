@@ -40,6 +40,8 @@ describe("OIDC metadata handler", () => {
     expect(discovery?.status).toBe(200)
     expect(await discovery?.json()).toMatchObject({
       issuer: "https://identity.example.test",
+      token_endpoint: "https://identity.example.test/api/system/oauth/token",
+      userinfo_endpoint: "https://identity.example.test/api/system/oauth/userinfo",
       id_token_signing_alg_values_supported: ["ES256"],
     })
     expect(jwks?.headers.get("access-control-allow-origin")).toBe("*")

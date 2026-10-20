@@ -130,5 +130,52 @@ test("既存契約の一部でも公開履歴へ未接続なら部分集計を�
       "INSERT INTO company_workforce_resource_bindings VALUES ('employment', 'employment:unconnected', '01900060-0000-7000-8000-027c16aed276')",
     )
     .run()
-  expect(await repository.find(query)).toBeInstanceOf(Error)
+  expect(await repository.find(query)).toEqual(
+    new Error("company employment history migration is incomplete"),
+  )
+})
+
+test("後の会社版で採用・再雇用を追加しても過去版の集計を再取得できる", async () => {
+  const database = await createLocalD1Database({ schema })
+  const repository = new CompanyEmploymentMovementsRepository({ env: { DB: database } })
+  const originalEmployeeId = "9e174baf-3240-4253-9cba-16bc3e431cca"
+  for (const [id, employeeId, organizationRevision, from, through] of [
+    ["employment:original", originalEmployeeId, 1, "2026-06-01", "2026-06-05"],
+    ["employment:hire", "e8761a48-d65d-4ac1-bb73-085d6b804347", 2, "2026-06-06", null],
+    ["employment:rehire", originalEmployeeId, 2, "2026-06-10", null],
+  ]) {
+    await database
+      .prepare("UPDATE company_organizations SET revision = ? WHERE id = ?")
+      .bind(organizationRevision, query.organizationId)
+      .run()
+    await database
+      .prepare("INSERT INTO company_employments VALUES (?, ?)")
+      .bind(id, employeeId)
+      .run()
+    await database
+      .prepare("INSERT INTO company_workforce_resource_bindings VALUES ('employment', ?, ?)")
+      .bind(id, query.organizationId)
+      .run()
+    await database
+      .prepare(
+        "INSERT INTO company_resource_revisions VALUES (?, 'employment', ?, 1, ?, 'active', ?, ?, ?)",
+      )
+      .bind(
+        query.organizationId,
+        id,
+        organizationRevision,
+        from,
+        through,
+        JSON.stringify({ employeeId, employmentType: "FULL_TIME", status: "ACTIVE" }),
+      )
+      .run()
+    if (organizationRevision === 1) {
+      expect(await repository.find(query)).toEqual({ joinCount: 1, retireCount: 1 })
+    }
+  }
+  expect(await repository.find(query)).toEqual({ joinCount: 1, retireCount: 1 })
+  expect(await repository.find({ ...query, organizationRevision: 2 })).toEqual({
+    joinCount: 3,
+    retireCount: 1,
+  })
 })

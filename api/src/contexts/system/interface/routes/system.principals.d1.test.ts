@@ -29,7 +29,7 @@ describe("System Principal HTTP", () => {
     const fixture = await SystemSessionTestContext.create()
     await seedRoot(fixture)
     const accessToken = await issueRootAccessToken(fixture)
-    if (accessToken instanceof Error) return
+    if (accessToken instanceof Error) throw accessToken
     const rawStepUp = "1".repeat(64)
     const stepUpHash = await new SystemPrincipalSecretService().hashRawSecret(rawStepUp)
     expect(stepUpHash).not.toBeInstanceOf(Error)
@@ -144,7 +144,120 @@ describe("System Principal HTTP", () => {
         .first<Record<string, unknown>>(),
     ).toEqual({ total: 4 })
   })
+
+  test("iam:writeだけの操作者は、自分にない権限を持つPrincipalへcredentialを追加できない", async () => {
+    const fixture = await SystemSessionTestContext.create()
+    await seedRoot(fixture)
+    await execSql(
+      fixture.database,
+      `INSERT INTO system_accounts (id, status, token_version, created_at, updated_at)
+       VALUES ('${operatorAccountId}', 'active', 0, 1, 1),
+              ('${serviceAccountId}', 'active', 0, 1, 1),
+              ('${agentAccountId}', 'active', 0, 1, 1);
+       INSERT INTO system_principals
+         (id, account_id, kind, name, connector_id, revision, created_at, updated_at)
+       VALUES ('${servicePrincipalId}', '${serviceAccountId}', 'service', 'Integration service', NULL, 1, 1, 1),
+              ('${agentPrincipalId}', '${agentAccountId}', 'agent', 'Reader agent', NULL, 1, 1, 1);
+       INSERT INTO system_iam_roles (id, key, kind, name, created_at, updated_at)
+       VALUES ('c2a1b6a2-2222-4222-8222-222222222222', 'test:iam-operator', 'custom', 'IAM operator', 1, 1),
+              ('d3a1b6a2-3333-4333-8333-333333333333', 'test:integration-writer', 'custom', 'Integration writer', 1, 1);
+       INSERT INTO system_iam_role_permissions (role_id, permission_key)
+       VALUES ('c2a1b6a2-2222-4222-8222-222222222222', 'iam:read'),
+              ('c2a1b6a2-2222-4222-8222-222222222222', 'iam:write'),
+              ('d3a1b6a2-3333-4333-8333-333333333333', 'integration:write');
+       INSERT INTO system_role_bindings
+         (id, account_id, role_id, resource_type, resource_id, created_at, revoked_at)
+       VALUES ('c3a1b6a2-3333-4333-8333-333333333333', '${operatorAccountId}', 'c2a1b6a2-2222-4222-8222-222222222222', NULL, NULL, 1, NULL),
+              ('d4a1b6a2-4444-4444-8444-444444444444', '${serviceAccountId}', 'd3a1b6a2-3333-4333-8333-333333333333', NULL, NULL, 1, NULL),
+              ('e4a1b6a2-4444-4444-8444-444444444444', '${agentAccountId}', 'c2a1b6a2-2222-4222-8222-222222222222', NULL, NULL, 1, NULL);`,
+    )
+    const operator = await createCredentialClient(fixture, operatorAccountId)
+    const root = await createCredentialClient(fixture, rootAccountId)
+    if (operator instanceof Error) throw operator
+    if (root instanceof Error) throw root
+    // 403はhandlerが例外で返すためclientの型に現れない。状態コードは数値で比べる。
+    const issue = async (client: CredentialClient, principalId: string): Promise<number> => {
+      const response = await client.system.principals[":principalId"]["machine-credentials"].$post({
+        param: { principalId },
+        json: { name: "Primary", expires_at: null, reason: "provisioning" },
+      })
+      return Number(response.status)
+    }
+    const countCreated = async () =>
+      await fixture.database
+        .prepare(`SELECT
+             (SELECT count(*) FROM system_machine_credentials) AS credentials,
+             (SELECT count(*) FROM system_audit_events
+              WHERE action = 'auth.machine_credential.created') AS audits`)
+        .first<Record<string, unknown>>()
+
+    expect(await issue(operator, servicePrincipalId)).toBe(403)
+    expect(await countCreated()).toEqual({ credentials: 0, audits: 0 })
+
+    expect(await issue(operator, agentPrincipalId)).toBe(201)
+    expect(await countCreated()).toEqual({ credentials: 1, audits: 1 })
+
+    // 対象が後から操作者にない権限を得たら、同じ操作者はもう追加できない。
+    await fixture.database
+      .prepare(`INSERT INTO system_role_bindings
+           (id, account_id, role_id, resource_type, resource_id, created_at, revoked_at)
+         VALUES ('e5a1b6a2-5555-4555-8555-555555555555', ?1,
+                 'd3a1b6a2-3333-4333-8333-333333333333', 'facility', 'f1', 2, NULL)`)
+      .bind(agentAccountId)
+      .run()
+    expect(await issue(operator, agentPrincipalId)).toBe(403)
+    expect(await countCreated()).toEqual({ credentials: 1, audits: 1 })
+
+    expect(await issue(root, servicePrincipalId)).toBe(201)
+    expect(await countCreated()).toEqual({ credentials: 2, audits: 2 })
+  })
 })
+
+const operatorAccountId = zAccountId.parse("c1a1b6a2-1111-4111-8111-111111111111")
+const serviceAccountId = zAccountId.parse("d1a1b6a2-1111-4111-8111-111111111111")
+const servicePrincipalId = "d2a1b6a2-2222-4222-8222-222222222222"
+const agentAccountId = zAccountId.parse("e1a1b6a2-1111-4111-8111-111111111111")
+const agentPrincipalId = "e2a1b6a2-2222-4222-8222-222222222222"
+
+function createCredentialApp() {
+  return systemFactory
+    .createApp()
+    .use("*", async (context, next) => {
+      context.set("now", () => now)
+      await next()
+    })
+    .post("/system/principals/:principalId/machine-credentials", ...credentialsPOST)
+}
+
+type CredentialClient = ReturnType<typeof hc<ReturnType<typeof createCredentialApp>>>
+
+async function createCredentialClient(
+  fixture: SystemSessionTestContext,
+  accountId: typeof rootAccountId,
+): Promise<CredentialClient | Error> {
+  const accessToken = await issueAccessToken(fixture, accountId)
+  if (accessToken instanceof Error) return accessToken
+  const rawStepUp = crypto.randomUUID().replaceAll("-", "").repeat(2)
+  const stepUpHash = await new SystemPrincipalSecretService().hashRawSecret(rawStepUp)
+  if (stepUpHash instanceof Error) return stepUpHash
+  await fixture.database
+    .prepare(`INSERT INTO system_step_up_grants
+         (id, account_id, token_hash, method, issued_at, expires_at, last_used_at, revoked_at)
+       VALUES (?1, ?2, ?3, 'password', ?4, ?5, NULL, NULL)`)
+    .bind(crypto.randomUUID(), accountId, stepUpHash, now.getTime(), now.getTime() + 300_000)
+    .run()
+  const app = createCredentialApp()
+
+  return hc<typeof app>("http://system.test", {
+    fetch: (input: Parameters<typeof app.request>[0], init?: Parameters<typeof app.request>[1]) =>
+      app.request(input, init, {
+        DB: fixture.context.env.DB,
+        JWT_SECRET: jwtSecret,
+        NOW: now.toISOString(),
+      }),
+    headers: { authorization: `Bearer ${accessToken}`, "x-system-step-up": rawStepUp },
+  })
+}
 
 async function seedRoot(fixture: SystemSessionTestContext): Promise<void> {
   await fixture.database
@@ -175,6 +288,13 @@ async function seedRoot(fixture: SystemSessionTestContext): Promise<void> {
 }
 
 async function issueRootAccessToken(fixture: SystemSessionTestContext): Promise<string | Error> {
+  return await issueAccessToken(fixture, rootAccountId)
+}
+
+async function issueAccessToken(
+  fixture: SystemSessionTestContext,
+  accountId: typeof rootAccountId,
+): Promise<string | Error> {
   const applications = createSystemSessionApplications({
     context: fixture.context,
     jwtSecret,
@@ -182,7 +302,7 @@ async function issueRootAccessToken(fixture: SystemSessionTestContext): Promise<
   })
   if (applications instanceof Error) return applications
   const result = await applications.issue.execute({
-    accountId: rootAccountId,
+    accountId,
     tokenVersion: 0,
     now: new Date(),
     auditContext: { authorizationJson: null, metadataJson: null },

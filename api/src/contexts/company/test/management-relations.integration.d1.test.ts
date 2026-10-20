@@ -301,6 +301,14 @@ describe("Company reporting graph through organization changes", () => {
         reportIndexes.map((index) => f.people[index]!.employeeId).toSorted(),
       )
     }
+    f.setActor(
+      CompanyActorValue.restore({
+        ...f.people[3]!,
+        organizationIds: [COMPANY_DEFAULT_ORGANIZATION_ID],
+        capabilities: ["company:read"],
+        permissions: ["employee:read"],
+      }),
+    )
     const response = await f.client["reporting-lines"][":employeeCode"].$get({
       param: { employeeCode: f.people[0]!.employeeId },
     })

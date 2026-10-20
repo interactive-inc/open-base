@@ -43,6 +43,11 @@ export class CompanyEmploymentMovementsRepository {
           LEFT JOIN company_workforce_resource_bindings binding
             ON binding.resource_type = 'employment' AND binding.resource_id = employment.id
           WHERE (binding.organization_id = ?1 OR (binding.organization_id IS NULL AND ?1 = '${COMPANY_DEFAULT_ORGANIZATION_ID}'))
+            AND NOT EXISTS (SELECT 1 FROM company_resource_revisions creation
+              WHERE creation.organization_id = ?1 AND creation.resource_type = 'employment'
+                AND creation.resource_id = employment.id AND creation.revision = 1
+                AND creation.organization_revision > ?2
+                AND json_extract(creation.attributes_json, '$.employeeId') = employment.employee_id)
             AND NOT EXISTS (SELECT 1 FROM company_resource_revisions resource
               WHERE resource.organization_id = ?1 AND resource.resource_type = 'employment'
                 AND resource.resource_id = employment.id AND resource.organization_revision <= ?2
