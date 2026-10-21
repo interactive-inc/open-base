@@ -8,7 +8,7 @@ import { z } from "zod"
 import { zAppMcpGrantResponse } from "@/contexts/system/interface/models/auth"
 
 /**
- * MCP コネクタ接続の同意で grant を発行する 。
+ * MCP コネクタ接続の同意で grant を発行する。
  *
  * 製品の同意画面が「接続を許可」で呼ぶ。認証済みSystem主体だけを受け付けるため、
  * 発行対象は常にセッション本人 (c.var.userId) で、body からは受け取らない。permission キーは

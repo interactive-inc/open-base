@@ -9,7 +9,13 @@ export type SystemInitialPasswordTarget = Readonly<{
   targetHasRootGrant: boolean
 }>
 
-/** 初期password発行に必要なAccount、連絡先、現在有効なroot権限を読む。credentialは返さない。 */
+/**
+ * 初期password発行に必要なAccount、連絡先、現在有効なroot権限を読む。credentialは返さない。
+ *
+ * ログインできる有効化済み・未削除のIdentityだけを返す。削除済みのIdentityはcredentialも消えて
+ * いるため、発行先に選ばれると更新が0行になって発行できなくなる。設定待ちのIdentityは
+ * passwordを設定してもログインできないため、発行先にしない。
+ */
 export async function readSystemInitialPasswordTarget(
   database: D1Database,
   accountId: string,
@@ -24,7 +30,10 @@ export async function readSystemInitialPasswordTarget(
           `SELECT identity.id, profile.email, profile.can_receive_email
            FROM system_identity_bindings AS identity
            LEFT JOIN system_identity_profiles AS profile ON profile.identity_id = identity.id
-           WHERE identity.account_id = ?1 AND identity.provider = 'password'
+           WHERE identity.account_id = ?1
+             AND identity.provider = 'password'
+             AND identity.activated_at IS NOT NULL
+             AND identity.revoked_at IS NULL
            ORDER BY identity.created_at, identity.id`,
         )
         .bind(parsed.data)

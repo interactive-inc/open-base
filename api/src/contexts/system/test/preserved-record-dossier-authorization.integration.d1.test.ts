@@ -53,6 +53,7 @@ test("監査出力資格は期限の1ms前まで有効で、期限ちょうど�
       expiresAtMs: expiresAt.getTime() + 60000,
       machineCredentialId: null,
       identityBindingId: null,
+      sessionFamilyId: null,
     },
   })
   const proof = await reader.prepare(at)

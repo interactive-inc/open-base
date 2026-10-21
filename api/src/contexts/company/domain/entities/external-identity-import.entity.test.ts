@@ -33,6 +33,22 @@ describe("ExternalIdentityImportEntity", () => {
     ).toBeInstanceOf(Error)
   })
 
+  test.each([
+    ["shared@example.com", "shared@example.com"],
+    ["Shared@Example.com", "shared@example.com"],
+  ])("新規Accountのメール重複を拒否する: %s / %s", (email, otherEmail) => {
+    const command = ExternalIdentityImportEntity.create(input)
+    if (command instanceof Error) throw command
+    expect(command.validateNewAccountEmails([email, otherEmail])).toBeInstanceOf(Error)
+  })
+
+  test("異なる新規メールと空の新規作成候補を許可する", () => {
+    const command = ExternalIdentityImportEntity.create(input)
+    if (command instanceof Error) throw command
+    expect(command.validateNewAccountEmails(["first@example.com", "second@example.com"])).toBeNull()
+    expect(command.validateNewAccountEmails([])).toBeNull()
+  })
+
   test.each([0, 26])("%s件の入力を拒否する", (count) => {
     expect(
       ExternalIdentityImportEntity.create({

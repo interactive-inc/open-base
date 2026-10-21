@@ -21,6 +21,7 @@ export async function prepareSystemAuditDisclosure(
   const proof = await new SystemAuditDisclosureReadAdapter(context).prepare({
     accountId: context.var.userId,
     tokenVersion: context.var.accountTokenVersion,
+    sessionFamilyId: context.var.accountSessionFamilyId ?? null,
     permission: input.permission,
     purpose: input.purpose,
     now: input.now,

@@ -31,6 +31,44 @@ function update(
   }
 }
 
+/**
+ * 権限の割当を作る。globalは全社、scopedは取込と別のprovider、scoped-oidcは取込と同じproviderに
+ * 限った割当、revokedは取り消し済みの全社の割当。
+ */
+async function grantPermission(
+  database: D1Database,
+  accountId: string,
+  kind: string,
+  permission: string,
+) {
+  if (kind === "none") return
+  const roleId = crypto.randomUUID()
+  const scoped = kind === "scoped" || kind === "scoped-oidc"
+  const resourceType = scoped ? "system:identity_provider" : null
+  await database.batch([
+    database
+      .prepare(`INSERT INTO system_iam_roles
+        (id, key, kind, resource_type, name, created_at, updated_at)
+        VALUES (?1, ?2, 'custom', ?3, 'Granted permission', 0, 0)`)
+      .bind(roleId, `custom:import-grant:${roleId}`, resourceType),
+    database
+      .prepare("INSERT INTO system_iam_role_permissions (role_id, permission_key) VALUES (?1, ?2)")
+      .bind(roleId, permission),
+    database
+      .prepare(`INSERT INTO system_role_bindings
+        (id, account_id, role_id, resource_type, resource_id, created_at, revoked_at)
+        VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6)`)
+      .bind(
+        crypto.randomUUID(),
+        accountId,
+        roleId,
+        resourceType,
+        resourceType === null ? null : kind === "scoped-oidc" ? "oidc" : "other-provider",
+        kind === "revoked" ? 1 : null,
+      ),
+  ])
+}
+
 describe("外部identityとCompany正本の同期", () => {
   test("入社前のAccount対応を有効にせず、初期対応は公開履歴へ一緒に保存する", async () => {
     const c = await createExternalIdentityImportTestContext()
@@ -141,6 +179,238 @@ describe("外部identityとCompany正本の同期", () => {
         .bind(accountId)
         .first<number>("token_version"),
     ).toBe(1)
+  })
+
+  test.each([
+    ["system:admin", "global", "none", "forbidden"],
+    ["system:admin", "scoped", "none", "forbidden"],
+    ["system:admin", "global", "revoked", "forbidden"],
+    ["system:admin", "none", "none", "applied"],
+    ["system:admin", "revoked", "none", "applied"],
+    ["system:admin", "global", "global", "applied"],
+    ["system:admin", "global", "scoped", "forbidden"],
+    ["system:admin", "global", "scoped-oidc", "forbidden"],
+    ["billing:operate", "global", "none", "forbidden"],
+    ["billing:operate", "scoped", "none", "forbidden"],
+    ["billing:operate", "global", "global", "applied"],
+    ["billing:operate", "global", "scoped-oidc", "forbidden"],
+  ])(
+    "既存Accountへのidentity追加は実行者が対象の権限を全社で覆うときだけ許す（%s、対象: %s、実行者: %s、結果: %s）",
+    async (permission, targetGrant, actorGrant, expected) => {
+      const c = await createExternalIdentityImportTestContext()
+      expect((await c.application.execute(c.input)).kind).toBe("applied")
+      const accountId = zAccountId.parse(
+        await c.database
+          .prepare(
+            "SELECT account_id FROM system_identity_bindings WHERE subject = 'external-person-1'",
+          )
+          .first<string>("account_id"),
+      )
+      await grantPermission(c.database, accountId, targetGrant, permission)
+      await grantPermission(c.database, c.actor.accountId, actorGrant, permission)
+      const tables = [
+        "system_accounts",
+        "system_identity_bindings",
+        "system_identity_profiles",
+        "system_audit_events",
+        "company_resource_revisions",
+        "company_external_identity_sources",
+        "company_external_identity_imports",
+      ]
+      const counts = () =>
+        Promise.all(
+          tables.map((table) =>
+            c.database.prepare(`SELECT count(*) AS total FROM ${table}`).first<number>("total"),
+          ),
+        )
+      const before = await counts()
+      const next = {
+        ...c.input,
+        commandId: "import:attach-root",
+        expectedRevision: c.input.expectedRevision + 1,
+        identities: c.input.identities.map((identity) => ({
+          ...identity,
+          subject: "another-external-subject",
+          accountId,
+          initialRoleId: null,
+          newEmployee: null,
+          name: "Changed Person",
+          email: "changed@example.com",
+        })),
+      }
+      const result = await c.application.execute(next)
+      if (expected === "forbidden") {
+        expect(result).toEqual({ kind: "forbidden" })
+        expect(await counts()).toEqual(before)
+        expect(
+          await c.database
+            .prepare("SELECT token_version FROM system_accounts WHERE id = ?1")
+            .bind(accountId)
+            .first<number>("token_version"),
+        ).toBe(0)
+        expect(
+          await c.database
+            .prepare("SELECT official_name, email FROM company_employees")
+            .first<Record<string, unknown>>(),
+        ).toEqual({ official_name: "Example Person", email: "you@example.com" })
+        expect(
+          await c.database
+            .prepare("SELECT revision FROM company_organizations WHERE id = ?1")
+            .bind(COMPANY_DEFAULT_ORGANIZATION_ID)
+            .first<number>("revision"),
+        ).toBe(next.expectedRevision)
+        return
+      }
+      expect(result).toMatchObject({
+        kind: "applied",
+        summary: { created: 1, updated: 0, skipped: 0 },
+      })
+      expect(
+        await c.database
+          .prepare("SELECT account_id FROM system_identity_bindings WHERE subject = ?1")
+          .bind(next.identities[0]!.subject)
+          .first<string>("account_id"),
+      ).toBe(accountId)
+    },
+  )
+
+  test("rootを持たない実行者も既存のroot Accountのidentityは更新できる", async () => {
+    const c = await createExternalIdentityImportTestContext()
+    expect((await c.application.execute(c.input)).kind).toBe("applied")
+    const accountId = zAccountId.parse(
+      await c.database
+        .prepare(
+          "SELECT account_id FROM system_identity_bindings WHERE subject = 'external-person-1'",
+        )
+        .first<string>("account_id"),
+    )
+    await grantPermission(c.database, accountId, "global", "system:admin")
+    expect(await c.application.execute(update(c.input))).toMatchObject({
+      kind: "applied",
+      summary: { created: 0, updated: 1, skipped: 0 },
+    })
+    expect(
+      await c.database
+        .prepare("SELECT count(*) AS total FROM system_identity_bindings")
+        .first<number>("total"),
+    ).toBe(1)
+    expect(
+      await c.database.prepare("SELECT email FROM system_identity_profiles").first<string>("email"),
+    ).toBe("updated@example.com")
+  })
+
+  test.each([
+    ["shared@example.com", "shared@example.com"],
+    ["Shared@Example.com", "shared@example.com"],
+  ])("新規subjectの同メールを保存せず拒否する: %s / %s", async (email, otherEmail) => {
+    const c = await createExternalIdentityImportTestContext()
+    const identity = c.input.identities[0]!
+    const tables = [
+      "system_accounts",
+      "system_identity_bindings",
+      "system_identity_profiles",
+      "company_employees",
+      "company_employments",
+      "company_resource_revisions",
+      "company_external_identity_sources",
+      "company_external_identity_imports",
+      "system_audit_events",
+    ]
+    const counts = () =>
+      Promise.all(
+        tables.map((table) =>
+          c.database.prepare(`SELECT count(*) AS total FROM ${table}`).first<number>("total"),
+        ),
+      )
+    const before = await counts()
+    expect(
+      await c.application.execute({
+        ...c.input,
+        identities: [
+          { ...identity, email },
+          { ...identity, subject: "external-person-2", email: otherEmail },
+        ],
+      }),
+    ).toMatchObject({ kind: "conflict", reason: "explicit_account_link_required" })
+    expect(await counts()).toEqual(before)
+    expect(
+      await c.database
+        .prepare("SELECT revision FROM company_organizations WHERE id = ?1")
+        .bind(COMPANY_DEFAULT_ORGANIZATION_ID)
+        .first<number>("revision"),
+    ).toBe(c.input.expectedRevision)
+  })
+
+  test.each([false, true])(
+    "異なるメールの複数新規作成を適用する（既存identityの再取得: %s）",
+    async (includeExisting) => {
+      const c = await createExternalIdentityImportTestContext()
+      if (includeExisting) expect((await c.application.execute(c.input)).kind).toBe("applied")
+      const identity = c.input.identities[0]!
+      expect(
+        await c.application.execute({
+          ...c.input,
+          commandId: "import:multiple",
+          expectedRevision: c.input.expectedRevision + (includeExisting ? 1 : 0),
+          identities: [
+            ...(includeExisting ? [identity] : []),
+            { ...identity, subject: "external-person-2", email: "second@example.com" },
+            { ...identity, subject: "external-person-3", email: "third@example.com" },
+          ],
+        }),
+      ).toMatchObject({
+        kind: "applied",
+        summary: { created: 2, updated: 0, skipped: includeExisting ? 1 : 0 },
+      })
+      expect(
+        await c.database
+          .prepare("SELECT count(*) AS total FROM company_employees")
+          .first<number>("total"),
+      ).toBe(includeExisting ? 3 : 2)
+    },
+  )
+
+  test("既存identityの更新と同メールの新規作成が混在しても全体を拒否する", async () => {
+    const c = await createExternalIdentityImportTestContext()
+    expect((await c.application.execute(c.input)).kind).toBe("applied")
+    const identity = c.input.identities[0]!
+    expect(
+      await c.application.execute({
+        ...c.input,
+        commandId: "import:mixed-duplicate",
+        expectedRevision: c.input.expectedRevision + 1,
+        identities: [
+          { ...identity, sourceRevision: 2, name: "Changed Person" },
+          { ...identity, subject: "external-person-2", email: "shared@example.com" },
+          { ...identity, subject: "external-person-3", email: "SHARED@example.com" },
+        ],
+      }),
+    ).toMatchObject({ kind: "conflict", reason: "explicit_account_link_required" })
+    expect(
+      await c.database
+        .prepare("SELECT official_name FROM company_employees")
+        .first<string>("official_name"),
+    ).toBe(identity.name)
+    expect(
+      await c.database
+        .prepare("SELECT count(*) AS total FROM company_resource_revisions")
+        .first<number>("total"),
+    ).toBe(4)
+    expect(
+      await c.database
+        .prepare("SELECT count(*) AS total FROM company_external_identity_imports")
+        .first<number>("total"),
+    ).toBe(1)
+    expect(
+      await c.database
+        .prepare("SELECT source_revision FROM company_external_identity_sources")
+        .first<number>("source_revision"),
+    ).toBe(1)
+    expect(
+      await c.database
+        .prepare("SELECT count(*) AS total FROM system_accounts")
+        .first<number>("total"),
+    ).toBe(2)
   })
 
   test("操作主体が持たない権限のAccountへidentityを追加しない", async () => {

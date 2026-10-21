@@ -1,7 +1,7 @@
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
 import { SystemAuditEventEntity } from "@system/domain/entities/system-audit-event.entity"
-import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { SystemMachineCredentialEntity } from "@system/domain/entities/system-machine-credential.entity"
+import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { StableSystemAuditJsonValue } from "@system/domain/values/audit/stable-system-audit-json.value"
 import { SystemAuditEventRepository } from "@system/infrastructure/repositories/audit/system-audit-event.repository"
 import { SystemMachineCredentialRepository } from "@system/infrastructure/repositories/iam/system-machine-credential.repository"
@@ -121,8 +121,8 @@ export const POST = systemFactory.createHandlers(
       new SystemAuditEventRepository(systemContext).prepareAppend(event),
     )
     if (creation instanceof Error) throw new SystemPrincipalUnavailableError(creation)
-    if (creation === "conflict") throw new SystemPrincipalConflictError()
     if (creation === "forbidden") throw new SystemForbiddenError()
+    if (creation === "conflict") throw new SystemPrincipalConflictError()
 
     return context.json(
       { credential: systemMachineCredentialResponse(credential), secret: rawSecret },

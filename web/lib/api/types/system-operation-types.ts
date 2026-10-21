@@ -105,7 +105,7 @@ export type SystemReconciliationRun = {
   assertion_id: string
   local_version: string
   status: string
-  created_at: number
+  created_at: string
   item_count: number
 }
 

@@ -48,11 +48,11 @@ export const PATCH = systemFactory.createHandlers(
     const repository = new SystemPasswordResetAdapter({
       env: { DB: context.env.DB },
     })
-    const identityId = await repository.findIdentityId(targetAccountId.data)
-    if (identityId instanceof Error) {
+    const identityIds = await repository.findIdentityIds(targetAccountId.data)
+    if (identityIds instanceof Error) {
       throw new SystemPasswordUnavailableError()
     }
-    if (identityId === null) {
+    if (identityIds.length === 0) {
       throw new SystemPasswordCredentialNotFoundError()
     }
     const passwordHash = await hashPassword(body.password, pepper).catch((caught: unknown) =>
@@ -75,8 +75,8 @@ export const PATCH = systemFactory.createHandlers(
     const auditEvent = SystemAuditEventEntity.create({
       actorAccountId: actorAccountId.data,
       action: SYSTEM_AUDIT_ACTIONS.systemPasswordCredentialReset,
-      targetType: "system:identity",
-      targetId: identityId,
+      targetType: "system:account",
+      targetId: targetAccountId.data,
       outcome: "succeeded",
       reasonCode: null,
       authorizationJson: null,
@@ -94,7 +94,6 @@ export const PATCH = systemFactory.createHandlers(
     const reset = await repository.reset({
       actorAccountId: actorAccountId.data,
       targetAccountId: targetAccountId.data,
-      identityId,
       passwordHash,
       now,
       auditStatements,

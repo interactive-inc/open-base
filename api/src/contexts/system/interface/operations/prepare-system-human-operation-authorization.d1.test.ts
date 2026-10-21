@@ -35,6 +35,7 @@ test("呼び出し側が選んだ権限で判定し、保存時の照合文を�
     database,
     accountId: "55823b7f-711d-4dbd-af39-039ee6e1b4ff",
     tokenVersion: 0,
+    sessionFamilyId: null,
     now: new Date(1000),
   }
   const proof = await prepareSystemHumanOperationAuthorization({

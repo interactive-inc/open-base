@@ -1,7 +1,7 @@
 import type { SystemD1Context } from "@system/configuration/system-context"
 type Context = SystemD1Context
 
-/** 外部Identity tokenのjtiを原子的に記録してreplayを検知する。 */
+/** 外部Identity tokenやMCP grantのjtiを原子的に記録してreplayを検知する。 */
 export class RecordSystemIdentityLoginTokenAdapter {
   constructor(private readonly c: Context) {
     Object.freeze(this)

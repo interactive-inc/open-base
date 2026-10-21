@@ -6,26 +6,19 @@ import { ResolveOrganizationalAuthorityCandidatesAdapter } from "@/contexts/comp
 import type { EmployeeId } from "@/contexts/company/domain/definitions/workforce-id.definition"
 
 function toCompanyCriterion(selector: WorkflowApproverSelector): OrganizationalAuthorityCriterion {
-  switch (selector.type) {
-    case "role":
-      return { kind: "technical_role", roleKey: selector.role_key }
-    case "employee":
-      return { kind: "employee", employeeCode: selector.employee_code }
-    case "direct_manager":
-      return { kind: "direct_manager" }
-    case "department_manager":
-      return { kind: "department_manager" }
-    case "target_department_manager":
-      return { kind: "target_department_manager" }
-    case "responsibility":
-      return {
-        kind: "responsibility",
-        responsibilityType: selector.responsibility_type,
-        organizationUnitCode: selector.organization_unit_code,
-      }
-    case "management_chain":
-      return { kind: "management_chain" }
+  if (selector.type === "employee") {
+    return { kind: "employee", employeeCode: selector.employee_code }
   }
+
+  if (selector.type === "responsibility") {
+    return {
+      kind: "responsibility",
+      responsibilityType: selector.responsibility_type,
+      organizationUnitCode: selector.organization_unit_code,
+    }
+  }
+
+  return { kind: selector.type }
 }
 
 async function resolveWorkflowApproverMatches(props: {

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { AccountCreatedEmailAdapter } from "@/contexts/system/infrastructure/adapters/auth/account-created-email.adapter"
 
-test("buildAccountCreatedEmail: email の HTML 特殊文字をエスケープする ", () => {
+test("buildAccountCreatedEmail: email の HTML 特殊文字をエスケープする", () => {
   const content = AccountCreatedEmailAdapter.build({
     origin: "https://identity.example.test",
     token: "tok-1",

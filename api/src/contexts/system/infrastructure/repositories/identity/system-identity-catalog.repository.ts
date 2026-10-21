@@ -1,3 +1,5 @@
+import { SystemLastRootGuardAdapter } from "@system/infrastructure/adapters/iam/system-last-root-guard.adapter"
+import { SystemActorAccountCoverageAdapter } from "@system/infrastructure/adapters/iam/system-actor-account-coverage.adapter"
 import type { AccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { IdentityBindingEntity } from "@system/domain/entities/identity-binding.entity"
 import type { IdentityId } from "@system/domain/schemas/identity/identity-id.schema"
@@ -294,36 +296,10 @@ export class SystemIdentityCatalogRepository {
     actorAccountId: AccountId,
     targetAccountId: AccountId,
   ): D1PreparedStatement {
-    return this.c.env.DB.prepare(
-      `WITH actor_permissions AS (
-         SELECT DISTINCT permission.permission_key AS key
-         FROM system_accounts account
-         INNER JOIN system_role_bindings binding ON binding.account_id = account.id
-         INNER JOIN system_iam_role_permissions permission ON permission.role_id = binding.role_id
-         WHERE account.id = ?1
-           AND account.status = 'active'
-           AND binding.resource_type IS NULL
-           AND binding.revoked_at IS NULL
-       ), target_permissions AS (
-         SELECT DISTINCT permission.permission_key AS key
-         FROM system_role_bindings binding
-         INNER JOIN system_iam_role_permissions permission ON permission.role_id = binding.role_id
-         WHERE binding.account_id = ?2 AND binding.revoked_at IS NULL
-       )
-       SELECT CASE WHEN
-         ?1 = ?2
-         OR EXISTS (SELECT 1 FROM actor_permissions WHERE key = 'system:admin')
-         OR (
-           EXISTS (SELECT 1 FROM actor_permissions WHERE key = 'iam:write')
-           AND NOT EXISTS (
-             SELECT 1 FROM target_permissions target
-             WHERE NOT EXISTS (
-               SELECT 1 FROM actor_permissions actor WHERE actor.key = target.key
-             )
-           )
-         )
-       THEN 1 ELSE abs(-9223372036854775808) END AS ok`,
-    ).bind(actorAccountId, targetAccountId)
+    return new SystemActorAccountCoverageAdapter({ database: this.c.env.DB }).prepare(
+      actorAccountId,
+      targetAccountId,
+    )
   }
 
   private prepareAdditionalActiveIdentityGuard(
@@ -341,32 +317,10 @@ export class SystemIdentityCatalogRepository {
   }
 
   private prepareLastRootGuard(targetAccountId: AccountId): D1PreparedStatement {
-    return this.c.env.DB.prepare(
-      `SELECT CASE WHEN
-         NOT EXISTS (
-           SELECT 1
-           FROM system_role_bindings binding
-           INNER JOIN system_iam_role_permissions permission ON permission.role_id = binding.role_id
-           WHERE binding.account_id = ?1
-             AND binding.resource_type IS NULL
-             AND binding.revoked_at IS NULL
-             AND permission.permission_key = 'system:admin'
-         )
-         OR EXISTS (
-           SELECT 1
-           FROM system_accounts account
-           INNER JOIN system_identity_bindings identity ON identity.account_id = account.id
-           INNER JOIN system_role_bindings binding ON binding.account_id = account.id
-           INNER JOIN system_iam_role_permissions permission ON permission.role_id = binding.role_id
-           WHERE account.status = 'active'
-             AND identity.activated_at IS NOT NULL
-             AND identity.revoked_at IS NULL
-             AND binding.resource_type IS NULL
-             AND binding.revoked_at IS NULL
-             AND permission.permission_key = 'system:admin'
-         )
-       THEN 1 ELSE json_extract('', '$') END AS ok`,
-    ).bind(targetAccountId)
+    return new SystemLastRootGuardAdapter({
+      database: this.c.env.DB,
+      targetAccountId,
+    }).prepare()
   }
 
   private toView(row: IdentityRow): SystemIdentityCatalogView | Error {

@@ -60,8 +60,8 @@ export function handleOidcMetadataRequest(props: Props): Response | null {
   const metadata = {
     issuer,
     authorization_endpoint: `${issuer}/oauth/authorize`,
-    token_endpoint: `${issuer}/api/oauth/token`,
-    userinfo_endpoint: `${issuer}/api/oauth/userinfo`,
+    token_endpoint: `${issuer}/api/system/oauth/token`,
+    userinfo_endpoint: `${issuer}/api/system/oauth/userinfo`,
     jwks_uri: `${issuer}${JWKS_PATH}`,
     scopes_supported: OidcScopeValue.supported().items,
     response_types_supported: ["code"],

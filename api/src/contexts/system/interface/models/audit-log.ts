@@ -16,4 +16,6 @@ const zAppAuditLog = z.object({
 export const zAppAuditLogs = z.object({
   items: z.array(zAppAuditLog),
   total: z.number().int().min(0),
+  /** 続きのページに渡す境界。条件に合う行が無ければ null。 */
+  boundary: z.string().nullable(),
 })

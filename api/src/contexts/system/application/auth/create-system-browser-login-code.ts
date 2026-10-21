@@ -1,4 +1,5 @@
 import type { SystemClockContext, SystemD1Context } from "@system/configuration/system-context"
+import type { SystemReadAuthentication } from "@system/domain/definitions/system-read-authentication.definition"
 import { zSessionFamilyId } from "@system/domain/schemas/auth/session-family-id.schema"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { CreateSystemBrowserLoginCodeAdapter } from "@system/infrastructure/adapters/auth/create-system-browser-login-code.adapter"
@@ -7,21 +8,21 @@ import { z } from "zod"
 
 type Context = SystemClockContext & SystemD1Context
 
+export type SystemBrowserLoginCodeRequest = Readonly<{
+  /** 発行を求めた認証。codeはこの認証のtoken versionへ束縛し、交換時に現在値と一致しなければ拒否する。 */
+  authentication: SystemReadAuthentication
+  /** 発行を求めたaccess tokenのSession family。交換時に失効していれば拒否する。 */
+  sessionFamilyId: unknown
+}>
+
 export type SystemBrowserLoginCode = Readonly<{
   code: string
   expiresInSeconds: number
 }>
 
-export type CreateSystemBrowserLoginCodeCommand = Readonly<{
-  accountId: unknown
-  /** 発行を求めたcredentialが検証済みのtoken version。交換時に現在値と一致しなければ拒否する。 */
-  tokenVersion: unknown
-  /** 発行を求めたaccess tokenのSession family。交換時に失効していれば拒否する。 */
-  sessionFamilyId: unknown
-}>
-
 /**
  * 認証済みSystem Accountへ短命なbrowser login codeを発行する。
+ * 入口で受け付けた認証の世代と発行元が保存の時点で失効していれば、コードを保存せず null を返す。
  * codeは発行元credentialのtoken versionとSession familyへ束縛し、password resetやlogoutの後に
  * 失効前のcredentialから得たcodeで新しいSessionを作れないようにする。
  */
@@ -33,12 +34,16 @@ export class CreateSystemBrowserLoginCode {
   }
 
   async execute(
-    command: CreateSystemBrowserLoginCodeCommand,
-  ): Promise<SystemBrowserLoginCode | Error> {
+    request: SystemBrowserLoginCodeRequest,
+  ): Promise<SystemBrowserLoginCode | null | Error> {
     const now = this.c.var.now()
-    const accountId = zAccountId.safeParse(command.accountId)
-    const tokenVersion = z.number().int().nonnegative().safeParse(command.tokenVersion)
-    const sessionFamilyId = zSessionFamilyId.nullable().safeParse(command.sessionFamilyId)
+    const accountId = zAccountId.safeParse(request.authentication.accountId)
+    const tokenVersion = z
+      .number()
+      .int()
+      .nonnegative()
+      .safeParse(request.authentication.tokenVersion)
+    const sessionFamilyId = zSessionFamilyId.nullable().safeParse(request.sessionFamilyId)
     if (
       !Number.isSafeInteger(now.getTime()) ||
       !accountId.success ||
@@ -56,13 +61,19 @@ export class CreateSystemBrowserLoginCode {
       this.c,
     ).createSystemBrowserLoginCode({
       codeHash,
-      accountId: accountId.data,
-      tokenVersion: tokenVersion.data,
-      sessionFamilyId: sessionFamilyId.data,
+      origin: {
+        accountId: accountId.data,
+        tokenVersion: tokenVersion.data,
+        sessionFamilyId: sessionFamilyId.data,
+        machineCredentialId: request.authentication.machineCredentialId,
+        identityBindingId: request.authentication.identityBindingId,
+      },
       createdAt: now,
       expiresAt: new Date(now.getTime() + this.codeTtlMilliseconds),
     })
     if (creation instanceof Error) return creation
+
+    if (creation === "rejected") return null
 
     return {
       code: rawCode,

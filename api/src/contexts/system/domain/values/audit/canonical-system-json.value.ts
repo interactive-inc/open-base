@@ -97,7 +97,13 @@ export class CanonicalSystemJsonValue {
         if (descriptor.enumerable !== true) continue
         const child = CanonicalSystemJsonValue.normalize(descriptor.value, depth + 1, state)
         if (child instanceof InvalidSystemProposalError) return child
-        normalized[key] = child
+        // prototypeのsetterを呼ばず、任意のキーをデータとして保持する。
+        Object.defineProperty(normalized, key, {
+          value: child,
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        })
       }
 
       return normalized

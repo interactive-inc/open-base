@@ -106,7 +106,11 @@ export async function createSystemWorkTestFixture() {
         : {}),
     })
   }
-  function adapter(account: string, identityBindingId: string | null = null) {
+  function adapter(
+    account: string,
+    identityBindingId: string | null = null,
+    sessionFamilyId: string | null = null,
+  ) {
     return new SystemWorkAuthorizationAdapter({
       env: { DB: db },
       var: { now: () => clock.now },
@@ -117,6 +121,7 @@ export async function createSystemWorkTestFixture() {
         expiresAtMs: claims(account).exp * 1000,
         machineCredentialId: claims(account).machineCredentialId ?? null,
         identityBindingId,
+        sessionFamilyId,
       },
     })
   }

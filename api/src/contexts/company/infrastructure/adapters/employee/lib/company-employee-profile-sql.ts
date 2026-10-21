@@ -1,9 +1,12 @@
+import { companyEffectiveResourceRevisionSql } from "@/contexts/company/infrastructure/adapters/employee/lib/company-effective-resource-revision-sql"
+
 /**
  * ?1 の会社営業日に、従業員ごとの正本から氏名、従業員 code、連絡先を読む CTE を返す。
  *
  * 公開履歴へ接続済みの従業員は、公開した Person と従業員の resource から読む。退職者と入社前の従業員も
  * 対象にするので、会社営業日に有効な版を優先し、無ければ最も新しい版を使う。最も新しい版が取消なら
- * 値は NULL になる。公開履歴へ未接続の従業員は、接続されるまで従業員の表が唯一の原記録なので表を読む。
+ * 値は NULL になる。訂正された版は、正本の時点参照と同じ規則で候補から外す。
+ * 公開履歴へ未接続の従業員は、接続されるまで従業員の表が唯一の原記録なので表を読む。
  *
  * 利用側は最後の CTE `employee_profiles` に対して SELECT を続ける。
  */
@@ -16,6 +19,7 @@ export function companyEmployeeProfileSql(): string {
         effective_from DESC, revision DESC) AS profile_rank
     FROM company_resource_revisions AS resource
     WHERE resource_type IN ('person', 'employee')
+      AND ${companyEffectiveResourceRevisionSql("resource")}
   ),
   profiles AS (SELECT * FROM ranked_profiles WHERE profile_rank = 1 AND state = 'active'),
   connected_employees AS (

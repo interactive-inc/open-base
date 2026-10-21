@@ -41,6 +41,7 @@ export class PrepareRecordSourceFreezeAuthorizationAdapter {
     const human = await new SystemHumanOperationAuthorizationAdapter(this.c).prepare({
       accountId: authentication.accountId,
       tokenVersion: authentication.tokenVersion,
+      sessionFamilyId: authentication.sessionFamilyId,
       permissions: ["system:admin"],
       now: input.now,
     })

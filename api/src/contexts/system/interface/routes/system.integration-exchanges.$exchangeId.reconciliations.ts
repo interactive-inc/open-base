@@ -16,10 +16,12 @@ import {
 } from "@system/interface/errors"
 import { authenticateSystemAccessToken } from "@system/interface/middlewares/authenticate-system-access-token"
 import { systemFactory } from "@system/interface/request-environment/system-factory"
+import { systemReconciliationRunResponse } from "@system/interface/responses/system-reconciliation-run-response"
+import { uuidSchema } from "@/lib/validation/uuid.schema"
 import { zValidator } from "@hono/zod-validator"
 import { z } from "zod"
 
-const exchangeParam = z.object({ exchangeId: z.string().regex(/^\S{1,255}$/) })
+const exchangeParam = z.object({ exchangeId: uuidSchema })
 
 // @authorization permission integration:read - 外部交換の照合履歴を読む
 export const GET = systemFactory.createHandlers(
@@ -44,7 +46,15 @@ export const GET = systemFactory.createHandlers(
       env: { DB: context.env.DB },
     }).findMany(exchangeId)
     if (runs instanceof Error) throw new SystemIntegrationUnavailableError(runs)
-    return context.json({ reconciliations: runs }, 200)
+    return context.json(
+      {
+        reconciliations: runs.map((run) => ({
+          ...run,
+          created_at: new Date(run.created_at).toISOString(),
+        })),
+      },
+      200,
+    )
   },
 )
 
@@ -55,10 +65,10 @@ export const POST = systemFactory.createHandlers(
   zValidator(
     "json",
     z.object({
-      id: z.string().regex(/^\S{1,255}$/),
-      connector_id: z.string().regex(/^\S{1,255}$/),
+      id: uuidSchema,
+      connector_id: uuidSchema,
       assertion: z.object({
-        id: z.string().regex(/^\S{1,255}$/),
+        id: uuidSchema,
         external_key: z.string().trim().min(1).max(512),
         external_version: z.string().trim().min(1).max(255),
         payload_digest: z.string().regex(/^[0-9a-f]{64}$/),
@@ -127,15 +137,7 @@ export const POST = systemFactory.createHandlers(
     if (reconciliation instanceof Error) {
       throw new SystemIntegrationInvalidError(reconciliation)
     }
-    const after = StableSystemAuditJsonValue.create({
-      id: reconciliation.id,
-      exchange_id: reconciliation.exchangeId,
-      assertion_id: reconciliation.assertionId,
-      local_version: reconciliation.localVersion,
-      status: reconciliation.status,
-      item_count: reconciliation.items.length,
-      created_at: reconciliation.createdAt.toISOString(),
-    })
+    const after = StableSystemAuditJsonValue.create(systemReconciliationRunResponse(reconciliation))
     if (after === null || after instanceof Error) {
       throw new SystemIntegrationUnavailableError(after)
     }
@@ -162,6 +164,6 @@ export const POST = systemFactory.createHandlers(
     if (result instanceof Error) throw new SystemIntegrationInvalidError(result)
     if (result.kind === "conflict") throw new SystemIntegrationConflictError()
     if (result.kind === "unavailable") throw new SystemIntegrationUnavailableError(result.cause)
-    return context.json({ reconciliation: result.run }, 201)
+    return context.json({ reconciliation: systemReconciliationRunResponse(result.run) }, 201)
   },
 )

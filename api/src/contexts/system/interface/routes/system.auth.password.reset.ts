@@ -51,6 +51,7 @@ export const POST = systemFactory.createHandlers(
           c.executionCtx.waitUntil(task)
         } catch {
           // ExecutionContextの無い実行環境ではtaskをそのまま継続させる。taskはrejectしない。
+          return
         }
       },
     }).execute({

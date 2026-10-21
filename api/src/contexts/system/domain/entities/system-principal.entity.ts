@@ -1,5 +1,6 @@
 import { InvalidSystemPrincipalError } from "@system/domain/errors"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
+import { uuidSchema } from "@/lib/validation/uuid.schema"
 import { z } from "zod"
 
 const propsSchema = z
@@ -8,10 +9,7 @@ const propsSchema = z
     accountId: zAccountId,
     kind: z.enum(["human", "agent", "service", "connector"]),
     name: z.string().trim().min(1).max(200),
-    connectorId: z
-      .string()
-      .regex(/^\S{1,255}$/)
-      .nullable(),
+    connectorId: uuidSchema.nullable(),
     revision: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
     createdAt: z.date(),
     updatedAt: z.date(),

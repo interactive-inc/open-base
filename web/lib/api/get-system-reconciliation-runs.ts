@@ -45,7 +45,7 @@ function toReconciliationRun(row: Record<string, unknown>): SystemReconciliation
 
   if (typeof row.status !== "string") return null
 
-  if (typeof row.created_at !== "number") return null
+  if (typeof row.created_at !== "string") return null
 
   if (typeof row.item_count !== "number") return null
 

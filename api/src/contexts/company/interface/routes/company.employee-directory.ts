@@ -1,3 +1,4 @@
+import { canReadCompanyResource } from "@/contexts/company/interface/operations/company-resource-read-permission"
 /** /company/employee-directory */
 import { CompanyEmployeeDirectoryReadAdapter } from "@/contexts/company/infrastructure/adapters/employee/employee-directory-read.adapter"
 import {
@@ -14,7 +15,7 @@ import { z } from "zod"
 
 const factory = createFactory<CompanyHttpEnvironment>()
 
-// @authorization permission - Company Actor の company:read capability で在籍者だけを読む
+// @authorization permission - employee:read または company:admin で従業員名簿を読む
 export const GET = factory.createHandlers(
   zValidator(
     "query",
@@ -32,7 +33,7 @@ export const GET = factory.createHandlers(
   async (context) => {
     const actor = context.var.companyActor
     if (actor === undefined) throw new CompanyAuthenticationRequiredError()
-    if (!actor.hasCapability("company:read")) throw new CompanyReadForbiddenError()
+    if (!canReadCompanyResource(actor, "employee")) throw new CompanyReadForbiddenError()
     if (context.env.DB === undefined) throw new CompanyDatabaseUnavailableError()
 
     const query = context.req.valid("query")

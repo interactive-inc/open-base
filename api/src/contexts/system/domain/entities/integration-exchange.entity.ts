@@ -1,11 +1,12 @@
 import { InvalidSystemIntegrationError } from "@system/domain/errors"
+import { uuidSchema } from "@/lib/validation/uuid.schema"
 import { z } from "zod"
 
 const digestSchema = z.string().regex(/^[0-9a-f]{64}$/u)
 const exchangePropsSchema = z
   .object({
-    id: z.string().regex(/^\S{1,255}$/),
-    connectorId: z.string().regex(/^\S{1,255}$/),
+    id: uuidSchema,
+    connectorId: uuidSchema,
     direction: z.enum(["inbound", "outbound"]),
     operationKey: z.string().regex(/^[a-z][a-z0-9_.:-]{0,199}$/u),
     idempotencyKey: z.string().regex(/^\S{1,255}$/),

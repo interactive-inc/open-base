@@ -21,12 +21,12 @@ const run: SystemReconciliationRun = {
   assertion_id: "assertion-1",
   local_version: "v3",
   status: "matched",
-  created_at: Date.UTC(2026, 3, 1),
+  created_at: "2026-04-01T00:00:00.000Z",
   item_count: 12,
 }
 
 describe("SystemReconciliationSection", () => {
-  test("項目数と epoch の記録時刻を出す", async () => {
+  test("項目数と記録時刻を出す", async () => {
     mocks.getSystemReconciliationRuns.mockResolvedValue([run])
 
     render(await SystemReconciliationSection({ exchangeId: "exchange-1" }))

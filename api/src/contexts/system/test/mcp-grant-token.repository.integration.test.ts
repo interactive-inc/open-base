@@ -6,6 +6,28 @@ import { signJwtToken } from "@system/lib/auth/sign-jwt-token"
 const SECRET = "test-jwt-secret-value"
 const GRANT_TOKEN_MAX_AGE_SECONDS = 120
 
+/**
+ * 発行処理と同じclaimとheaderを持つ正常なgrant payload。拒否テストはここから対象の1条件だけを変え、
+ * 他の検査で先に拒否されて狙った検査の回帰を見逃さないようにする。
+ */
+function validGrantPayload(nowSeconds: number) {
+  return {
+    accountId: "50ea5eee-5cb5-4870-911a-e57ee3f7a81a",
+    tokenVersion: 0,
+    challenge: "challenge-abc",
+    purpose: "mcp-grant",
+    iss: "system",
+    aud: "system-mcp",
+    jti: "1f0c3e8a-3b7e-4d2c-9a51-6d1e2f7b8c90",
+    exp: nowSeconds + GRANT_TOKEN_MAX_AGE_SECONDS,
+    iat: nowSeconds,
+  }
+}
+
+function signGrant(payload: ReturnType<typeof validGrantPayload>) {
+  return signJwtToken(payload, SECRET, "mcp-grant+jwt")
+}
+
 describe("mcp-grant-token", () => {
   test("発行したトークンを検証するとAccount世代とchallengeが復元できる", async () => {
     const token = await createMcpGrantToken(
@@ -69,20 +91,24 @@ describe("mcp-grant-token", () => {
     expect(await verifyMcpGrantToken(tampered, SECRET)).toBeInstanceOf(Error)
   })
 
-  test("期限切れのトークンは拒否する", async () => {
-    const expiredAt = Math.floor(Date.now() / 1000) - 10
+  test("手で組み立てた正常なgrantは受理する", async () => {
+    const token = await signGrant(validGrantPayload(Math.floor(Date.now() / 1000)))
 
-    const token = await signJwtToken(
-      {
-        userId: "50ea5eee-5cb5-4870-911a-e57ee3f7a81a",
-        challenge: "challenge-abc",
-        purpose: "mcp-grant",
-        exp: expiredAt,
-        iat: expiredAt - GRANT_TOKEN_MAX_AGE_SECONDS,
-      },
-      SECRET,
-      "mcp-grant+jwt",
-    )
+    expect(await verifyMcpGrantToken(token, SECRET)).not.toBeInstanceOf(Error)
+  })
+
+  test("期限切れのトークンは拒否する", async () => {
+    const nowSeconds = Math.floor(Date.now() / 1000)
+    const expiredAt = nowSeconds - 10
+    const baseline = validGrantPayload(nowSeconds)
+
+    expect(await verifyMcpGrantToken(await signGrant(baseline), SECRET)).not.toBeInstanceOf(Error)
+
+    const token = await signGrant({
+      ...baseline,
+      exp: expiredAt,
+      iat: expiredAt - GRANT_TOKEN_MAX_AGE_SECONDS,
+    })
 
     expect(await verifyMcpGrantToken(token, SECRET)).toBeInstanceOf(Error)
   })
@@ -111,19 +137,11 @@ describe("mcp-grant-token", () => {
   })
 
   test("purpose が異なるトークンは拒否する", async () => {
-    const nowSeconds = Math.floor(Date.now() / 1000)
+    const baseline = validGrantPayload(Math.floor(Date.now() / 1000))
 
-    const token = await signJwtToken(
-      {
-        userId: "50ea5eee-5cb5-4870-911a-e57ee3f7a81a",
-        challenge: "challenge-abc",
-        purpose: "other-purpose",
-        exp: nowSeconds + 120,
-        iat: nowSeconds,
-      },
-      SECRET,
-      "mcp-grant+jwt",
-    )
+    expect(await verifyMcpGrantToken(await signGrant(baseline), SECRET)).not.toBeInstanceOf(Error)
+
+    const token = await signGrant({ ...baseline, purpose: "other-purpose" })
 
     expect(await verifyMcpGrantToken(token, SECRET)).toBeInstanceOf(Error)
   })
@@ -161,18 +179,11 @@ describe("mcp-grant-token", () => {
    * verifier を知らない相手でも交換できてしまう。schema の min(1) で入口を塞いでいることを固定する。
    */
   test("challenge が空のトークンは拒否する", async () => {
-    const nowSeconds = Math.floor(Date.now() / 1000)
+    const baseline = validGrantPayload(Math.floor(Date.now() / 1000))
 
-    const token = await signJwtToken(
-      {
-        userId: "50ea5eee-5cb5-4870-911a-e57ee3f7a81a",
-        challenge: "",
-        purpose: "mcp-grant",
-        exp: nowSeconds + 120,
-        iat: nowSeconds,
-      },
-      SECRET,
-    )
+    expect(await verifyMcpGrantToken(await signGrant(baseline), SECRET)).not.toBeInstanceOf(Error)
+
+    const token = await signGrant({ ...baseline, challenge: "" })
 
     expect(await verifyMcpGrantToken(token, SECRET)).toBeInstanceOf(Error)
   })

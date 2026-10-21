@@ -164,7 +164,10 @@ export const POST = factory.createHandlers(
     if (planned instanceof Error) throw new CompanyReadUnavailableError(planned)
     const result = await new ApplyOrganizationChange({
       actor,
-      repository: new D1CompanyResourceRepository({ database }),
+      repository: new D1CompanyResourceRepository({
+        database,
+        writeGuard: context.var.companyResourceWriteGuard,
+      }),
     }).execute({
       commandId: headers["idempotency-key"],
       expectedRevision,

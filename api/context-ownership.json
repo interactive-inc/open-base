@@ -14,7 +14,7 @@
       "profile"
     ],
     "infrastructure": ["adapters", "repositories", "schema"],
-    "interface": ["capabilities", "operations", "request-environment", "routes"]
+    "interface": ["capabilities", "operations", "ports", "request-environment", "routes"]
   },
   "businessAreaOwners": {},
   "routeOwners": {}

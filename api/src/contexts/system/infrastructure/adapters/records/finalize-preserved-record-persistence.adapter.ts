@@ -40,17 +40,19 @@ export class FinalizePreservedRecordPersistenceAdapter {
   async find(command: Command): Promise<PreservedRecordEntity | null | Error> {
     const proposal = await RecordPreservationProposalValue.create(command)
     if (proposal instanceof Error) return proposal
+    return this.findExecuted(proposal)
+  }
+
+  async findExecuted(
+    proposal: RecordPreservationProposalValue,
+  ): Promise<PreservedRecordEntity | null | Error> {
     if (
       this.c.authorization.operationKey !== "system.record.preserve" ||
-      this.c.authorization.grantedToAccountId !== command.record.snapshot.actorAccountId ||
+      this.c.authorization.grantedToAccountId !== proposal.props.actorAccountId ||
       this.c.authorization.proposalDigest !== proposal.props.digest.toString()
     )
       return new Error("record replay authorization does not match")
-    const existing = await new PreservedRecordRepository(this.c).findMatchingFinalization(
-      command.record,
-      command.disclosure,
-      command.preservation,
-    )
+    const existing = await new PreservedRecordRepository(this.c).findMatchingProposal(proposal)
     if (existing === null || existing instanceof Error) return existing
     try {
       const batches = await this.c.env.DB.batch([
@@ -66,7 +68,7 @@ export class FinalizePreservedRecordPersistenceAdapter {
           this.c.authorization.id,
           this.c.authorization.caseId,
           proposal.props.digest.toString(),
-          command.record.snapshot.actorAccountId,
+          proposal.props.actorAccountId,
           Date.parse(existing.snapshot.finalizedAt),
           existing.snapshot.id,
         ),

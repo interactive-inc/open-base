@@ -88,8 +88,6 @@ export class ExecuteRecordPreservationAdapter {
     const current = await this.c.source.revalidate(source)
     if (current instanceof Error || current.assertions.length === 0)
       return new RecordPreservationExecutionError("conflict")
-    const finalization = value.toFinalization({ actorAccountId: authentication.accountId, at })
-    if (finalization instanceof Error) return new RecordPreservationExecutionError("conflict")
     const authorization = ExecutionAuthorizationEntity.create({
       id: await createExecutionAuthorizationId("record-preservation", proposal.caseId),
       caseId: proposal.caseId,
@@ -112,12 +110,14 @@ export class ExecuteRecordPreservationAdapter {
         assertions,
         authorization,
         executionGuards: [technical[0]],
-      }).find(finalization)
+      }).findExecuted(value)
       if (existing === null || existing instanceof Error)
         return new RecordPreservationExecutionError("conflict")
       return { record_id: existing.snapshot.id, finalized_at: existing.snapshot.finalizedAt }
     }
     if (proposal.status !== "approved") return new RecordPreservationExecutionError("conflict")
+    const finalization = value.toFinalization({ actorAccountId: authentication.accountId, at })
+    if (finalization instanceof Error) return new RecordPreservationExecutionError("conflict")
     const qualification = await this.c.prepareExecution({
       applicationId: proposal.number,
       caseId: proposal.caseId,

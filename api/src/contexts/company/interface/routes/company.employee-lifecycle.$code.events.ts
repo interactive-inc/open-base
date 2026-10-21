@@ -50,6 +50,7 @@ export const GET = factory.createHandlers(
     })
     if (employee instanceof Error) throw new CompanyReadUnavailableError(employee)
     if (employee === null) {
+      if (!actor.hasPermission("employee:read")) throw new CompanyReadForbiddenError()
       throw new CompanyEmployeeNotFoundError()
     }
     if (actor.employeeId !== employee.id && !actor.hasPermission("employee:read")) {

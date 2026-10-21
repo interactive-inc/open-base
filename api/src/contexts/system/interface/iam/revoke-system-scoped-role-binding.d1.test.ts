@@ -133,3 +133,14 @@ test("actorが持たない権限を含むroleはresource管理者でも取消で
       .first<Record<string, unknown>>(),
   ).toEqual({ revoked_at: null })
 })
+
+test("globalのsystem:adminだけを持つ操作者は、resource管理権限を直接持たなくても取消できる", async () => {
+  const fixture = await createFixture()
+  await execSql(
+    fixture.database,
+    `UPDATE system_iam_role_permissions SET permission_key = 'system:admin' WHERE role_id = 'f8dc2e88-fc2d-4a67-8c0e-11db39f67d75';
+     INSERT INTO system_role_bindings (id, account_id, role_id, resource_type, resource_id, created_at) VALUES ('17e9fca7-165d-44c4-8e80-4b3d024c4554', '${otherAccount}', '848c3ab1-d54e-4ef8-82ff-dbc3e9f23620', 'demo:resource', 'resource-1', 0);`,
+  )
+
+  expect(await revoke(fixture)).toBe("revoked")
+})

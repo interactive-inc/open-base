@@ -3,6 +3,7 @@ import { SystemSessionTestContext } from "@system/test/system-session-test-conte
 import { systemFactory } from "@system/interface/request-environment/system-factory"
 import { authenticateSystemAccessToken } from "@system/interface/middlewares/authenticate-system-access-token"
 import { createSystemSessionApplications } from "@system/test/create-system-session-applications.test-support"
+import { requireIssuedSystemSession } from "@system/test/require-issued-system-session.test-support"
 import { describe, expect, setDefaultTimeout, test } from "bun:test"
 import { hc } from "hono/client"
 
@@ -46,14 +47,14 @@ describe("authenticateSystemAccessToken", () => {
     })
     expect(applications).not.toBeInstanceOf(Error)
     if (applications instanceof Error) return
-    const issuance = await applications.issue.execute({
-      accountId,
-      tokenVersion: 0,
-      now: new Date(),
-      auditContext: { authorizationJson: null, metadataJson: null },
-    })
-    expect(issuance).not.toBeInstanceOf(Error)
-    if (issuance instanceof Error || issuance.kind === "rejected") return
+    const issuance = requireIssuedSystemSession(
+      await applications.issue.execute({
+        accountId,
+        tokenVersion: 0,
+        now: new Date(),
+        auditContext: { authorizationJson: null, metadataJson: null },
+      }),
+    )
 
     const app = systemFactory
       .createApp()

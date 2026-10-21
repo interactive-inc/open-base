@@ -78,6 +78,19 @@ export class PreservedRecordRepository {
     disclosure: PreservedRecordDisclosurePolicyEntity,
     preservation: AttachmentPreservationEntity,
   ): Promise<PreservedRecordEntity | null | Error> {
+    const proposal = await RecordPreservationProposalValue.create({
+      record,
+      disclosure,
+      preservation,
+    })
+    if (proposal instanceof Error) return proposal
+    return this.findMatchingProposal(proposal)
+  }
+
+  /** 保存時のメタデータで承認内容を復元し、再送時刻による期間検査を避ける。 */
+  async findMatchingProposal(
+    requestedProposal: RecordPreservationProposalValue,
+  ): Promise<PreservedRecordEntity | null | Error> {
     try {
       const statements = [
         ...this.c.assertions,
@@ -87,7 +100,7 @@ export class PreservedRecordRepository {
         LEFT JOIN system_record_disclosure_policies p ON p.id = r.disclosure_policy_id AND p.revision = r.disclosure_policy_revision
         LEFT JOIN system_attachment_preservations h ON h.id = r.preservation_id
         LEFT JOIN system_audit_events a ON a.event_id = h.created_audit_event_id
-        WHERE r.id = ?1`).bind(record.snapshot.id),
+        WHERE r.id = ?1`).bind(requestedProposal.props.recordId),
       ]
       const batch = await this.c.env.DB.batch<{
         snapshot_json: string
@@ -116,14 +129,8 @@ export class PreservedRecordRepository {
         disclosure: storedDisclosure,
         preservation: storedPreservation,
       })
-      const requestedProposal = await RecordPreservationProposalValue.create({
-        record,
-        disclosure,
-        preservation,
-      })
       if (
         storedProposal instanceof Error ||
-        requestedProposal instanceof Error ||
         !storedProposal.props.digest.equals(requestedProposal.props.digest)
       )
         return new Error("record finalization conflicts with existing receipt")

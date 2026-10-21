@@ -472,11 +472,9 @@ export class SystemD1ProposalAdapter implements SystemProposalQuery {
   > {
     if (input.candidateAccountIds.length === 0) return null
     try {
-      const placeholders = input.candidateAccountIds.map((_, index) => `?${index + 6}`)
-      const exactDelegation =
-        input.delegationId === undefined
-          ? ""
-          : `AND delegation.id = ?${input.candidateAccountIds.length + 6}`
+      // 候補は最大 100 人なので、1 人 1 引数にすると D1 の 100 引数の上限を超える。
+      // 候補を 1 つの JSON 引数で渡し、人数にかかわらず引数を 6〜7 個に保つ。
+      const exactDelegation = input.delegationId === undefined ? "" : "AND delegation.id = ?7"
       const row = await this.c.env.DB.prepare(
         `SELECT delegation.id, delegation.delegator_account_id
          FROM system_delegations AS delegation
@@ -486,12 +484,12 @@ export class SystemD1ProposalAdapter implements SystemProposalQuery {
            AND delegation.starts_at <= ?3
            AND delegation.ends_at > ?3
            AND (delegation.revoked_at IS NULL OR delegation.revoked_at > ?3)
-           AND delegation.delegator_account_id IN (${placeholders.join(", ")})
+           AND delegation.delegator_account_id IN (SELECT value FROM json_each(?4))
            AND NOT EXISTS (
              SELECT 1 FROM system_decision_task_exclusions
              WHERE case_id = ?1
-               AND task_key = ?4
-               AND round = ?5
+               AND task_key = ?5
+               AND round = ?6
                AND excluded_account_id = ?2
            )
            AND (
@@ -525,9 +523,9 @@ export class SystemD1ProposalAdapter implements SystemProposalQuery {
           input.caseId,
           input.actorAccountId,
           input.at.getTime(),
+          JSON.stringify(input.candidateAccountIds),
           input.taskKey,
           input.round,
-          ...input.candidateAccountIds,
           ...(input.delegationId === undefined ? [] : [input.delegationId]),
         )
         .first<{ id: string; delegator_account_id: string }>()

@@ -294,3 +294,22 @@ test("request composition pins server source, storage and actor without acceptin
     }),
   ).toBeInstanceOf(Error)
 })
+
+test("executed retention replay identity does not require a fresh finalization time", async () => {
+  const original = await proposal({
+    hold: { ...hold, kind: "retention", retainUntil: "2026-09-14T00:00:00.000Z" },
+  })
+  if (original instanceof Error) throw original
+  const restored = await RecordPreservationProposalValue.restore(
+    JSON.parse(original.props.canonical.toString()),
+  )
+  if (restored instanceof Error) throw restored
+  for (const at of ["2026-09-14T00:00:00.000Z", "2026-09-15T00:00:00.000Z"]) {
+    expect(
+      restored.toFinalization({ actorAccountId: input.actorAccountId, at: new Date(at) }),
+    ).toBeInstanceOf(Error)
+    expect(restored.props.recordId).toBe(input.id)
+    expect(restored.props.actorAccountId).toBe(input.actorAccountId)
+    expect(restored.props.digest.equals(original.props.digest)).toBe(true)
+  }
+})

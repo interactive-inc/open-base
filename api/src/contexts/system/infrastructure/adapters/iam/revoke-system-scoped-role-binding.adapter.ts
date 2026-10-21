@@ -32,7 +32,17 @@ export class RevokeSystemScopedRoleBindingAdapter {
     try {
       const row = await input.database
         .prepare(
-          `SELECT EXISTS (
+          `SELECT (EXISTS (
+             SELECT 1 FROM system_accounts admin_actor
+             JOIN system_role_bindings admin_binding ON admin_binding.account_id = admin_actor.id
+             JOIN system_iam_role_permissions admin_permission
+               ON admin_permission.role_id = admin_binding.role_id
+             WHERE admin_actor.id = ?1 AND admin_actor.status = 'active'
+               AND admin_actor.closed_at IS NULL AND admin_binding.revoked_at IS NULL
+               AND admin_binding.resource_type IS NULL
+               AND admin_permission.permission_key = 'system:admin'
+           )
+           OR EXISTS (
              SELECT 1 FROM system_accounts actor
              JOIN system_role_bindings actor_binding ON actor_binding.account_id = actor.id
              JOIN system_iam_role_permissions permission ON permission.role_id = actor_binding.role_id
@@ -53,7 +63,7 @@ export class RevokeSystemScopedRoleBindingAdapter {
                      AND actor_permission.permission_key = target_permission.permission_key
                  )
                ))
-           ) AS allowed`,
+           )) AS allowed`,
         )
         .bind(
           input.actorAccountId,
@@ -78,7 +88,17 @@ export class RevokeSystemScopedRoleBindingAdapter {
       const statements = [
         c.database
           .prepare(
-            `SELECT CASE WHEN EXISTS (
+            `SELECT CASE WHEN (EXISTS (
+             SELECT 1 FROM system_accounts admin_actor
+             JOIN system_role_bindings admin_binding ON admin_binding.account_id = admin_actor.id
+             JOIN system_iam_role_permissions admin_permission
+               ON admin_permission.role_id = admin_binding.role_id
+             WHERE admin_actor.id = ?1 AND admin_actor.status = 'active'
+               AND admin_actor.closed_at IS NULL AND admin_binding.revoked_at IS NULL
+               AND admin_binding.resource_type IS NULL
+               AND admin_permission.permission_key = 'system:admin'
+           )
+           OR EXISTS (
                SELECT 1 FROM system_accounts actor
                JOIN system_role_bindings actor_binding ON actor_binding.account_id = actor.id
                JOIN system_iam_role_permissions permission ON permission.role_id = actor_binding.role_id
@@ -99,7 +119,7 @@ export class RevokeSystemScopedRoleBindingAdapter {
                        AND actor_permission.permission_key = target_permission.permission_key
                    )
                  )
-             ) THEN 1 ELSE json_extract('', '$') END AS ok`,
+             )) THEN 1 ELSE json_extract('', '$') END AS ok`,
           )
           .bind(
             c.actorAccountId,

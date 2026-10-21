@@ -1,4 +1,7 @@
-import { CompanyEmploymentResourceHistoryAdapter } from "@/contexts/company/infrastructure/adapters/employee/company-employment-resource-history.adapter"
+import {
+  CompanyEmploymentResourceHistoryAdapter,
+  type CompanyEmploymentResourceHistoryEntry,
+} from "@/contexts/company/infrastructure/adapters/employee/company-employment-resource-history.adapter"
 import type { CompanyResourceChangeEntity } from "@/contexts/company/domain/entities/company-resource-change.entity"
 import type { CompanyResourceEntity } from "@/contexts/company/domain/entities/company-resource.entity"
 import { CompanyEmploymentResourceTimelineValue } from "@/contexts/company/domain/values/company-employment-resource-timeline.value"
@@ -55,9 +58,28 @@ export class CompanyEmploymentResourceProjectionAdapter {
       return new CompanyResourceValidationError("invalid_resource")
     const history = await new CompanyEmploymentResourceHistoryAdapter(this.c).read(resource)
     if (history instanceof Error) return history
+    // 今回の版が訂正する版は、保存済みの履歴と同じく訂正元として渡す。渡さないと、発効日を直した訂正の
+    // 訂正元が有効な履歴に残り、正本の時点参照と違う期間を投影する。
+    const stagedCorrections = new Map(
+      props.change.corrections
+        .filter((correction) => correction.type === resource.type && correction.id === resource.id)
+        .map((correction) => [correction.revision, correction.correctsRevision]),
+    )
     const timeline = CompanyEmploymentResourceTimelineValue.create([
       ...history,
-      ...props.stagedHistory,
+      ...props.stagedHistory.map(
+        (staged): CompanyEmploymentResourceHistoryEntry => ({
+          organizationId: staged.organizationId,
+          type: staged.type,
+          id: staged.id,
+          revision: staged.revision,
+          state: staged.state,
+          effectiveFrom: staged.effectiveFrom,
+          effectiveTo: staged.effectiveTo,
+          attributes: staged.attributes,
+          correctsRevision: stagedCorrections.get(staged.revision) ?? null,
+        }),
+      ),
     ])
     if (timeline instanceof Error) return timeline
     const snapshot = await this.c.batch([

@@ -71,6 +71,11 @@ export class SystemMachineCredentialRepository {
     }
   }
 
+  /**
+   * credentialの追加は対象Principalとして認証する手段の付与なので、Role Bindingの付与と同じ上限を課す。
+   * 操作者がsystem:adminでなければ、対象Accountの全Bindingの権限をglobalで保有している必要がある。
+   * 事前読取ではなく保存batchの中で照合し、読取後の昇格・失効でもcredentialと監査を残さない。
+   */
   async create(
     actorAccountId: AccountId,
     credential: SystemMachineCredentialEntity,
@@ -162,28 +167,28 @@ export class SystemMachineCredentialRepository {
       if (auditStatements instanceof Error) return auditStatements
 
       const statements = [
+        /**
+         * 利用時刻（updated_at）の一致は条件にしない。並行した別の正しい認証が利用時刻を進めただけで
+         * 後続の認証を 401 にしてしまう。失効・期限・Account・Connector は保存の時点で確かめ、
+         * secret と失効の不可逆性は trigger が守る。利用時刻は大きい方へ進める。
+         */
         this.c.env.DB.prepare(
           `UPDATE system_machine_credentials
-           SET updated_at = ?2, last_used_at = ?2
-           WHERE id = ?1 AND status = 'active' AND updated_at = ?3
+           SET updated_at = max(updated_at, ?2),
+               last_used_at = max(coalesce(last_used_at, ?2), ?2)
+           WHERE id = ?1 AND status = 'active'
              AND created_at <= ?2 AND (expires_at IS NULL OR expires_at > ?2)
              AND EXISTS (
                SELECT 1 FROM system_principals AS principal
                INNER JOIN system_accounts AS account ON account.id = principal.account_id
                LEFT JOIN system_connectors AS connector ON connector.id = principal.connector_id
                WHERE principal.id = system_machine_credentials.principal_id
-                 AND principal.account_id = ?4 AND account.status = 'active'
-                 AND account.token_version = ?5
+                 AND principal.account_id = ?3 AND account.status = 'active'
+                 AND account.token_version = ?4
                  AND principal.kind IN ('agent', 'service', 'connector')
                  AND (principal.kind <> 'connector' OR connector.status = 'active')
              )`,
-        ).bind(
-          credential.id,
-          now.getTime(),
-          credential.updatedAt.getTime(),
-          accountId.data,
-          row.token_version,
-        ),
+        ).bind(credential.id, now.getTime(), accountId.data, row.token_version),
         this.c.env.DB.prepare(
           "SELECT CASE WHEN changes() = 1 THEN 1 ELSE abs(-9223372036854775808) END AS ok",
         ),

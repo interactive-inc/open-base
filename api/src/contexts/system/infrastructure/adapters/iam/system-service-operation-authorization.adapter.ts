@@ -28,6 +28,8 @@ FROM system_accounts account JOIN system_principals principal ON principal.accou
 WHERE account.id = ?1 AND account.status = 'active' AND account.closed_at IS NULL
   AND account.token_version = ?2 AND principal.kind = 'service'
   AND account.created_at <= ?3 AND principal.created_at <= ?3
+  AND (?5 IS NULL OR EXISTS (SELECT 1 FROM system_sessions session
+    WHERE session.family_id = ?5 AND session.account_id = account.id AND session.revoked_at IS NULL))
   AND (EXISTS (SELECT 1 FROM grants WHERE permission_key = 'system:admin')
     OR NOT EXISTS (SELECT 1 FROM json_each(?4) required
       WHERE NOT EXISTS (SELECT 1 FROM grants WHERE permission_key = required.value)))`
@@ -42,6 +44,7 @@ export class SystemServiceOperationAuthorizationAdapter {
     input: Readonly<{
       accountId: string
       tokenVersion: number
+      sessionFamilyId: string | null
       permissions: ReadonlyArray<string>
       now: Date
     }>,
@@ -66,6 +69,7 @@ export class SystemServiceOperationAuthorizationAdapter {
       input.tokenVersion,
       input.now.getTime(),
       JSON.stringify(input.permissions),
+      input.sessionFamilyId,
     ]
     try {
       const snapshot = await this.c.env.DB.prepare(authorizedActor)
@@ -74,8 +78,8 @@ export class SystemServiceOperationAuthorizationAdapter {
       if (snapshot === null) return "forbidden"
       const assertion =
         this.c.env.DB.prepare(`SELECT CASE WHEN EXISTS (SELECT 1 FROM (${authorizedActor}) actor
-        WHERE actor.principal_id = ?5 AND actor.principal_revision = ?6
-          AND actor.account_updated_at = ?7 AND actor.grants = ?8)
+        WHERE actor.principal_id = ?6 AND actor.principal_revision = ?7
+          AND actor.account_updated_at = ?8 AND actor.grants = ?9)
         THEN 1 ELSE json_extract('{}', 'system_service_authorization_changed') END AS ok`).bind(
           ...parameters,
           snapshot.principal_id,

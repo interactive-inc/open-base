@@ -19,14 +19,14 @@ export async function getSystemIntegrationExchange(
 
   return {
     id: body.exchange.id,
-    connectorId: body.exchange.connectorId,
+    connectorId: body.exchange.connector_id,
     direction: body.exchange.direction,
-    operationKey: body.exchange.operationKey,
-    idempotencyKey: body.exchange.idempotencyKey,
-    payloadDigest: body.exchange.payloadDigest,
+    operationKey: body.exchange.operation_key,
+    idempotencyKey: body.exchange.idempotency_key,
+    payloadDigest: body.exchange.payload_digest,
     status: body.exchange.status,
     attempt: body.exchange.attempt,
-    externalReference: body.exchange.externalReference,
-    lastErrorCode: body.exchange.lastErrorCode,
+    externalReference: body.exchange.external_reference,
+    lastErrorCode: body.exchange.last_error_code,
   }
 }

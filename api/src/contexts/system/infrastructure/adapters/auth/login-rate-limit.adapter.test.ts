@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, spyOn, test } from "bun:test"
 import { Database } from "bun:sqlite"
+import { readFileSync } from "node:fs"
 import { drizzle } from "drizzle-orm/bun-sqlite"
 import type { DrizzleD1Database } from "drizzle-orm/d1"
 import type {
@@ -10,9 +11,9 @@ import { LoginRateLimitAdapter } from "@/contexts/system/infrastructure/adapters
 import * as schema from "@system/infrastructure/schema/system-core"
 
 /**
- * : レートリミットを module-scope Map から D1 の system_authentication_attempts へ移した分散カウンタの検証。
- * 実 migration を全適用した bun:sqlite 上で、窓境界・失敗のみカウント・成功リセット・掃除・
- * 別インスタンス (=別 isolate 相当) からの可視性を固定する。窓判定は timestamp_ms 列の Date 比較に
+ * レートリミットを module-scope Map から D1 の system_authentication_attempts へ移した分散カウンタの検証。
+ * 対象テーブルと索引を正本の DDL で作成した bun:sqlite 上で、窓境界・失敗のみカウント・成功リセット・掃除・
+ * 別インスタンス (=別 isolate 相当) からの可視性を固定する。窓判定は attempted_at 列の Date 比較に
  * 依存するため、窓境界を「now で拒否 / now-WINDOW 直後で許可」の両端で assert して silent break を防ぐ。
  */
 
@@ -21,82 +22,80 @@ const MAX_ATTEMPTS = 10
 const MAX_ATTEMPTS_PER_ACCOUNT = MAX_ATTEMPTS * 2
 const MAX_ATTEMPTS_PER_IP = 50
 
-const sqlite = new Database(":memory:")
-sqlite.run(`
-  CREATE TABLE system_authentication_attempts (
-    id text PRIMARY KEY,
-    identifier text NOT NULL,
-    ip text,
-    attempted_at integer NOT NULL
-  )
-`)
-const db = drizzle(sqlite, { schema }) as unknown as DrizzleD1Database<typeof schema>
-const rateLimitContext: SystemDatabaseContext & SystemClockContext = {
-  var: { database: db, now: () => new Date() },
+const coreSchema = readFileSync(new URL("../../schema/system-core.sql", import.meta.url), "utf8")
+const authenticationAttemptsSchema = coreSchema.match(
+  /CREATE TABLE system_authentication_attempts \([\s\S]*?CREATE INDEX system_authentication_attempts_ip_attempted_at_idx[\s\S]*?;/,
+)?.[0]
+if (authenticationAttemptsSchema === undefined) {
+  throw new Error("Authentication attempts schema was not found")
 }
-const rateLimit = new LoginRateLimitAdapter(rateLimitContext)
+const sqlite = new Database(":memory:")
+sqlite.run(authenticationAttemptsSchema)
+const db = drizzle(sqlite, { schema }) as unknown as DrizzleD1Database<typeof schema>
+function createRateLimit(database: DrizzleD1Database<typeof schema>) {
+  const context: SystemDatabaseContext & SystemClockContext = {
+    var: { database, now: () => new Date() },
+  }
+  return new LoginRateLimitAdapter(context)
+}
+const rateLimit = createRateLimit(db)
 
 const loginRateLimitKey = (ip: string | null, identifier: string) =>
   LoginRateLimitAdapter.loginKey(ip, identifier)
 const internalVerifyRateLimitKey = (ip: string | null, userId: string) =>
   LoginRateLimitAdapter.internalVerifyKey(ip, userId)
 
-function isLoginRateLimited(
-  _database: DrizzleD1Database<typeof schema>,
-  key: string,
-  now?: number,
-) {
-  return rateLimit.isLimited({ key, now })
+function isLoginRateLimited(database: DrizzleD1Database<typeof schema>, key: string, now?: number) {
+  return createRateLimit(database).isLimited({ key, now })
 }
 
-function recordLoginAttempt(
-  _database: DrizzleD1Database<typeof schema>,
-  key: string,
-  now?: number,
-) {
-  return rateLimit.record({ key, now })
+function recordLoginAttempt(database: DrizzleD1Database<typeof schema>, key: string, now?: number) {
+  return createRateLimit(database).record({ key, now })
 }
 
-function resetLoginAttempts(_database: DrizzleD1Database<typeof schema>, key: string) {
-  return rateLimit.reset({ key })
+function resetLoginAttempts(database: DrizzleD1Database<typeof schema>, key: string) {
+  return createRateLimit(database).reset({ key })
 }
 
 function recordAndCheckLoginAttempt(
-  _database: DrizzleD1Database<typeof schema>,
+  database: DrizzleD1Database<typeof schema>,
   identifier: string,
   ip: string | null,
   now?: number,
 ) {
-  return rateLimit.recordAndCheck({ identifier, ip, now })
+  return createRateLimit(database).recordAndCheck({ identifier, ip, now })
 }
 
 function resetLoginAttemptsForIdentifier(
-  _database: DrizzleD1Database<typeof schema>,
+  database: DrizzleD1Database<typeof schema>,
   identifier: string,
 ) {
-  return rateLimit.resetForIdentifier({ identifier })
+  return createRateLimit(database).resetForIdentifier({ identifier })
 }
 
 /**
  * bun:sqlite の drizzle には D1 の db.batch が無い。recordAndCheckLoginAttempt の atomic 書込を
  * 逐次実行で代替する shim (他の db テストと同じ運用)。D1 は 1 database につき単一の SQLite 接続を
  * 直列実行するため、db.batch 呼び出しどうしは互いに割り込まない。この shim もキューで直列化し、
- * 並列 burst のテスト  が呼び出し順どおりに 1 件ずつ処理されるようにする
+ * 並列 burst のテストが呼び出し順どおりに 1 件ずつ処理されるようにする
  * (呼び出し元が Promise.all で同時に発火しても、実際の DB 書込順は各呼び出しが db.batch に
  * 到達した順=配列順になる)。
  */
-let batchQueue: Promise<unknown> = Promise.resolve()
-const withBatch = db as unknown as {
-  batch: (statements: ReadonlyArray<PromiseLike<unknown>>) => Promise<unknown[]>
+function addBatch(database: DrizzleD1Database<typeof schema>) {
+  let batchQueue: Promise<unknown> = Promise.resolve()
+  const withBatch = database as unknown as {
+    batch: (statements: ReadonlyArray<PromiseLike<unknown>>) => Promise<unknown[]>
+  }
+  withBatch.batch = (statements) => {
+    const run = batchQueue.then(() => Promise.all(statements))
+    batchQueue = run.then(
+      () => undefined,
+      () => undefined,
+    )
+    return run
+  }
 }
-withBatch.batch = (statements) => {
-  const run = batchQueue.then(() => Promise.all(statements))
-  batchQueue = run.then(
-    () => undefined,
-    () => undefined,
-  )
-  return run
-}
+addBatch(db)
 
 function countRows(identifier: string): number {
   const row = sqlite
@@ -236,16 +235,20 @@ describe("分散カウンタ (別インスタンス = 別 isolate 相当)", () =
     const dbA = drizzle(sqlite, { schema }) as unknown as DrizzleD1Database<typeof schema>
     const dbB = drizzle(sqlite, { schema }) as unknown as DrizzleD1Database<typeof schema>
 
+    const writer = createRateLimit(dbA)
+    const reader = createRateLimit(dbB)
+    expect(writer).not.toBe(reader)
     for (let i = 0; i < MAX_ATTEMPTS; i += 1) {
-      await recordLoginAttempt(dbA, "shared", 0)
+      await writer.record({ key: "shared", now: 0 })
     }
 
-    expect(await isLoginRateLimited(dbB, "shared", 0)).toBe(true)
+    expect(countRows("shared")).toBe(MAX_ATTEMPTS)
+    expect(await reader.isLimited({ key: "shared", now: 0 })).toBe(true)
   })
 })
 
 describe("DB 障害時は fail-open", () => {
-  test("system_authentication_attempts が無い DB でも throw せず判定 false・記録/リセットは黙って失敗する", async () => {
+  test("system_authentication_attempts が無い DB でも throw せず判定 false・記録/リセットはエラーを記録して継続する", async () => {
     /**
      * migration 未適用の空 DB を渡すと全クエリが "no such table" になる。fail-open なので
      * 判定は false を返し、記録・リセットは throw せずログイン処理を巻き戻さない。
@@ -253,14 +256,75 @@ describe("DB 障害時は fail-open", () => {
     const bareSqlite = new Database(":memory:")
     const bareDb = drizzle(bareSqlite, { schema }) as unknown as DrizzleD1Database<typeof schema>
 
-    expect(await isLoginRateLimited(bareDb, "x", 0)).toBe(false)
-    await recordLoginAttempt(bareDb, "x", 0)
-    await resetLoginAttempts(bareDb, "x")
-    expect(await isLoginRateLimited(bareDb, "x", 0)).toBe(false)
+    addBatch(bareDb)
+    const errors = spyOn(console, "error").mockImplementation(() => undefined)
+    try {
+      expect(await isLoginRateLimited(bareDb, "x", 0)).toBe(false)
+      await recordLoginAttempt(bareDb, "x", 0)
+      await resetLoginAttempts(bareDb, "x")
+      expect(await recordAndCheckLoginAttempt(bareDb, "x", null, 0)).toEqual({
+        limited: false,
+      })
+      await resetLoginAttemptsForIdentifier(bareDb, "x")
+
+      // 各操作の catch が実際のテーブル欠落を記録したことを確認し、正常 DB への誤接続を検出する。
+      expect(errors.mock.calls.map(([message]) => message)).toEqual([
+        "login rate limit check failed",
+        "login rate limit record failed",
+        "login rate limit reset failed",
+        "login rate limit gate failed",
+        "login rate limit reset failed",
+      ])
+      for (const [, error] of errors.mock.calls) {
+        expect(error).toBeInstanceOf(Error)
+        expect(String(error)).toContain("no such table: system_authentication_attempts")
+      }
+    } finally {
+      errors.mockRestore()
+      bareSqlite.close()
+    }
   })
 })
 
 describe("recordAndCheckLoginAttempt (原子的 3 バケットゲート)", () => {
+  test.each([
+    { name: "空の identifier", identifier: "", ip: "203.0.113.1" },
+    { name: "2049 文字の identifier", identifier: "a".repeat(2049), ip: "203.0.113.1" },
+    { name: "256 文字の ip", identifier: "user@example.com", ip: "a".repeat(256) },
+    { name: "NUL だけの identifier", identifier: "\u0000", ip: "203.0.113.1" },
+    { name: "NUL で始まる identifier", identifier: "\u0000user@example.com", ip: "203.0.113.1" },
+    { name: "NUL を含む identifier", identifier: "user\u0000@example.com", ip: "203.0.113.1" },
+    { name: "NUL を含む ip", identifier: "user@example.com", ip: "\u0000203.0.113.1" },
+  ])("$name は DB に触らず拒否する", async ({ identifier, ip }) => {
+    const errors = spyOn(console, "error").mockImplementation(() => undefined)
+    const insert = spyOn(db, "insert")
+    const select = spyOn(db, "select")
+    const batch = spyOn(db, "batch")
+    try {
+      expect(await rateLimit.recordAndCheck({ identifier, ip, now: 0 })).toEqual({ limited: true })
+      expect(
+        sqlite.query("SELECT count(*) AS total FROM system_authentication_attempts").get(),
+      ).toEqual({ total: 0 })
+      expect(insert).not.toHaveBeenCalled()
+      expect(select).not.toHaveBeenCalled()
+      expect(batch).not.toHaveBeenCalled()
+      expect(errors).not.toHaveBeenCalled()
+    } finally {
+      errors.mockRestore()
+      insert.mockRestore()
+      select.mockRestore()
+      batch.mockRestore()
+    }
+  })
+
+  test("上限の 2048 文字の identifier と 255 文字の ip は記録する", async () => {
+    const identifier = "a".repeat(2048)
+    expect(await rateLimit.recordAndCheck({ identifier, ip: "a".repeat(255), now: 0 })).toEqual({
+      limited: false,
+    })
+    expect(countRows(identifier)).toBe(1)
+  })
+
   test("同一 pair (IP+識別子) は 10 回まで許可、11 回目で拒否される", async () => {
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
       const result = await recordAndCheckLoginAttempt(db, "pair@example.com", "10.0.0.1", 0)
@@ -380,7 +444,7 @@ describe("recordAndCheckLoginAttempt (原子的 3 バケットゲート)", () =>
   })
 })
 
-describe("resetLoginAttemptsForIdentifier ", () => {
+describe("resetLoginAttemptsForIdentifier", () => {
   test("該当 identifier の行を全削除する一方、同じ IP の他アカウントの行は残す", async () => {
     await recordAndCheckLoginAttempt(db, "victim@example.com", "10.6.0.1", 0)
     await recordAndCheckLoginAttempt(db, "attacker@example.com", "10.6.0.1", 0)
@@ -389,5 +453,114 @@ describe("resetLoginAttemptsForIdentifier ", () => {
 
     expect(countRows("victim@example.com")).toBe(1)
     expect(countRows("attacker@example.com")).toBe(0)
+  })
+})
+
+describe("recordAndCheckPasswordReauthentication (パスワード再入力の Account 単位ゲート)", () => {
+  const accountId = "6b1f4c1e-5d9a-4b5e-9f7c-2a8d3e4f5a60"
+  const reauthenticationKey = `password-reauthentication|${accountId}`
+
+  function recordAndCheckReauthentication(now: number) {
+    return rateLimit.recordAndCheckPasswordReauthentication({ accountId, now })
+  }
+
+  test("ログインと同じ上限で 10 回まで許可し、11 回目を拒否する", async () => {
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+      expect((await recordAndCheckReauthentication(0)).limited).toBe(false)
+    }
+
+    expect((await recordAndCheckReauthentication(0)).limited).toBe(true)
+    // 拒否した試行は自分の行を消すので、窓が延びない。
+    expect(countRows(reauthenticationKey)).toBe(MAX_ATTEMPTS)
+  })
+
+  test("窓の経過で回復する (WINDOW_MS 直前は拒否、WINDOW_MS ちょうどで許可)", async () => {
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+      await recordAndCheckReauthentication(0)
+    }
+
+    expect((await recordAndCheckReauthentication(WINDOW_MS - 1)).limited).toBe(true)
+    expect((await recordAndCheckReauthentication(WINDOW_MS)).limited).toBe(false)
+  })
+
+  test("並列 burst (15 発) でも許可は 10 回までで、超過分は拒否される", async () => {
+    const results = await Promise.all(
+      Array.from({ length: 15 }, () => recordAndCheckReauthentication(0)),
+    )
+
+    expect(results.filter((result) => !result.limited).length).toBe(MAX_ATTEMPTS)
+    expect(results.filter((result) => result.limited).length).toBe(5)
+  })
+
+  test("成功時のリセットで行が消え、また 10 回試行できる", async () => {
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+      await recordAndCheckReauthentication(0)
+    }
+
+    await rateLimit.resetPasswordReauthentication({ accountId })
+
+    expect(countRows(reauthenticationKey)).toBe(0)
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+      expect((await recordAndCheckReauthentication(0)).limited).toBe(false)
+    }
+  })
+
+  test("ログインの失敗はこのカウンタに数えない (同じ文字列を識別子に送られても数えない)", async () => {
+    for (let attempt = 0; attempt < MAX_ATTEMPTS_PER_IP; attempt += 1) {
+      await recordAndCheckLoginAttempt(db, `login-user${attempt}@example.com`, null, 0)
+    }
+    for (let attempt = 0; attempt < MAX_ATTEMPTS_PER_ACCOUNT; attempt += 1) {
+      await recordAndCheckLoginAttempt(db, reauthenticationKey, `10.7.0.${attempt}`, 0)
+    }
+
+    expect((await recordAndCheckReauthentication(0)).limited).toBe(false)
+
+    // 成功時のリセットも、ログインのゲートが同じ文字列の識別子で入れた行には触れない。
+    await rateLimit.resetPasswordReauthentication({ accountId })
+    expect(countRows(reauthenticationKey)).toBe(MAX_ATTEMPTS_PER_ACCOUNT)
+  })
+
+  test("再入力の失敗はログインのどのバケットにも数えない", async () => {
+    for (let attempt = 0; attempt < MAX_ATTEMPTS * 3; attempt += 1) {
+      await recordAndCheckReauthentication(0)
+    }
+
+    // ip 無しのログインは anonymous バケットに入る。再入力の行が数えられていれば 50 回より前に拒否される。
+    for (let attempt = 0; attempt < MAX_ATTEMPTS_PER_IP; attempt += 1) {
+      const result = await recordAndCheckLoginAttempt(db, `spray${attempt}@example.com`, null, 0)
+      expect(result.limited).toBe(false)
+    }
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+      const result = await recordAndCheckLoginAttempt(db, "owner@example.com", "10.8.0.1", 0)
+      expect(result.limited).toBe(false)
+    }
+  })
+
+  test("ログインの成功リセットは再入力のカウンタを消さない (逆も)", async () => {
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+      await recordAndCheckReauthentication(0)
+    }
+    await recordAndCheckLoginAttempt(db, "owner@example.com", "10.9.0.1", 0)
+
+    await resetLoginAttemptsForIdentifier(db, "owner@example.com")
+    expect(countRows(reauthenticationKey)).toBe(MAX_ATTEMPTS)
+
+    await recordAndCheckLoginAttempt(db, "owner@example.com", "10.9.0.1", 0)
+    await rateLimit.resetPasswordReauthentication({ accountId })
+    expect(countRows("owner@example.com")).toBe(1)
+  })
+
+  test("DB 障害時はログインのゲートと同じく fail-open で許可する", async () => {
+    const bareSqlite = new Database(":memory:")
+    const bareDb = drizzle(bareSqlite, { schema }) as unknown as DrizzleD1Database<typeof schema>
+    addBatch(bareDb)
+    const bareRateLimit = new LoginRateLimitAdapter({
+      var: { database: bareDb, now: () => new Date(0) },
+    })
+
+    expect(
+      (await bareRateLimit.recordAndCheckPasswordReauthentication({ accountId, now: 0 })).limited,
+    ).toBe(false)
+    await bareRateLimit.resetPasswordReauthentication({ accountId })
   })
 })

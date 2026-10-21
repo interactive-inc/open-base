@@ -139,6 +139,10 @@ function toCompanyResource(row: CompanyResourceRow): CompanyResourceEntity | Err
 }
 type Context = Readonly<{
   database: D1Database
+  writeGuard?: Readonly<{
+    prepare: (change: CompanyResourceChangeEntity) => ReadonlyArray<D1PreparedStatement>
+    readFailure: (cause: unknown) => Error | null
+  }>
   atomicStatements?: ReadonlyArray<D1PreparedStatement>
   /** 同じcommandIdの再送で、Company外の同一batch書込も一致させる。 */
   atomicPayload?: unknown
@@ -528,6 +532,7 @@ export class D1CompanyResourceRepository implements CompanyResourceRepository {
       return { kind: "unavailable", cause: organizationProjection }
     const organizationRevision = change.expectedRevision + 1
     const statements = [
+      ...(this.c.writeGuard?.prepare(change) ?? []),
       ...journal.statements,
       ...organizationProjection.beforeWorkforce,
       ...projection,
@@ -551,7 +556,7 @@ export class D1CompanyResourceRepository implements CompanyResourceRepository {
       if (this.isWorkforceConstraintFailure(cause)) {
         return { kind: "invalid", error: new CompanyResourceValidationError("invalid_resource") }
       }
-      return { kind: "unavailable", cause }
+      return { kind: "unavailable", cause: this.c.writeGuard?.readFailure(cause) ?? cause }
     }
   }
 

@@ -6,7 +6,6 @@ import type { SystemD1Context } from "@system/configuration/system-context"
 type ResetProps = Readonly<{
   actorAccountId: AccountId
   targetAccountId: AccountId
-  identityId: IdentityId
   passwordHash: string
   now: Date
   auditStatements: ReadonlyArray<D1PreparedStatement>
@@ -21,7 +20,7 @@ export class SystemPasswordResetAdapter {
     Object.freeze(this)
   }
 
-  async findIdentityId(accountId: AccountId): Promise<IdentityId | null | Error> {
+  async findIdentityIds(accountId: AccountId): Promise<ReadonlyArray<IdentityId> | Error> {
     try {
       const rows = await this.c.env.DB.prepare(
         `SELECT id
@@ -30,19 +29,14 @@ export class SystemPasswordResetAdapter {
            AND provider = 'password'
            AND activated_at IS NOT NULL
            AND revoked_at IS NULL
-         ORDER BY created_at, id
-         LIMIT 2`,
+         ORDER BY created_at, id`,
       )
         .bind(accountId)
         .all<Readonly<{ id: string }>>()
       if (!rows.success) return new Error("failed to read System password Identity")
-      if (rows.results.length === 0) return null
-      if (rows.results.length !== 1) {
-        return new Error("System AccountEntity has multiple active password Identities")
-      }
-      const identityId = zIdentityId.safeParse(rows.results[0]?.id)
+      const identityIds = zIdentityId.array().safeParse(rows.results.map((row) => row.id))
 
-      return identityId.success ? identityId.data : identityId.error
+      return identityIds.success ? identityIds.data : identityIds.error
     } catch (caught) {
       return caught instanceof Error ? caught : new Error("failed to read System password Identity")
     }
@@ -55,20 +49,18 @@ export class SystemPasswordResetAdapter {
         this.c.env.DB.prepare(
           `UPDATE system_password_credentials
            SET password_hash = ?2,
-               changed_at = max(changed_at + 1, ?4),
-               updated_at = max(updated_at + 1, ?4)
-           WHERE identity_id = ?1
-             AND EXISTS (
-               SELECT 1 FROM system_identity_bindings
-               WHERE id = ?1
-                 AND account_id = ?3
+               changed_at = max(changed_at + 1, ?3),
+               updated_at = max(updated_at + 1, ?3)
+           WHERE identity_id IN (
+               SELECT id FROM system_identity_bindings
+               WHERE account_id = ?1
                  AND provider = 'password'
                  AND activated_at IS NOT NULL
                  AND revoked_at IS NULL
              )`,
-        ).bind(props.identityId, props.passwordHash, props.targetAccountId, props.now.getTime()),
+        ).bind(props.targetAccountId, props.passwordHash, props.now.getTime()),
         this.c.env.DB.prepare(
-          "SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('', '$') END AS ok",
+          "SELECT CASE WHEN changes() > 0 THEN 1 ELSE json_extract('', '$') END AS ok",
         ),
         this.c.env.DB.prepare(
           `UPDATE system_accounts
@@ -92,9 +84,9 @@ export class SystemPasswordResetAdapter {
         return "forbidden"
       }
       if (caught instanceof Error && caught.message.includes("malformed JSON")) {
-        const currentIdentityId = await this.findIdentityId(props.targetAccountId)
-        if (currentIdentityId === null) return "not_found"
-        if (currentIdentityId instanceof Error) return currentIdentityId
+        const currentIdentityIds = await this.findIdentityIds(props.targetAccountId)
+        if (currentIdentityIds instanceof Error) return currentIdentityIds
+        if (currentIdentityIds.length === 0) return "not_found"
 
         return new Error("System password credential is inconsistent", { cause: caught })
       }

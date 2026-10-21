@@ -10,6 +10,7 @@ export const zAppValidationIssue = z
     values: z.unknown().optional(),
     minimum: z.unknown().optional(),
     maximum: z.unknown().optional(),
+    inclusive: z.boolean().optional(),
     format: z.unknown().optional(),
     origin: z.unknown().optional(),
     keys: z.unknown().optional(),
@@ -18,6 +19,7 @@ export const zAppValidationIssue = z
 
 export const zAppStructuredValidationError = z.object({
   error: z.enum(["invalid_body", "invalid_query", "invalid_fields", "invalid_input"]),
+  message: z.string().optional(),
   issues: z.array(zAppValidationIssue).optional(),
 })
 

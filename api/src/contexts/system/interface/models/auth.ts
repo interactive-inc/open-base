@@ -12,7 +12,7 @@ export const zAppAuthAcknowledgement = z.object({
 
 /**
  * ログアウトの応答。switchedTo は残アカウントへ切り替わったときだけ true、
- * 完全ログアウト時は null 。
+ * 完全ログアウト時は null。
  */
 export const zAppLogoutResponse = z.object({
   item: z.object({

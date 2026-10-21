@@ -14,6 +14,7 @@ import {
 import { authenticateSystemAccessToken } from "@system/interface/middlewares/authenticate-system-access-token"
 import { requireSystemStepUp } from "@system/interface/middlewares/require-system-step-up"
 import { systemFactory } from "@system/interface/request-environment/system-factory"
+import { uuidSchema } from "@/lib/validation/uuid.schema"
 import { systemConnectorResponse } from "@system/interface/responses/system-connector-response"
 import { zValidator } from "@hono/zod-validator"
 import { z } from "zod"
@@ -22,7 +23,7 @@ import { z } from "zod"
 export const PATCH = systemFactory.createHandlers(
   authenticateSystemAccessToken,
   requireSystemStepUp,
-  zValidator("param", z.object({ connectorId: z.string().regex(/^\S{1,255}$/) }).strict()),
+  zValidator("param", z.object({ connectorId: uuidSchema }).strict()),
   zValidator(
     "json",
     z

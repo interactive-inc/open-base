@@ -22,8 +22,12 @@ describe("SystemDeliveryRepository", () => {
     const fixture = await createFixture()
     const repository = new SystemDeliveryRepository({ env: { DB: fixture.database } })
     const queued = createDelivery("a".repeat(64))
-    expect(await repository.create(queued, accountId, null, [])).toBe("created")
-    expect(await repository.create(queued, accountId, null, [])).toBe("replayed")
+    expect(await repository.create(queued, accountId, null, [])).toMatchObject({
+      status: "created",
+    })
+    expect(await repository.create(queued, accountId, null, [])).toMatchObject({
+      status: "replayed",
+    })
     expect(await repository.create(createDelivery("b".repeat(64)), accountId, null, [])).toBe(
       "conflict",
     )
@@ -73,8 +77,14 @@ describe("SystemDeliveryRepository", () => {
       payloadDigest: "d".repeat(64),
       receivedAt: now,
     }
-    expect(await repository.acceptInbox(input, [])).toBe("accepted")
-    expect(await repository.acceptInbox({ ...input, id: "inbox:2" }, [])).toBe("replayed")
+    expect(await repository.acceptInbox(input, [])).toMatchObject({
+      status: "accepted",
+      message: { id: input.id },
+    })
+    expect(await repository.acceptInbox({ ...input, id: "inbox:2" }, [])).toMatchObject({
+      status: "replayed",
+      message: { id: input.id },
+    })
     expect(
       await repository.acceptInbox({ ...input, id: "inbox:3", payloadDigest: "e".repeat(64) }, []),
     ).toBe("conflict")
@@ -90,6 +100,81 @@ describe("SystemDeliveryRepository", () => {
     expect(await repository.findDeadLetters()).toMatchObject([
       { sourceType: "inbox", sourceId: "inbox:1", reasonCode: "signature.invalid" },
     ])
+  })
+  test("jobの別ID再送は進行済み実体を返しhandler相違は競合する", async () => {
+    const fixture = await createFixture()
+    const repository = new SystemDeliveryRepository({ env: { DB: fixture.database } })
+    const queued = createDelivery("a".repeat(64))
+    expect(await repository.create(queued, accountId, null, [])).toMatchObject({
+      status: "created",
+    })
+    const leased = queued.claim(accountId, "c".repeat(64), now, 10_000)
+    if (leased instanceof Error) throw leased
+    expect(await repository.update(queued, leased, [])).toBe("updated")
+    const replay = await repository.replay({
+      kind: "job",
+      operationKey: queued.operationKey,
+      idempotencyKey: queued.idempotencyKey,
+      payloadDigest: queued.payloadDigest,
+      handlerKey: null,
+    })
+    expect(replay).toMatchObject({
+      status: "replayed",
+      delivery: { id: queued.id, status: "leased", attempt: 1 },
+    })
+    expect(
+      await repository.replay({
+        kind: "job",
+        operationKey: queued.operationKey,
+        idempotencyKey: queued.idempotencyKey,
+        payloadDigest: queued.payloadDigest,
+        handlerKey: "record.handler",
+      }),
+    ).toBe("conflict")
+    const resend = SystemDeliveryEntity.create({
+      id: crypto.randomUUID(),
+      kind: "job",
+      operationKey: queued.operationKey,
+      payloadDigest: queued.payloadDigest,
+      idempotencyKey: queued.idempotencyKey,
+      status: "queued",
+      attempt: 0,
+      maxAttempts: 1,
+      availableAt: now,
+      leaseAccountId: null,
+      leaseTokenHash: null,
+      leaseExpiresAt: null,
+      lastErrorCode: null,
+      createdAt: now,
+      updatedAt: now,
+      completedAt: null,
+    })
+    if (resend instanceof Error) throw resend
+    expect(await repository.create(resend, accountId, null, [])).toMatchObject({
+      status: "replayed",
+      delivery: { id: queued.id, status: "leased", attempt: 1 },
+    })
+  })
+
+  test("inboxの監査batch失敗は受信を部分保存しない", async () => {
+    const fixture = await createFixture()
+    const repository = new SystemDeliveryRepository({ env: { DB: fixture.database } })
+    const result = await repository.acceptInbox(
+      {
+        id: "inbox:rollback",
+        sourceKey: "source:rollback",
+        externalMessageId: "external:rollback",
+        payloadDigest: "a".repeat(64),
+        receivedAt: now,
+      },
+      [fixture.database.prepare("INSERT INTO missing_audit_table (id) VALUES ('failed')")],
+    )
+    expect(result).toBeInstanceOf(Error)
+    expect(
+      await fixture.database
+        .prepare("SELECT count(*) AS total FROM system_inbox_messages")
+        .first<Record<string, unknown>>(),
+    ).toEqual({ total: 0 })
   })
 })
 

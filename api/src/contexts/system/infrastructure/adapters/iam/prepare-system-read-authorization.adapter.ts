@@ -44,9 +44,11 @@ WHERE account.id = ?1 AND account.status = 'active' AND account.closed_at IS NUL
       AND (credential.expires_at IS NULL OR (credential.expires_at > ?3 AND credential.expires_at > (SELECT at FROM evaluation)))
       AND (principal.kind <> 'connector' OR connector.status = 'active')))
   AND (?6 IS NULL OR (identity.id IS NOT NULL AND identity.created_at <= (SELECT at FROM evaluation)
-    AND identity.activated_at IS NOT NULL AND identity.activated_at <= (SELECT at FROM evaluation) AND identity.revoked_at IS NULL))`
+    AND identity.activated_at IS NOT NULL AND identity.activated_at <= (SELECT at FROM evaluation) AND identity.revoked_at IS NULL))
+  AND (?8 IS NULL OR EXISTS (SELECT 1 FROM system_sessions session
+    WHERE session.family_id = ?8 AND session.account_id = account.id AND session.revoked_at IS NULL))`
 
-/** 現在のBearer発行元と権限を読み、開示監査の前後でも同じ資格と期限を要求する。 */
+/** 現在のBearer発行元・Session familyの未失効と権限を読み、開示監査の前後でも同じ資格と期限を要求する。 */
 export class PrepareSystemReadAuthorizationAdapter {
   constructor(private readonly c: Context) {
     Object.freeze(this)
@@ -72,6 +74,7 @@ export class PrepareSystemReadAuthorizationAdapter {
       authentication.machineCredentialId,
       authentication.identityBindingId,
       now.getTime(),
+      authentication.sessionFamilyId,
     ]
     try {
       // 発行元の照合と付与の読取を同じ batch で読み、往復を 1 回にする。
@@ -102,7 +105,7 @@ export class PrepareSystemReadAuthorizationAdapter {
             return new Error("read authorization time changed")
           return [
             this.c.env.DB.prepare(`SELECT CASE WHEN EXISTS (
-            SELECT 1 FROM (${authorizationSql}) current WHERE current.proof = ?8 AND current.permissions = ?9
+            SELECT 1 FROM (${authorizationSql}) current WHERE current.proof = ?9 AND current.permissions = ?10
           ) THEN 1 ELSE json_extract('{}','system_read_authorization_changed') END`).bind(
               ...parameters(now),
               snapshot.proof,

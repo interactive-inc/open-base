@@ -15,7 +15,7 @@ const AUTUMN = restoreCalendarDate("2026-09-01")
 
 /** 組織と改訂表と、その索引（作り直しを含む）だけを使う。参照整合の trigger を持たないので、版を直接置ける。 */
 const schema = splitSqlStatements(
-  readFileSync(new URL("../../schema/company.sql", import.meta.url), "utf8"),
+  readFileSync(new URL("../infrastructure/schema/company.sql", import.meta.url), "utf8"),
 )
   .filter(
     (statement) =>

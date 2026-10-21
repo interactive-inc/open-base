@@ -70,6 +70,7 @@ async function resolveSystemSession(props: {
         expiresAtMs: claims.exp * 1000,
         machineCredentialId: claims.machineCredentialId ?? null,
         identityBindingId: null,
+        sessionFamilyId: claims.sid ?? null,
       },
     }
   }
@@ -144,6 +145,7 @@ export class ResolveBearerAccountAdapter {
         expiresAtMs: external.expiresAtMs,
         machineCredentialId: null,
         identityBindingId: external.identityBindingId,
+        sessionFamilyId: null,
       },
     }
   }

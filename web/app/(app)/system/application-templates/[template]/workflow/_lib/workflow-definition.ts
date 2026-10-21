@@ -19,7 +19,6 @@ const responsibilityTypeSchema = z
   .regex(/^[A-Z][A-Z0-9_]*$/)
 
 const workflowApproverSelectorSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("role"), role_key: codeSchema }),
   z.object({ type: z.literal("employee"), employee_code: codeSchema }),
   z.object({ type: z.literal("direct_manager") }),
   z.object({ type: z.literal("department_manager") }),

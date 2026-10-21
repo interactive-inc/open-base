@@ -52,6 +52,7 @@ export type SystemClockContext = Readonly<{
 export type SystemAuthorizationContext = Readonly<{
   var: Readonly<{
     accountTokenVersion: number
+    accountSessionFamilyId?: string | null
     permissions: ReadonlySet<string>
     scopedPermissions?: ReadonlyMap<string, ReadonlySet<string>>
     role: string

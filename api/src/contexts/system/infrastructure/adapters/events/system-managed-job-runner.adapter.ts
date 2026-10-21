@@ -62,6 +62,7 @@ export class SystemManagedJobRunnerAdapter {
       const authorization = await new SystemServiceOperationAuthorizationAdapter(this.c).prepare({
         accountId: this.c.workerAccountId,
         tokenVersion,
+        sessionFamilyId: null,
         permissions: ["batch:execute"],
         now: at,
       })

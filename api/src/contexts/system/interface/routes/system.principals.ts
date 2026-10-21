@@ -15,6 +15,7 @@ import {
 import { authenticateSystemAccessToken } from "@system/interface/middlewares/authenticate-system-access-token"
 import { requireSystemStepUp } from "@system/interface/middlewares/require-system-step-up"
 import { systemFactory } from "@system/interface/request-environment/system-factory"
+import { uuidSchema } from "@/lib/validation/uuid.schema"
 import { systemPrincipalResponse } from "@system/interface/responses/system-principal-response"
 import { zValidator } from "@hono/zod-validator"
 import { z } from "zod"
@@ -26,7 +27,7 @@ const createBody = z.discriminatedUnion("kind", [
     .object({
       kind: z.literal("connector"),
       name: z.string().trim().min(1).max(200),
-      connector_id: z.string().regex(/^\S{1,255}$/),
+      connector_id: uuidSchema,
     })
     .strict(),
 ])

@@ -27,7 +27,7 @@ type Context = Readonly<{
   repository: OrganizationWorkforceChangeRepository
 }>
 
-/** Companyのappend-only組織台帳へ無効化revisionを追記する。 */
+/** 組織単位を会社営業日から廃止し、過去の組織・所属期間を残す。 */
 export class DeleteOrganizationUnit {
   constructor(private readonly c: Context) {
     Object.freeze(this)
@@ -131,7 +131,8 @@ export class DeleteOrganizationUnit {
         {
           ...current,
           revision: current.revision + 1,
-          isVoid: true,
+          endsOn: current.startsOn === asOf ? current.endsOn : asOf,
+          isVoid: current.startsOn === asOf,
           recordedByActionId: operationId,
           recordedAt,
         },

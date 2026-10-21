@@ -2,7 +2,7 @@ import { execSql } from "@system/test/local-d1/exec-sql.test-support"
 import { revokeSystemScopedRoleBindingsWithEffects } from "@system/interface/iam/revoke-system-scoped-role-bindings-with-effects"
 import { SystemSessionTestContext } from "@system/test/system-session-test-context.test-support"
 import { expect, setDefaultTimeout, test } from "bun:test"
-import { testAccountId } from "@system/test/system-test-id.test-support"
+import { testAccountId, testDerivedId } from "@system/test/system-test-id.test-support"
 
 // ローカルD1のtemplate作成とDBごとの往復を含むため、既定の5秒を超えることがある。
 setDefaultTimeout(30_000)
@@ -13,18 +13,13 @@ const otherAccount = testAccountId("other")
 
 const now = new Date("2026-01-02T00:00:00.000Z")
 
+/** 招待の主キーは UUID のため、名前から決まる値を使う。 */
+function invitationId(name: string): string {
+  return testDerivedId("invitation", name)
+}
+
 async function fixture() {
   const test = await SystemSessionTestContext.create()
-  await execSql(
-    test.database,
-    `CREATE TABLE system_account_invitations (
-    id TEXT PRIMARY KEY, token TEXT NOT NULL UNIQUE, email TEXT NOT NULL,
-    role_id TEXT NOT NULL, resource_type TEXT, resource_id TEXT,
-    related_resource_id TEXT, accepted_by_account_id TEXT,
-    expires_at INTEGER NOT NULL, revoked_at INTEGER,
-    created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
-  )`,
-  )
   for (const id of [actorAccount, targetAccount, otherAccount]) {
     await test.database
       .prepare(
@@ -86,19 +81,19 @@ function revoke(
 
 async function insertInvitation(
   test: SystemSessionTestContext,
-  id: string,
+  name: string,
   resourceId: string,
   relatedResourceId: string,
   state: "pending" | "used" | "expired" | "revoked" = "pending",
 ) {
   await test.database
     .prepare(`INSERT INTO system_account_invitations
-      (id, token, email, role_id, resource_type, resource_id, related_resource_id,
+      (id, token, subject, role_id, resource_type, resource_id, related_resource_id,
        accepted_by_account_id, expires_at, revoked_at, created_at, updated_at)
      VALUES (?1, ?1, 'person@example.com', '848c3ab1-d54e-4ef8-82ff-dbc3e9f23620', 'demo:resource', ?2, ?3,
              ?4, ?5, ?6, 0, 0)`)
     .bind(
-      id,
+      invitationId(name),
       resourceId,
       relatedResourceId,
       state === "used" ? targetAccount : null,
@@ -168,24 +163,26 @@ test("招待の施設・関連資源を限定し、未使用の有効招待だ�
   await insertInvitation(test, "used", "resource-1", "assignment-1", "used")
   await insertInvitation(test, "expired", "resource-1", "assignment-1", "expired")
   await insertInvitation(test, "revoked", "resource-1", "assignment-1", "revoked")
-  await insertInvitation(test, "dbcd34b4-9c95-419a-8fc3-d992cd5566d7", "resource-2", "assignment-1")
+  await insertInvitation(test, "other-resource", "resource-2", "assignment-1")
   await insertInvitation(test, "other-assignment", "resource-1", "assignment-2")
 
   expect(await revoke(test, ["assignment-1"])).toBe("revoked")
   expect(
     (
       await test.database
-        .prepare("SELECT id, revoked_at AS revokedAt FROM system_account_invitations ORDER BY id")
+        .prepare("SELECT id, revoked_at AS revokedAt FROM system_account_invitations")
         .all<Record<string, unknown>>()
-    ).results,
-  ).toEqual([
-    { id: "dbcd34b4-9c95-419a-8fc3-d992cd5566d7", revokedAt: null },
-    { id: "expired", revokedAt: null },
-    { id: "other-assignment", revokedAt: null },
-    { id: "pending", revokedAt: now.getTime() },
-    { id: "revoked", revokedAt: 1 },
-    { id: "used", revokedAt: null },
-  ])
+    ).results.toSorted((left, right) => String(left.id).localeCompare(String(right.id))),
+  ).toEqual(
+    [
+      { id: invitationId("other-resource"), revokedAt: null },
+      { id: invitationId("expired"), revokedAt: null },
+      { id: invitationId("other-assignment"), revokedAt: null },
+      { id: invitationId("pending"), revokedAt: now.getTime() },
+      { id: invitationId("revoked"), revokedAt: 1 },
+      { id: invitationId("used"), revokedAt: null },
+    ].toSorted((left, right) => left.id.localeCompare(right.id)),
+  )
   expect(
     (
       await test.database
@@ -194,7 +191,7 @@ test("招待の施設・関連資源を限定し、未使用の有効招待だ�
         )
         .all<Record<string, unknown>>()
     ).results,
-  ).toEqual([{ action: "system.account_invitation.revoked", targetId: "pending" }])
+  ).toEqual([{ action: "system.account_invitation.revoked", targetId: invitationId("pending") }])
 })
 
 test("最後の管理者を外せない場合は招待の失効も取り消す", async () => {
@@ -203,12 +200,14 @@ test("最後の管理者を外せない場合は招待の失効も取り消す",
   expect(await revoke(test, ["assignment-1"])).toBe("last_manager")
   expect(
     await test.database
-      .prepare("SELECT revoked_at FROM system_account_invitations WHERE id = 'pending'")
+      .prepare("SELECT revoked_at FROM system_account_invitations WHERE id = ?1")
+      .bind(invitationId("pending"))
       .first<Record<string, unknown>>(),
   ).toEqual({ revoked_at: null })
   expect(
     await test.database
-      .prepare("SELECT count(*) AS count FROM system_audit_events WHERE target_id = 'pending'")
+      .prepare("SELECT count(*) AS count FROM system_audit_events WHERE target_id = ?1")
+      .bind(invitationId("pending"))
       .first<Record<string, unknown>>(),
   ).toEqual({ count: 0 })
 })
@@ -233,13 +232,15 @@ test("招待の読み取り後に同じ資源の招待が増えたら全変更�
   expect(
     (
       await test.database
-        .prepare("SELECT id, revoked_at AS revokedAt FROM system_account_invitations ORDER BY id")
+        .prepare("SELECT id, revoked_at AS revokedAt FROM system_account_invitations")
         .all<Record<string, unknown>>()
-    ).results,
-  ).toEqual([
-    { id: "concurrent", revokedAt: null },
-    { id: "original", revokedAt: null },
-  ])
+    ).results.toSorted((left, right) => String(left.id).localeCompare(String(right.id))),
+  ).toEqual(
+    [
+      { id: invitationId("concurrent"), revokedAt: null },
+      { id: invitationId("original"), revokedAt: null },
+    ].toSorted((left, right) => left.id.localeCompare(right.id)),
+  )
   expect(
     await test.database
       .prepare(
@@ -249,7 +250,26 @@ test("招待の読み取り後に同じ資源の招待が増えたら全変更�
   ).toEqual({ revoked_at: null })
   expect(
     await test.database
-      .prepare("SELECT count(*) AS count FROM system_audit_events WHERE target_id = 'original'")
+      .prepare("SELECT count(*) AS count FROM system_audit_events WHERE target_id = ?1")
+      .bind(invitationId("original"))
       .first<Record<string, unknown>>(),
   ).toEqual({ count: 0 })
+})
+
+test("globalのsystem:adminだけを持つ操作者は、招待付きの全解除もできる", async () => {
+  const test = await fixture()
+  await execSql(
+    test.database,
+    `UPDATE system_iam_role_permissions SET permission_key = 'system:admin' WHERE role_id = 'f8dc2e88-fc2d-4a67-8c0e-11db39f67d75';
+     INSERT INTO system_role_bindings (id, account_id, role_id, resource_type, resource_id, created_at) VALUES ('17e9fca7-165d-44c4-8e80-4b3d024c4554', '${otherAccount}', '848c3ab1-d54e-4ef8-82ff-dbc3e9f23620', 'demo:resource', 'resource-1', 0);`,
+  )
+  await insertInvitation(test, "pending", "resource-1", "assignment-1")
+
+  expect(await revoke(test, ["assignment-1"])).toBe("revoked")
+  expect(
+    await test.database
+      .prepare("SELECT revoked_at AS revokedAt FROM system_account_invitations WHERE id = ?1")
+      .bind(invitationId("pending"))
+      .first<Record<string, unknown>>(),
+  ).toEqual({ revokedAt: now.getTime() })
 })
