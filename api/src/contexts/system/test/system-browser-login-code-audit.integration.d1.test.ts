@@ -1,5 +1,7 @@
 import { execSql } from "@system/test/local-d1/exec-sql.test-support"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
+import { zSessionFamilyId } from "@system/domain/schemas/auth/session-family-id.schema"
+import { CreateSystemBrowserLoginCode } from "@system/application/auth/create-system-browser-login-code"
 import { ConsumeSystemBrowserLoginCodeAdapter } from "@system/infrastructure/adapters/auth/consume-system-browser-login-code.adapter"
 import { CreateSystemBrowserLoginCodeAdapter } from "@system/infrastructure/adapters/auth/create-system-browser-login-code.adapter"
 import { createSystemAttachmentTestDatabase } from "@system/test/create-system-attachment-test-database.test-support"
@@ -150,5 +152,89 @@ describe("System browser login code audit", () => {
         .prepare("SELECT code_hash FROM system_browser_login_codes ORDER BY code_hash")
         .all(),
     ).toMatchObject({ results: [{ code_hash: "b".repeat(64) }] })
+  })
+
+  describe("Session familyの期限", () => {
+    const familyId = zSessionFamilyId.parse("0d6f1e2a-3b4c-4d5e-8f60-718293a4b5c6")
+
+    async function insertFamilySession(database: D1Database, expiresAtMs: number) {
+      await execSql(
+        database,
+        `INSERT INTO system_sessions (id, account_id, family_id, token_hash, token_version, created_at, expires_at, rotated_at, revoked_at)
+         VALUES ('5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b', 'fcd3b186-db56-4b04-8df7-acf9afd0c292', '${familyId}', '${"c".repeat(64)}', 0, 1, ${expiresAtMs}, NULL, NULL);`,
+      )
+    }
+
+    test("発行元のSessionの期限が切れていれば、失効していなくてもcodeを保存しない", async () => {
+      const database = await createDatabase()
+      await insertFamilySession(database, 900)
+
+      expect(
+        await new CreateSystemBrowserLoginCodeAdapter({
+          env: { DB: database },
+        }).createSystemBrowserLoginCode({
+          codeHash,
+          origin: { ...origin, sessionFamilyId: familyId },
+          createdAt,
+          expiresAt,
+        }),
+      ).toBe("rejected")
+      expect(await readAudits(database)).toEqual([])
+    })
+
+    test("交換までに発行元のSessionの期限が切れていれば、familyを有効として返さない", async () => {
+      const database = await createDatabase()
+      const context = { env: { DB: database } }
+      await insertFamilySession(database, 1_500)
+
+      expect(
+        await new CreateSystemBrowserLoginCodeAdapter(context).createSystemBrowserLoginCode({
+          codeHash,
+          origin: { ...origin, sessionFamilyId: familyId },
+          createdAt,
+          expiresAt,
+        }),
+      ).toBe("created")
+      expect(
+        await new ConsumeSystemBrowserLoginCodeAdapter(context).consumeSystemBrowserLoginCode(
+          codeHash,
+          new Date(2_000),
+        ),
+      ).toEqual({ accountId, tokenVersion: 0, sessionFamilyActive: false })
+    })
+  })
+
+  test("machine credentialで認証した要求にはcodeを発行しない", async () => {
+    const database = await createDatabase()
+    // credentialは有効なままにして、失効の照合ではなく発行の拒否で止まることを確かめる。
+    await execSql(
+      database,
+      `INSERT INTO system_principals (id, account_id, kind, name, revision, created_at, updated_at)
+         VALUES ('2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f', 'fcd3b186-db56-4b04-8df7-acf9afd0c292', 'service', 'Service', 1, 1, 1);
+       INSERT INTO system_machine_credentials (id, principal_id, name, secret_hash, status, created_at, updated_at)
+         VALUES ('8a7b6c5d-4e3f-4a2b-9c1d-0e9f8a7b6c5d', '2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f', 'Service key', '${"d".repeat(64)}', 'active', 1, 1);`,
+    )
+
+    const creation = await new CreateSystemBrowserLoginCode({
+      env: { DB: database },
+      var: { now: () => createdAt },
+    }).execute({
+      authentication: {
+        accountId,
+        tokenVersion: 0,
+        issuedAtMs: createdAt.getTime(),
+        expiresAtMs: expiresAt.getTime(),
+        machineCredentialId: "8a7b6c5d-4e3f-4a2b-9c1d-0e9f8a7b6c5d",
+        identityBindingId: null,
+        sessionFamilyId: null,
+      },
+      sessionFamilyId: null,
+    })
+
+    expect(creation).toBeNull()
+    expect(
+      await database.prepare("SELECT code_hash FROM system_browser_login_codes").all(),
+    ).toMatchObject({ results: [] })
+    expect(await readAudits(database)).toEqual([])
   })
 })

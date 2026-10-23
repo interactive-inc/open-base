@@ -40,6 +40,7 @@ const insertSql = `INSERT INTO system_browser_login_codes
       WHERE session.family_id = ?6
         AND session.account_id = account.id
         AND session.revoked_at IS NULL
+        AND session.expires_at > ?3
     ))
     AND (?7 IS NULL OR EXISTS (
       SELECT 1 FROM system_principals principal

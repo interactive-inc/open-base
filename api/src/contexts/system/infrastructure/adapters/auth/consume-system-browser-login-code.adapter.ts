@@ -9,6 +9,7 @@ type Context = SystemD1Context
 /**
  * 未失効のbrowser token交換用codeを一度だけ消費し、消費監査と同じbatchで確定する。
  * 発行元credentialのtoken versionと、発行元Session familyが現在も有効かを返し、交換側が照合する。
+ * Session familyは、失効しておらず期限も切れていないSessionが残っているときだけ有効とする。
  */
 export class ConsumeSystemBrowserLoginCodeAdapter {
   constructor(private readonly c: Context) {
@@ -36,6 +37,7 @@ export class ConsumeSystemBrowserLoginCodeAdapter {
                       WHERE session.family_id = code.session_family_id
                         AND session.account_id = code.account_id
                         AND (session.revoked_at IS NULL OR session.revoked_at > ?2)
+                        AND session.expires_at > ?2
                     )
                   END AS session_family_active
            FROM system_browser_login_codes AS code

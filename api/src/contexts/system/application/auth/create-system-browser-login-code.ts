@@ -25,6 +25,8 @@ export type SystemBrowserLoginCode = Readonly<{
  * 入口で受け付けた認証の世代と発行元が保存の時点で失効していれば、コードを保存せず null を返す。
  * codeは発行元credentialのtoken versionとSession familyへ束縛し、password resetやlogoutの後に
  * 失効前のcredentialから得たcodeで新しいSessionを作れないようにする。
+ * machine credentialで認証した要求には発行しない。機械の主体がbrowserでloginする理由は無く、
+ * 交換で作るbrowser Sessionは元のcredentialの失効に連動しないためである。
  */
 export class CreateSystemBrowserLoginCode {
   private readonly codeTtlMilliseconds = 60_000
@@ -52,6 +54,7 @@ export class CreateSystemBrowserLoginCode {
     ) {
       return new Error("browser login code is unavailable")
     }
+    if (request.authentication.machineCredentialId !== null) return null
 
     const rawCode = crypto.randomUUID()
     const codeHash = await systemLoginCodeHash(rawCode)
