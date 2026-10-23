@@ -193,6 +193,7 @@
     "src/contexts/company/domain/policies/apply-lifecycle-mutations.policy.ts",
     "src/contexts/company/domain/policies/can-apply-organization-change.policy.test.ts",
     "src/contexts/company/domain/policies/can-apply-organization-change.policy.ts",
+    "src/contexts/company/domain/policies/can-write-company-definitions.policy.test.ts",
     "src/contexts/company/domain/policies/can-write-company-definitions.policy.ts",
     "src/contexts/company/domain/policies/company-governance-authority.policy.test.ts",
     "src/contexts/company/domain/policies/company-governance-authority.policy.ts",

@@ -44,6 +44,7 @@ const actor = CompanyActorValue.restore({
     "employee:read",
     "employee:attributes:read",
     "org:write",
+    "master:position:write",
     "employee:write",
     "employee:write:attributes",
   ],
