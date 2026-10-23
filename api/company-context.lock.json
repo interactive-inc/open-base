@@ -1,7 +1,7 @@
 {
   "version": 1,
   "files": {
-    "company-context.manifest.json": "b5ef3dbdc95741b4ea247dff48a61e82b67bf2a4ea475a9be0f7f5cb61415cf1",
+    "company-context.manifest.json": "ae1148b5d06dae226bd573da2f03c86a915fba11b1f0e2e357d26cfd02ae7784",
     "src/contexts/company/AGENTS.md": "3d0dc1a9f6b424d37b4565cfc2c23bea199349e9840d61596adbdb1f060d3e6d",
     "src/contexts/company/application/account-employee-links/create-account-employee-links.ts": "c81fb1365056c64faecffe101778e5621317f37de70599960b56b624765f5af4",
     "src/contexts/company/application/account-employee-links/delete-account-employee-links.ts": "d8c13446d4fd39870e55096e298ccd99b230a75795049682731f88212439fa89",
@@ -193,7 +193,8 @@
     "src/contexts/company/domain/policies/apply-lifecycle-mutations.policy.ts": "c8a50dc5ae67b45ead43c70c3193629cc18dc9bf291e4a53cbf3a307fe673a3c",
     "src/contexts/company/domain/policies/can-apply-organization-change.policy.test.ts": "628f0ea86f650aa12d886e5e5db9a3f03e589148dd0f2124b1be57a111b0f0f3",
     "src/contexts/company/domain/policies/can-apply-organization-change.policy.ts": "62197279ab5a1de77c6ee1c107b6390d952b8f186a660a526dd1d05a7caffb5f",
-    "src/contexts/company/domain/policies/can-write-company-definitions.policy.ts": "718b9f461fe29b667c6b53f9d378cc68d992e9f4bf55e7c0994afed6400b27da",
+    "src/contexts/company/domain/policies/can-write-company-definitions.policy.test.ts": "145dcc3e8b53267aa3b3a8ac4b5928543a0e9370069360e9989747f49496d360",
+    "src/contexts/company/domain/policies/can-write-company-definitions.policy.ts": "a519248ea183003723b4b16386470ab58351109c112641a9fb9f17464364ee41",
     "src/contexts/company/domain/policies/company-governance-authority.policy.test.ts": "8ab02ad45ae1dcd44e5efb28b01f24649ed70f80c73faa98d5a84cb12139bf62",
     "src/contexts/company/domain/policies/company-governance-authority.policy.ts": "5ba23c349a6d52a0728afbc00069d3cd52cf905c2d4d59e2b527697c56edbc1c",
     "src/contexts/company/domain/policies/company-organization.policy.ts": "306762afa60b171025e537f2ebfb2f05350eff8f47a4371b5e934b901e8b28f5",
@@ -643,7 +644,7 @@
     "src/contexts/company/test/assignment-resource-adoption.integration.d1.test.ts": "e9a5b617f2a99669c284fb296536ce216ee43d72d008793e12fae93b5c02c964",
     "src/contexts/company/test/company-account-profile-operations.integration.d1.test.ts": "ca8aa50de1ab949c02b1e903967bf41465f3e7e86d5942088bec1135c14a521c",
     "src/contexts/company/test/company-account-profile.integration.d1.test.ts": "3b134800122b54923015f8afd7bfc31f0d9be599d6c580594ac7478e8ec69b2e",
-    "src/contexts/company/test/company-api.integration.d1.test.ts": "e1847d22a37649eb992205007d3dd82a887ac301df3b8b789e3bc24c84bac72d",
+    "src/contexts/company/test/company-api.integration.d1.test.ts": "ec855cb8cc3ca23ffcb355654d7ccffa2f92ef0a29898062e73084dd70decc63",
     "src/contexts/company/test/company-assignment-resource-projection.integration.d1.test.ts": "fdf2c043685f81ad89c396046278804ea8b73dc006efddef2d7ed34efea79129",
     "src/contexts/company/test/company-assignment-resource.test-support.ts": "225210bc624434157a4d6b7b76dc4b86e04b890c4507fd52132fda1fc457b724",
     "src/contexts/company/test/company-authority-employment.integration.d1.test.ts": "bd16a25bdea9266ff7d584bfd87d68f2b1e1f17f2d07c6dc9bc611e16beebf1c",
