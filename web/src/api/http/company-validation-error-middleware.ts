@@ -1,4 +1,4 @@
-import type { HonoEnv } from "@/env"
+import type { HonoEnv } from "@/bindings"
 import { CompanyHTTPException } from "@/contexts/company/interface/errors"
 import { createMiddleware } from "hono/factory"
 import type { MiddlewareHandler } from "hono"

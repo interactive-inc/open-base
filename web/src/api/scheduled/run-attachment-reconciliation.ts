@@ -1,5 +1,5 @@
 import { reconcileSystemAttachmentObjects } from "@system/interface/operations/reconcile-system-attachment-objects"
-import type { Bindings } from "@/env"
+import type { Bindings } from "@/bindings"
 
 /** 一回の定期起動で確認する添付の量。残りはSystemに記録した位置から次回の起動が続ける。 */
 const RECONCILIATION_LIMITS = { chunkSize: 100, maxChunks: 10 } as const

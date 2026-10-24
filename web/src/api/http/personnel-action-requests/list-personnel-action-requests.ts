@@ -6,7 +6,7 @@ import type {
 } from "@/contexts/company/domain/definitions/personnel-action-request-record.definition"
 import { personnelActionInputSchema } from "@/contexts/company/domain/definitions/lifecycle-types.definition"
 import type { EmployeeId } from "@/contexts/company/domain/definitions/workforce-id.definition"
-import type { Context } from "@/env"
+import type { Context } from "@/bindings"
 import type { CompanySessionValue } from "@/contexts/company/domain/values/company-session.value"
 import { UnexpectedError } from "@/lib/errors"
 import { readSystemWorkflowReferences } from "@system/interface/operations/read-system-workflow-references"

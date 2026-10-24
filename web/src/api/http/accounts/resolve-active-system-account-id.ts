@@ -1,4 +1,4 @@
-import type { Context } from "@/env"
+import type { Context } from "@/bindings"
 import type { AccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { readSystemAccountSnapshot } from "@system/interface/operations/read-system-account-snapshot"
 

@@ -1,6 +1,7 @@
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
+import { apiUrl } from "@/lib/api-url.ts"
 
 type EndpointTokens = {
   token: string | null
@@ -70,7 +71,7 @@ async function tryRefresh(
   refreshToken: string,
 ): Promise<{ access_token: string; refresh_token: string | null } | null> {
   try {
-    const url = new URL("/system/sessions", baseUrl)
+    const url = apiUrl("/system/sessions", baseUrl)
 
     const res = await fetch(url, {
       method: "PATCH",
@@ -187,7 +188,7 @@ export async function apiRequest<T = unknown>(
 ): Promise<T> {
   const { baseUrl, token } = await ensureAuth()
 
-  const url = new URL(path, baseUrl)
+  const url = apiUrl(path, baseUrl)
 
   for (const [key, value] of Object.entries(options.query ?? {})) {
     if (value !== null && value !== undefined && value !== "") {

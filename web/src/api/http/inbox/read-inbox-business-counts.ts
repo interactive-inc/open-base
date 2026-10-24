@@ -3,7 +3,7 @@ import {
   type InboxBusinessCounts,
   type InboxCountInput,
 } from "@/api/http/inbox/inbox-count-input"
-import type { Context } from "@/env"
+import type { Context } from "@/bindings"
 import { ApplicationError } from "@/lib/errors"
 
 /**

@@ -40,7 +40,7 @@ test("retries preserve the exact command, version and key without fetching a new
     expect(await saveGradeDefinition(command)).toMatchObject({ replayed: retry })
   expect(requests).toHaveLength(2)
   for (const request of requests) {
-    expect(new URL(request.url).pathname).toBe("/company/definitions")
+    expect(new URL(request.url).pathname).toBe("/api/company/definitions")
     expect(request.method).toBe("POST")
     expect(request.headers.get("if-match")).toBe("7")
     expect(request.headers.get("idempotency-key")).toBe(command.commandId)

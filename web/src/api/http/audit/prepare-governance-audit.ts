@@ -4,7 +4,7 @@ import type {
   AuditAction,
   AuditTargetType,
 } from "@/contexts/company/domain/definitions/company-audit-event.definition"
-import type { Context } from "@/env"
+import type { Context } from "@/bindings"
 import { prepareGovernanceAuditRecord } from "@/api/http/audit/prepare-governance-audit-record"
 
 export function prepareGovernanceAudit(props: {

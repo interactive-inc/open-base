@@ -41,10 +41,10 @@ test("all pages keep the observed company revision and missing archive does not 
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init)
     const url = new URL(request.url)
-    if (url.pathname === "/company/employee-directory/E001") return Response.json(employee)
-    if (url.pathname === "/company/grade-award-archives/by-employee/employee:test")
+    if (url.pathname === "/api/company/employee-directory/E001") return Response.json(employee)
+    if (url.pathname === "/api/company/grade-award-archives/by-employee/employee:test")
       return Response.json({ error: "missing" }, { status: 404 })
-    expect(url.pathname).toBe("/company/grade-assignment-history")
+    expect(url.pathname).toBe("/api/company/grade-assignment-history")
     expect(request.headers.get("x-company-organization-id")).toBe(
       "ad4f6cb1-774b-43ae-950f-80e9bc67c66d",
     )
@@ -85,17 +85,17 @@ test.each([
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(new Request(input, init).url)
       paths.push(url.pathname)
-      if (url.pathname === "/company/employee-directory/E001")
+      if (url.pathname === "/api/company/employee-directory/E001")
         return Response.json({
           ...employee,
           profile: failure === "unconnected" ? null : employee.profile,
         })
-      if (url.pathname === "/company/grade-award-archives/by-employee/employee:test")
+      if (url.pathname === "/api/company/grade-award-archives/by-employee/employee:test")
         return Response.json(
           { error: "missing" },
           { status: failure === "archive-forbidden" ? 403 : 404 },
         )
-      expect(url.pathname).toBe("/company/grade-assignment-history")
+      expect(url.pathname).toBe("/api/company/grade-assignment-history")
       if (failure === "storage-failure")
         return Response.json({ error: "unavailable" }, { status: 503 })
       return Response.json({
@@ -108,6 +108,6 @@ test.each([
     }),
   )
   expect(await getEmployeeGradeHistory("E001")).toBeInstanceOf(Error)
-  expect(paths).not.toContain("/company/employee-grades")
-  expect(paths).not.toContain("/company/grade-definitions")
+  expect(paths).not.toContain("/api/company/employee-grades")
+  expect(paths).not.toContain("/api/company/grade-definitions")
 })

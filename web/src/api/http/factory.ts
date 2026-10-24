@@ -1,4 +1,4 @@
-import type { HonoEnv } from "@/env"
+import type { HonoEnv } from "@/bindings"
 import { createFactory } from "hono/factory"
 
 export const factory = createFactory<HonoEnv>()

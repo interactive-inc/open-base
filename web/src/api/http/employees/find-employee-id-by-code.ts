@@ -1,6 +1,6 @@
 import { openCompanyEmployeeDirectory } from "@/contexts/company/interface/operations/open-company-employee-directory"
 import type { EmployeeId } from "@/contexts/company/domain/definitions/workforce-id.definition"
-import type { Context } from "@/env"
+import type { Context } from "@/bindings"
 
 /** 委任先のCompany Employee IDを、会社営業日の従業員名簿のcodeから解決する。 */
 export async function findEmployeeIdByCode(

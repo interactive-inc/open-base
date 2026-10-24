@@ -2,7 +2,7 @@ import {
   openCompanyAuditEvents,
   type CompanyAuditEvents,
 } from "@/contexts/company/interface/operations/open-company-audit-events"
-import type { Context } from "@/env"
+import type { Context } from "@/bindings"
 
 export type CompanyAuditExportRows = Awaited<ReturnType<CompanyAuditEvents["export"]>>
 

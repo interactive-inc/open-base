@@ -2,7 +2,7 @@ import { readCompanyAccountDisplayNames } from "@/contexts/company/interface/ope
 import { readCompanyAccountEmployeeLinks } from "@/contexts/company/interface/operations/read-company-account-employee-links"
 import { openCompanyEmployeeDirectory } from "@/contexts/company/interface/operations/open-company-employee-directory"
 import type { EmployeeId } from "@/contexts/company/domain/definitions/workforce-id.definition"
-import type { Context } from "@/env"
+import type { Context } from "@/bindings"
 import type { IdentityProvider } from "@system/domain/schemas/identity/identity-provider.schema"
 import { identitySubjectSchema } from "@system/domain/schemas/identity/identity-subject.schema"
 import { zAccountId, type AccountId } from "@system/domain/schemas/iam/account-id.schema"

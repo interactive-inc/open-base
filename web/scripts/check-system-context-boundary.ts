@@ -659,8 +659,8 @@ function inspectModuleSpecifier(file: string, moduleSpecifier: string): SystemBo
     return [{ file, reason: `System から API root へ依存しています: ${moduleSpecifier}` }]
   }
 
-  if (moduleSpecifier === "@/env") {
-    return [{ file, reason: "System から製品全体の実行時 Context へ依存しています: @/env" }]
+  if (moduleSpecifier === "@/bindings") {
+    return [{ file, reason: "System から製品全体の実行時 Context へ依存しています: @/bindings" }]
   }
 
   if (COMPOSITION_MODULE.test(moduleSpecifier)) {

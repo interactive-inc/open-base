@@ -14,7 +14,7 @@ beforeAll(async () => {
     port: 0,
     async fetch(request) {
       const url = new URL(request.url)
-      if (url.pathname === "/system/sessions" && request.method === "PATCH") {
+      if (url.pathname === "/api/system/sessions" && request.method === "PATCH") {
         const body = (await request.json()) as { refresh_token: string }
         presented.push(body.refresh_token)
         return Response.json({ access_token: "fresh-access", refresh_token: "rotated-refresh" })

@@ -1,6 +1,6 @@
 import { executeServiceBindingRequest } from "@/api/http/service-binding/execute-service-binding-request"
 import { createRuntimeApp } from "@/api/runtime-app"
-import type { Bindings } from "@/env"
+import type { Bindings } from "@/bindings"
 import { SystemServiceBindingAccountChannel } from "@system/interface/request-environment/system-service-binding-account-channel"
 import { createSystemExternalAccessToken } from "@system/test/create-system-external-access-token.test-support"
 import {

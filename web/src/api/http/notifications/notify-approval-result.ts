@@ -1,5 +1,5 @@
 import type { EmployeeId } from "@/contexts/company/domain/definitions/workforce-id.definition"
-import type { Context } from "@/env"
+import type { Context } from "@/bindings"
 import {
   EmployeeNotificationAdapter,
   type PublishedEmployeeNotification,

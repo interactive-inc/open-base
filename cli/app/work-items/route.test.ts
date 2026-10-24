@@ -56,7 +56,7 @@ test("CLIの保存では確認済み成果・版・再送キーと再認証heade
     expect(response.status).toBe(409)
     expect(captured.requests).toHaveLength(1)
     expect(new URL(captured.requests[0]?.url ?? "http://localhost").pathname).toBe(
-      `/system/work-items/${id}/approve`,
+      `/api/system/work-items/${id}/approve`,
     )
     expect(captured.requests[0]?.headers.get("x-system-step-up")).toBe("b".repeat(64))
     expect(await captured.requests[0]?.json()).toEqual(command)

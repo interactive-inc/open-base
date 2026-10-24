@@ -2,6 +2,7 @@ import { basename, extname } from "node:path"
 import { resolveBaseUrl } from "@/lib/config/resolve-base-url"
 import { SettingsFile } from "@/lib/config/settings-file"
 import { UsageError } from "@/lib/errors"
+import { apiUrl } from "@/lib/http/api-url"
 
 const CONTENT_TYPES: Readonly<Record<string, string>> = {
   ".pdf": "application/pdf",
@@ -57,7 +58,7 @@ export async function uploadAttachment(
     headers.Authorization = `Bearer ${tokens.token}`
   }
 
-  const response = await fetch(new URL("/system/attachments", baseUrl), {
+  const response = await fetch(apiUrl("/system/attachments", baseUrl), {
     method: "POST",
     headers,
     body: form,

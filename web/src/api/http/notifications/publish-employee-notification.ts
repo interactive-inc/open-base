@@ -3,7 +3,7 @@ import type { EmployeeId } from "@/contexts/company/domain/definitions/workforce
 import type { CompanySessionValue } from "@/contexts/company/domain/values/company-session.value"
 import type { CompanyNotificationKind } from "@/api/http/notifications/notification-kind.definition"
 import type { PublishedEmployeeNotification } from "@/api/http/notifications/employee-notification.adapter"
-import type { Context } from "@/env"
+import type { Context } from "@/bindings"
 import { EmployeeNotificationAdapter } from "@/api/http/notifications/employee-notification.adapter"
 import { ForbiddenError, NotFoundError, UnexpectedError } from "@/lib/errors"
 import type { ApplicationError } from "@/lib/errors"

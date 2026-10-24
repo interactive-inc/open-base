@@ -2,7 +2,7 @@ import {
   type CompanyAccountParticipant,
   resolveCompanyAccountParticipants,
 } from "@/api/http/accounts/resolve-company-account-participants"
-import type { Context } from "@/env"
+import type { Context } from "@/bindings"
 import { openSystemAccountCatalog } from "@system/interface/operations/open-system-account-catalog"
 import { openSystemIdentityCatalog } from "@system/interface/operations/open-system-identity-catalog"
 

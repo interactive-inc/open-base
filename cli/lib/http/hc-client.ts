@@ -3,13 +3,14 @@ import { hc } from "hono/client"
 import { resolveBaseUrl } from "@/lib/config/resolve-base-url"
 import { SettingsFile } from "@/lib/config/settings-file"
 import { ApiError } from "@/lib/errors"
+import { apiBaseUrl, apiUrl } from "@/lib/http/api-url"
 
 async function tryRefresh(
   baseUrl: string,
   refreshToken: string,
 ): Promise<{ access_token: string; refresh_token: string | null } | null> {
   try {
-    const url = new URL("/system/sessions", baseUrl)
+    const url = apiUrl("/system/sessions", baseUrl)
 
     const res = await fetch(url, {
       method: "PATCH",
@@ -103,7 +104,7 @@ export async function createClient(baseUrlOverride?: string | null) {
     headers.Authorization = `Bearer ${tokens.token}`
   }
 
-  return hc<AppType>(baseUrl, { headers, fetch: toFetchOrThrow(baseUrl) })
+  return hc<AppType>(apiBaseUrl(baseUrl), { headers, fetch: toFetchOrThrow(baseUrl) })
 }
 
 export type Client = Awaited<ReturnType<typeof createClient>>

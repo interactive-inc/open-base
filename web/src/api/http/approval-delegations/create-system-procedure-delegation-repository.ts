@@ -1,4 +1,4 @@
-import type { Context } from "@/env"
+import type { Context } from "@/bindings"
 import { openSystemProcedureDelegations } from "@system/interface/operations/open-system-procedure-delegations"
 
 /** Systemの委任永続化を製品API compositionへ接続する。 */

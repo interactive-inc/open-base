@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# ローカル開発用の api/.dev.vars を生成する。秘密値は毎回ランダムに作る。
-# 公開リポジトリに実際に使える秘密値を置かないため、.dev.vars.example は
+# ローカル開発用の web/.env を生成する。秘密値は毎回ランダムに作る。
+# 公開リポジトリに実際に使える秘密値を置かないため、.env.example は
 # 秘密値を空にしてある。api はプレースホルダのままの値を実行時に拒否する。
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-TARGET=".dev.vars"
+TARGET=".env"
 
 if [ -f "$TARGET" ]; then
   echo "$TARGET は既に存在するので変更しない。作り直すなら削除してから再実行する。"

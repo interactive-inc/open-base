@@ -8,7 +8,7 @@ import { apiFetch } from "@/lib/api/api-fetch"
  * トークン不要のクライアントをその場で作る。
  */
 export async function postRefreshToken(refreshToken: string) {
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "https://base.localhost"
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "https://base.localhost/api"
 
   const client = hc<AppType>(baseUrl, { fetch: apiFetch })
 

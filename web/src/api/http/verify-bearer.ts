@@ -1,5 +1,5 @@
 import { CompanySessionValue } from "@/contexts/company/domain/values/company-session.value"
-import type { HonoEnv } from "@/env"
+import type { HonoEnv } from "@/bindings"
 import { restoreWorkforceId } from "@/contexts/company/domain/definitions/restore-workforce-id.definition"
 import { resolveLiveEmployeeAccess } from "@/api/http/employees/resolve-live-employee-access"
 import { resolveCompanyAccountEmployeeLink } from "@/contexts/company/interface/operations/resolve-company-account-employee-link"

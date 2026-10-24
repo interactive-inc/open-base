@@ -1,6 +1,7 @@
 import { ApiError } from "@/lib/errors"
 import { loadConfig } from "@/lib/config/load-config"
 import { SettingsFile } from "@/lib/config/settings-file"
+import { apiUrl } from "@/lib/http/api-url"
 
 type RequestOptions = {
   method?: "GET" | "POST" | "PUT" | "DELETE"
@@ -38,7 +39,7 @@ async function tryRefresh(
   refreshToken: string,
 ): Promise<{ access_token: string; refresh_token: string | null } | null> {
   try {
-    const url = new URL("/system/sessions", baseUrl)
+    const url = apiUrl("/system/sessions", baseUrl)
 
     const res = await fetch(url, {
       method: "PATCH",
@@ -65,7 +66,7 @@ async function request<T = unknown>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const url = new URL(path, baseUrl)
+  const url = apiUrl(path, baseUrl)
 
   for (const [key, value] of Object.entries(options.query ?? {})) {
     if (value !== null && value !== undefined && value !== "") {

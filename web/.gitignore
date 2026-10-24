@@ -21,9 +21,11 @@ wrangler.jsonc
 # env
 .env
 .env.production
-# .dev.vars とその派生（.bak / .local など）。公開リポジトリなので接頭辞で丸ごと除外する。
+# .env とその派生。公開リポジトリなので接頭辞で丸ごと除外する。
+.env*
+!.env.example
+# 旧wranglerの秘密値ファイル
 .dev.vars*
-!.dev.vars.example
 
 # logs
 logs/
@@ -39,4 +41,12 @@ lerna-debug.log*
 
 # 公開デモなどの追加の配備設定（ドメイン・バインディング ID を含むためコミットしない）
 wrangler.*.jsonc
-!wrangler.example.jsonc
+
+# Void（生成物と配備固有の設定。リソースIDとアカウントを含むためコミットしない）
+.void/
+.void-wrangler.jsonc
+void.deploy.json
+void.lock.json
+
+# 旧wranglerの配備設定の退避先（本番の識別子を含む）
+.deploy/

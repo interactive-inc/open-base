@@ -1,5 +1,6 @@
 import { basename, extname } from "node:path"
 import { ensureAuth } from "@/lib/api-client.ts"
+import { apiUrl } from "@/lib/api-url.ts"
 
 const CONTENT_TYPES: Readonly<Record<string, string>> = {
   ".pdf": "application/pdf",
@@ -38,7 +39,7 @@ export async function uploadAttachment(path: string): Promise<string> {
     headers.Authorization = `Bearer ${auth.token}`
   }
 
-  const response = await fetch(new URL("/attachments", auth.baseUrl), {
+  const response = await fetch(apiUrl("/system/attachments", auth.baseUrl), {
     method: "POST",
     headers,
     body: form,

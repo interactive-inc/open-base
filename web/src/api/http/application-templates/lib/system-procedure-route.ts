@@ -1,7 +1,7 @@
 import { resolveActiveSystemAccountId } from "@/api/http/accounts/resolve-active-system-account-id"
 import type { CompanyProcedureDecisionPolicy } from "@/contexts/company/domain/policies/company-procedure-decision.policy"
 import { parseCompanyProcedureDecisionPolicy } from "@/contexts/company/domain/policies/parse-company-procedure-decision.policy"
-import type { Context } from "@/env"
+import type { Context } from "@/bindings"
 import { parseJsonValue } from "@/api/http/application-requests/lib/parse-json-value"
 import { PublishSystemProcedure } from "@system/application/workflow/publish-system-procedure"
 import type { ProcedureDefinitionEntity } from "@system/domain/entities/procedure-definition.entity"

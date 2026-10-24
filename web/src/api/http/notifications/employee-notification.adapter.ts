@@ -1,6 +1,6 @@
 import type { EmployeeId } from "@/contexts/company/domain/definitions/workforce-id.definition"
 import type { CompanyNotificationKind } from "@/api/http/notifications/notification-kind.definition"
-import type { Context } from "@/env"
+import type { Context } from "@/bindings"
 import { resolveCompanyAccountEmployeeLink } from "@/contexts/company/interface/operations/resolve-company-account-employee-link"
 import { toWorkforceEmployeeId } from "@/contexts/company/domain/definitions/to-workforce-employee-id.definition"
 import { SystemAccountEligibilityAdapter } from "@/api/http/accounts/system-account-eligibility.adapter"

@@ -1,5 +1,5 @@
 import { handleApiError } from "@/api/error-response/handle-api-error"
-import type { HonoEnv } from "@/env"
+import type { HonoEnv } from "@/bindings"
 import type { Context, MiddlewareHandler, Next } from "hono"
 
 export type RouteMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE"

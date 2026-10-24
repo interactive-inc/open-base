@@ -1,4 +1,4 @@
-import type { HonoEnv } from "@/env"
+import type { HonoEnv } from "@/bindings"
 import { ForbiddenError } from "@/lib/http/errors"
 import { createMiddleware } from "hono/factory"
 

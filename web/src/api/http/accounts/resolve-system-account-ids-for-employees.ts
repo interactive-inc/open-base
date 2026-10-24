@@ -1,6 +1,6 @@
 import { readCompanyAccountEmployeeLinks } from "@/contexts/company/interface/operations/read-company-account-employee-links"
 import type { EmployeeId } from "@/contexts/company/domain/definitions/workforce-id.definition"
-import type { Context } from "@/env"
+import type { Context } from "@/bindings"
 import { zAccountId, type AccountId } from "@system/domain/schemas/iam/account-id.schema"
 
 export async function resolveSystemAccountIdsForEmployees(

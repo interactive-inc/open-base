@@ -23,7 +23,7 @@ import {
   CompanyConflictError,
   CompanyNotFoundError,
 } from "@/contexts/company/domain/errors"
-import type { Context, Variables } from "@/env"
+import type { Context, Variables } from "@/bindings"
 import { canRepairWorkflow } from "@/api/http/application-requests/lib/can-repair-workflow"
 import { parseJsonValue } from "@/api/http/application-requests/lib/parse-json-value"
 import { isUniqueConstraintError } from "@/lib/d1/is-unique-constraint-error"

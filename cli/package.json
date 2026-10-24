@@ -12,8 +12,8 @@
   },
   "dependencies": {
     "@hono/zod-validator": "^0.7.6",
-    "web": "workspace:*",
     "hono": "^4.12.27",
+    "web": "workspace:*",
     "zod": "^3.25.76"
   },
   "devDependencies": {

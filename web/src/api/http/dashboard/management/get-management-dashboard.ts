@@ -4,7 +4,7 @@ import {
   EMPTY_MANAGEMENT_DASHBOARD_BUSINESS_METRICS,
   type ManagementDashboardBusinessMetrics,
 } from "@/api/http/dashboard/management/management-dashboard-business-metrics"
-import type { Context } from "@/env"
+import type { Context } from "@/bindings"
 import { resolveCompanyBusinessDate } from "@/contexts/company/domain/definitions/resolve-company-business-date.definition"
 import { UnexpectedError } from "@/lib/errors"
 import type { ApplicationError } from "@/lib/errors"

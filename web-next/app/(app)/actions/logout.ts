@@ -18,7 +18,7 @@ export async function logoutAction(): Promise<void> {
 
   if (refreshToken !== undefined) {
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "https://base.localhost"
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "https://base.localhost/api"
 
       await apiFetch(`${baseUrl}/system/sessions`, {
         method: "DELETE",

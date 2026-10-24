@@ -1,4 +1,4 @@
-import type { HonoEnv } from "@/env"
+import type { HonoEnv } from "@/bindings"
 import { UnauthorizedError } from "@/lib/http/errors"
 import { resolveSystemBearerPrincipal } from "@system/interface/operations/resolve-system-bearer-principal"
 import { readBearerAuthorization } from "@system/interface/operations/bearer-authorization"

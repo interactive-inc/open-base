@@ -1,7 +1,7 @@
 import { findCompanyEmployeeProfileSnapshot } from "@/contexts/company/interface/operations/find-company-employee-profile-snapshot"
 import { openCompanyEmployeeDirectory } from "@/contexts/company/interface/operations/open-company-employee-directory"
 import { resolveCompanyBusinessDate } from "@/contexts/company/domain/definitions/resolve-company-business-date.definition"
-import type { Context } from "@/env"
+import type { Context } from "@/bindings"
 import { restoreWorkforceId } from "@/contexts/company/domain/definitions/restore-workforce-id.definition"
 import { zAppAuthMe } from "@/api/http/company/response-schemas"
 import { InternalError, NotFoundError, UnauthorizedError } from "@/lib/http/errors"

@@ -29,8 +29,8 @@
  * 後に登録すると `me` が id として食われる。この順序は規約ではなく生成器が保証する。
  */
 import { Glob } from "bun"
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs"
-import { resolve } from "node:path"
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
+import { dirname, relative, resolve } from "node:path"
 import {
   inspectApiRouteModuleRegistry,
   type ApiRouteModuleRegistration,
@@ -40,6 +40,7 @@ import { ROUTE_MODULE_REGISTRY } from "@/api/route-module.registry"
 const SOURCE_ROOT = resolve(import.meta.dir, "../src")
 const APP_PATH = resolve(SOURCE_ROOT, "api/app.ts")
 const RUNTIME_APP_PATH = resolve(SOURCE_ROOT, "api/runtime-app.ts")
+const VOID_ROUTES_ROOT = resolve(SOURCE_ROOT, "routes/api")
 
 const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const
 const ROUTES_PER_TYPE_PART = 48
@@ -468,29 +469,103 @@ export function createRuntimeApp() {
 `
 }
 
+const VOID_ROUTE_HEADER = `// このファイルは \`bun run gen:app\` が生成する。手で編集しない。
+// Voidの \`/api\` 配下の経路として、context routeのhandlerを共通middleware付きで公開する。
+`
+
+/** URLからVoidのroute fileの相対パスを作る。`/system/accounts/:id` → `system/accounts/[id]/index.ts`。 */
+export function toVoidRouteFile(url: string): string {
+  const segments = url
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => (segment.startsWith(":") ? `[${segment.slice(1)}]` : segment))
+  return [...segments, "index.ts"].join("/")
+}
+
+function renderVoidExport(registration: RouteRegistration): string {
+  const args = [
+    `"${registration.method}"`,
+    `"${registration.url}"`,
+    `${registration.alias}.${registration.method}`,
+  ]
+  const line = `export const ${registration.method} = voidApiRoute(${args.join(", ")})`
+  if (line.length <= LINE_WIDTH) return line
+  return `export const ${registration.method} = voidApiRoute(\n${args.map((arg) => `  ${arg},`).join("\n")}\n)`
+}
+
+/** Voidのroute fileを、URLごとに1ファイルで描く。同じURLの別メソッドは同じファイルへまとめる。 */
+export function renderVoidRoutes(registrations: readonly RouteRegistration[]): Map<string, string> {
+  const byFile = new Map<string, RouteRegistration[]>()
+  for (const registration of sortRegistrations(registrations)) {
+    const file = toVoidRouteFile(registration.url)
+    byFile.set(file, [...(byFile.get(file) ?? []), registration])
+  }
+  const rendered = new Map<string, string>()
+  for (const [file, fileRegistrations] of [...byFile.entries()].sort(([left], [right]) =>
+    left < right ? -1 : 1,
+  )) {
+    const modules = new Map<string, string>()
+    for (const registration of fileRegistrations)
+      modules.set(registration.module, registration.alias)
+    const imports = [...modules.entries()]
+      .sort((left, right) => (left[0] < right[0] ? -1 : 1))
+      .map(([module, alias]) => `import * as ${alias} from "${module}"`)
+    const exports = [...fileRegistrations]
+      .sort((left, right) => METHODS.indexOf(left.method) - METHODS.indexOf(right.method))
+      .map(renderVoidExport)
+    rendered.set(
+      file,
+      `${VOID_ROUTE_HEADER}\nimport { voidApiRoute } from "@/api/http/void-api-route"\n${imports.join("\n")}\n\n${exports.join("\n")}\n`,
+    )
+  }
+  return rendered
+}
+
+function listExistingVoidRoutes(): string[] {
+  if (!existsSync(VOID_ROUTES_ROOT)) return []
+  return Array.from(new Glob("**/*.ts").scanSync(VOID_ROUTES_ROOT)).sort()
+}
+
 // import されたとき（テスト等）に app.ts を書き換えないよう、実行はエントリ時に限る。
 if (import.meta.main) {
   const registrations = await collectRegistrations()
+  const voidRoutes = renderVoidRoutes(registrations)
   const outputs = [
     { path: APP_PATH, name: "app.ts", rendered: renderApp(registrations) },
     { path: RUNTIME_APP_PATH, name: "runtime-app.ts", rendered: renderRuntimeApp(registrations) },
+    ...[...voidRoutes.entries()].map(([file, rendered]) => ({
+      path: resolve(VOID_ROUTES_ROOT, file),
+      name: relative(SOURCE_ROOT, resolve(VOID_ROUTES_ROOT, file)),
+      rendered,
+    })),
   ]
+  const extraVoidRoutes = listExistingVoidRoutes().filter((file) => !voidRoutes.has(file))
   const checkOnly = process.argv.includes("--check")
 
   if (checkOnly) {
     const stale = outputs.filter(
       (output) => !existsSync(output.path) || readFileSync(output.path, "utf8") !== output.rendered,
     )
-    if (stale.length > 0) {
+    const staleNames = [
+      ...stale.map((output) => output.name),
+      ...extraVoidRoutes.map((file) => `routes/api/${file}（不要）`),
+    ]
+    if (staleNames.length > 0) {
       console.error(
-        `${stale.map((output) => output.name).join(", ")} が interface/routes/ と一致していません。` +
+        `${staleNames.join(", ")} が interface/routes/ と一致していません。` +
           "`bun run gen:app` を実行してください。",
       )
       process.exit(1)
     }
-    console.log(`app.ts と runtime-app.ts は最新です (${registrations.length} routes)`)
+    console.log(`app.ts、runtime-app.ts、routes/api は最新です (${registrations.length} routes)`)
   } else {
-    for (const output of outputs) writeFileSync(output.path, output.rendered)
-    console.log(`app.ts と runtime-app.ts を生成しました (${registrations.length} routes)`)
+    for (const file of extraVoidRoutes) rmSync(resolve(VOID_ROUTES_ROOT, file))
+    for (const output of outputs) {
+      mkdirSync(dirname(output.path), { recursive: true })
+      writeFileSync(output.path, output.rendered)
+    }
+    console.log(
+      `app.ts、runtime-app.ts、routes/api を生成しました (${registrations.length} routes)`,
+    )
   }
 }

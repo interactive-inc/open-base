@@ -1,4 +1,4 @@
-import type { Bindings } from "@/env"
+import type { Bindings } from "@/bindings"
 import { resolveSystemServiceBindingAccount } from "@system/interface/operations/resolve-system-service-binding-account"
 import { SystemServiceBindingAccountChannel } from "@system/interface/request-environment/system-service-binding-account-channel"
 import { z } from "zod"

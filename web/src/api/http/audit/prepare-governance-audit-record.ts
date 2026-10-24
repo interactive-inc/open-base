@@ -6,7 +6,7 @@ import {
   type AuditAction,
   type AuditTargetType,
 } from "@/contexts/company/domain/definitions/company-audit-event.definition"
-import type { Context } from "@/env"
+import type { Context } from "@/bindings"
 
 /** Company監査の識別子と永続化断片を、呼出側の同一transactionへ渡す。 */
 export function prepareGovernanceAuditRecord(props: {

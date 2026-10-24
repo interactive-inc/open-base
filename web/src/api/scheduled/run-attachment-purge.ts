@@ -2,7 +2,7 @@ import { openSystemAttachmentObjects } from "@system/interface/operations/open-s
 import { openSystemAttachments } from "@system/interface/operations/open-system-attachments"
 import { UNLINKED_ATTACHMENT_RETENTION_MILLISECONDS } from "@system/domain/catalogs/attachments/unlinked-attachment-retention.catalog"
 import { openSystemAttachmentDatabase } from "@system/interface/operations/open-system-attachment-database"
-import type { Bindings } from "@/env"
+import type { Bindings } from "@/bindings"
 
 /** 一回の定期起動で回収する上限。残りは次回の起動が拾う。 */
 const PURGE_LIMIT = 100

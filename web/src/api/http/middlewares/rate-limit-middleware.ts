@@ -1,4 +1,4 @@
-import type { HonoEnv } from "@/env"
+import type { HonoEnv } from "@/bindings"
 import { isProductionEnvironment } from "@/lib/config/is-production-environment"
 import { createMiddleware } from "hono/factory"
 import { HTTPException } from "hono/http-exception"

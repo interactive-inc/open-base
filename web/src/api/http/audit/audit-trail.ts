@@ -2,7 +2,7 @@ import { openCompanyAuditEvents } from "@/contexts/company/interface/operations/
 import type { CompanySessionValue } from "@/contexts/company/domain/values/company-session.value"
 import type { AuditEventInput } from "@/contexts/company/domain/definitions/company-audit-event.definition"
 import { createAuditEvent } from "@/contexts/company/domain/definitions/company-audit-event.definition"
-import type { Context } from "@/env"
+import type { Context } from "@/bindings"
 import type { CompanyAuditEventFilters as AuditEventFilters } from "@/contexts/company/interface/operations/open-company-audit-events"
 import { toHttpException } from "@/lib/http/to-http-exception"
 import { auditUnavailable } from "@/api/http/audit/audit-unavailable"

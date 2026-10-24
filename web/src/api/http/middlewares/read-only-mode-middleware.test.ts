@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Hono } from "hono"
-import type { HonoEnv } from "@/env"
+import type { HonoEnv } from "@/bindings"
 import {
   isReadOnlyMode,
   readOnlyModeMiddleware,

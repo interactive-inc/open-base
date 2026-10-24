@@ -1,7 +1,7 @@
 import type { ApplicationWorkflow } from "@/contexts/company/domain/definitions/company-procedure-workflow.definition"
 import { openCompanyEmployeeDirectory } from "@/contexts/company/interface/operations/open-company-employee-directory"
 import { UnprocessableEntityError } from "@/lib/http/errors"
-import type { Context } from "@/env"
+import type { Context } from "@/bindings"
 
 /** Company authorityとして解決できるworkflow selectorだけを許可する。 */
 export async function validateApplicationWorkflowReferences(

@@ -9,7 +9,7 @@ import { readCompanyOrganizationLifecycleRevision } from "@/contexts/company/int
 import { validatePersonnelPositionReference } from "@/contexts/company/domain/policies/validate-personnel-position-reference.policy"
 import { isAbortedByGuard } from "@/lib/database/is-aborted-by-guard"
 import { resolveActiveSystemAccountId } from "@/api/http/accounts/resolve-active-system-account-id"
-import type { Context } from "@/env"
+import type { Context } from "@/bindings"
 import { abortWhenPreviousStatementChangedNoRows } from "@/lib/database/abort-when-previous-statement-changed-no-rows"
 import {
   ApplicationError,

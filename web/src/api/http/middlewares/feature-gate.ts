@@ -1,4 +1,4 @@
-import type { HonoEnv } from "@/env"
+import type { HonoEnv } from "@/bindings"
 import { NotFoundError } from "@/lib/http/errors"
 import { resolveDisabledRoutePrefixes } from "@/api/http/features/resolve-disabled-route-prefixes"
 import { createMiddleware } from "hono/factory"

@@ -4,7 +4,7 @@ import { prepareCompanyInitialAccountProfileStatement } from "@/contexts/company
 import { findCompanyRegisteredEmployeeByOperation } from "@/contexts/company/interface/operations/find-company-registered-employee-by-operation"
 import { openCompanyEmployeeDirectory } from "@/contexts/company/interface/operations/open-company-employee-directory"
 import { readCompanyOrganizationLifecycleRevision } from "@/contexts/company/interface/operations/read-company-organization-lifecycle-revision"
-import type { Context } from "@/env"
+import type { Context } from "@/bindings"
 import {
   ApplicationError,
   ConflictError,

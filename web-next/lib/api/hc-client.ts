@@ -30,7 +30,7 @@ const fetchWithNetworkGuard: typeof fetch = async (input, init) => {
 export async function createClient(): Promise<ApiClient> {
   const token = await getServerSession()
 
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "https://base.localhost"
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "https://base.localhost/api"
 
   const headers: Record<string, string> = {
     "X-Open-Base-Client": "web",

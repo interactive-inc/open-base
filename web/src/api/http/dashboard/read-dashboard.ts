@@ -4,7 +4,7 @@ import {
   EMPTY_DASHBOARD_BUSINESS_METRICS,
   type DashboardBusinessMetrics,
 } from "@/api/http/dashboard/dashboard-business-metrics"
-import type { Context } from "@/env"
+import type { Context } from "@/bindings"
 import { countPendingSystemCases } from "@system/interface/operations/count-pending-system-cases"
 import { listSystemCaseMonthlyCounts } from "@system/interface/operations/list-system-case-monthly-counts"
 
