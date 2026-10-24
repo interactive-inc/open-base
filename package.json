@@ -4,14 +4,13 @@
   "workspaces": [
     "cli",
     "mcp",
-    "web",
-    "web-next"
+    "web"
   ],
   "type": "module",
   "scripts": {
-    "build": "bun run --filter web build && bun run --filter web-next build",
+    "build": "bun run --filter web build",
     "build:api-types": "bun run --filter web build:types",
-    "typecheck": "bun run build:api-types && bun run --filter web-next check && bun run --filter cli check",
+    "typecheck": "bun run build:api-types && bun run --filter cli check",
     "test:web": "bun run --filter web test",
     "check": "vp check"
   },

@@ -1,8 +1,5 @@
 {
   "apps": {
-    "web-next": {
-      "name": "app.base"
-    },
     "web": {
       "name": "base",
       "appPort": 18787

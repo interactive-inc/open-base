@@ -24,12 +24,7 @@ export default defineConfig({
       {
         // System と Company は共通基盤を採用する別製品と全ファイルを同一に保ち、hash で固定している。
         // この製品だけで書き換えると同一性が崩れるため、import 配置の規則を適用しない。
-        // shadcn の生成物も直接編集しないため除外する。
-        files: [
-          "web/src/contexts/system/**",
-          "web/src/contexts/company/**",
-          "web-next/components/ui/**",
-        ],
+        files: ["web/src/contexts/system/**", "web/src/contexts/company/**"],
         rules: {
           "import/first": "off",
           "import/newline-after-import": "off",
