@@ -1,4 +1,4 @@
-const apiRoot = new URL("../api/", import.meta.url).pathname
+const apiRoot = new URL("../web/", import.meta.url).pathname
 const files = Array.from(
   new Bun.Glob("src/{contexts,api}/**/*.d1.test.ts").scanSync({ cwd: apiRoot }),
 ).sort()

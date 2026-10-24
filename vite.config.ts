@@ -26,9 +26,9 @@ export default defineConfig({
         // この製品だけで書き換えると同一性が崩れるため、import 配置の規則を適用しない。
         // shadcn の生成物も直接編集しないため除外する。
         files: [
-          "api/src/contexts/system/**",
-          "api/src/contexts/company/**",
-          "web/components/ui/**",
+          "web/src/contexts/system/**",
+          "web/src/contexts/company/**",
+          "web-next/components/ui/**",
         ],
         rules: {
           "import/first": "off",

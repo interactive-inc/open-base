@@ -1,15 +1,16 @@
+import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { defineConfig } from "vite-plus"
 
-const webRoot = fileURLToPath(new URL(".", import.meta.url))
+const root = dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
   resolve: {
     alias: {
-      "@": webRoot,
+      "@": resolve(root, "./src"),
     },
   },
-  test: {
-    environment: "happy-dom",
+  fmt: {
+    semi: false,
   },
 })

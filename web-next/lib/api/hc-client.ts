@@ -1,6 +1,6 @@
 import { apiFetch } from "@/lib/api/api-fetch"
 import { getServerSession } from "@/lib/auth/get-server-session"
-import type { ApiClient, AppType } from "api/app"
+import type { ApiClient, AppType } from "web/app"
 import { hc } from "hono/client"
 
 /**

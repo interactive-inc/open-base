@@ -1,4 +1,4 @@
-import type { AppType } from "api/app"
+import type { AppType } from "web/app"
 import { hc } from "hono/client"
 import { resolveBaseUrl } from "@/lib/config/resolve-base-url"
 import { SettingsFile } from "@/lib/config/settings-file"

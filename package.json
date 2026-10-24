@@ -2,16 +2,16 @@
   "name": "open-base",
   "private": true,
   "workspaces": [
-    "api",
     "cli",
     "mcp",
-    "web"
+    "web",
+    "web-next"
   ],
   "type": "module",
   "scripts": {
-    "build": "bun run --filter api build && bun run --filter web build",
-    "build:api-types": "bun run --filter api build:types",
-    "typecheck": "bun run build:api-types && bun run --filter web check && bun run --filter cli check",
+    "build": "bun run --filter web build && bun run --filter web-next build",
+    "build:api-types": "bun run --filter web build:types",
+    "typecheck": "bun run build:api-types && bun run --filter web-next check && bun run --filter cli check",
     "test:web": "bun run --filter web test",
     "check": "vp check"
   },
