@@ -20,7 +20,10 @@ import {
   GET as exchangesGET,
   POST as exchangesPOST,
 } from "@system/interface/routes/system.integration-exchanges"
-import { createSystemSessionApplications } from "@system/test/create-system-session-applications.test-support"
+import {
+  createSystemSessionApplications,
+  systemTestSignedInSession,
+} from "@system/test/create-system-session-applications.test-support"
 import { SystemSessionTestContext } from "@system/test/system-session-test-context.test-support"
 import { seedSystemStepUpGrant } from "@system/test/seed-system-step-up-grant.test-support"
 import { describe, expect, setDefaultTimeout, test } from "bun:test"
@@ -45,6 +48,7 @@ describe("System integration HTTP", () => {
 
     const app = systemFactory
       .createApp()
+      .use("*", systemTestSignedInSession)
       .use("*", async (context, next) => {
         context.set("now", () => clock.value)
         await next()
@@ -249,7 +253,6 @@ async function issueSession(
 ) {
   const applications = createSystemSessionApplications({
     context: fixture.context,
-    jwtSecret: "system-session-test-jwt-secret",
     sessionTtlMilliseconds: 604_800_000,
   })
   if (applications instanceof Error) return applications

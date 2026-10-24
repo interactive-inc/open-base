@@ -1,10 +1,8 @@
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
-import type { InvalidSystemPasswordReason } from "@system/domain/errors"
 import { zAccountId, type AccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { EmailValue } from "@system/domain/values/identity/email.value"
-import { SystemPasswordValue } from "@system/domain/values/auth/system-password.value"
 import { SystemAuditEventEntity } from "@system/domain/entities/system-audit-event.entity"
-import { zIdentityId } from "@system/domain/schemas/identity/identity-id.schema"
+import { zIdentityId, type IdentityId } from "@system/domain/schemas/identity/identity-id.schema"
 import { identitySubjectSchema } from "@system/domain/schemas/identity/identity-subject.schema"
 import { roleBindingIdSchema } from "@system/domain/schemas/iam/role-binding.schema"
 import type {
@@ -13,31 +11,41 @@ import type {
 } from "@system/infrastructure/adapters/iam/d1-system-root-bootstrap.adapter"
 import { z } from "zod"
 
-export type SystemPasswordHasher = Readonly<{
-  hash: (password: string) => Promise<string | Error>
+/** 初期rootのパスキー招待を作るport。招待は初期化と同じbatchで保存する。 */
+export type SystemRootEnrollmentIssuer = Readonly<{
+  prepare: (
+    input: Readonly<{ accountId: AccountId; identityId: IdentityId; now: Date }>,
+  ) => Promise<
+    | Readonly<{ token: string; expiresAt: Date; statements: ReadonlyArray<D1PreparedStatement> }>
+    | Error
+  >
 }>
 
 type Props = Readonly<{
-  passwordHasher: SystemPasswordHasher
+  enrollmentIssuer: SystemRootEnrollmentIssuer
   repository: Pick<D1SystemRootBootstrapAdapter, "bootstrap">
 }>
 
 export type BootstrapSystemRootCommand = Readonly<{
   email: string
-  password: string
   now: Date
 }>
 
 export type BootstrapSystemRootResult =
-  | SystemRootBootstrapAdapterResult
+  | Exclude<SystemRootBootstrapAdapterResult, Readonly<{ kind: "created" }>>
+  | (Extract<SystemRootBootstrapAdapterResult, Readonly<{ kind: "created" }>> &
+      Readonly<{ enrollment: Readonly<{ token: string; expiresAt: Date }> }>)
   | Readonly<{
       kind: "invalid_input"
-      reason: "invalid_email" | "invalid_time" | InvalidSystemPasswordReason
+      reason: "invalid_email" | "invalid_time"
     }>
 type BootstrapSystemRootContext = Props
 type Context = BootstrapSystemRootContext
 
-/** AccountEntity・Identity・credential・root binding・監査をCompanyなしで初期化する。 */
+/**
+ * Account・パスキーIdentity・root binding・監査をCompanyなしで初期化する。
+ * パスワードは持たない。初期rootは返したパスキー招待でパスキーを登録してからサインインする。
+ */
 export class BootstrapSystemRoot {
   private static readonly emailSchema = EmailValue.schema
     .pipe(z.string().max(254))
@@ -57,11 +65,6 @@ export class BootstrapSystemRoot {
       return Object.freeze({ kind: "invalid_input" as const, reason: "invalid_email" as const })
     }
 
-    const password = SystemPasswordValue.create(command.password)
-    if (!(password instanceof SystemPasswordValue)) {
-      return Object.freeze({ kind: "invalid_input" as const, reason: password.reason })
-    }
-
     const accountId = zAccountId.safeParse(crypto.randomUUID())
     const identityId = zIdentityId.safeParse(crypto.randomUUID())
     const rootBindingId = roleBindingIdSchema.safeParse(crypto.randomUUID())
@@ -69,13 +72,12 @@ export class BootstrapSystemRoot {
       return new Error("failed to generate System bootstrap identifiers")
     }
 
-    let passwordHash: string | Error
-    try {
-      passwordHash = await this.c.passwordHasher.hash(password.toString())
-    } catch (caught) {
-      return caught instanceof Error ? caught : new Error("failed to hash System password")
-    }
-    if (passwordHash instanceof Error) return passwordHash
+    const enrollment = await this.c.enrollmentIssuer.prepare({
+      accountId: accountId.data,
+      identityId: identityId.data,
+      now: command.now,
+    })
+    if (enrollment instanceof Error) return enrollment
 
     const auditEvent = SystemAuditEventEntity.create<AccountId>({
       actorAccountId: null,
@@ -92,15 +94,19 @@ export class BootstrapSystemRoot {
     })
     if (auditEvent instanceof Error) return auditEvent
 
-    return this.c.repository.bootstrap({
+    const bootstrap = await this.c.repository.bootstrap({
       accountId: accountId.data,
       identityId: identityId.data,
-      identitySubject: email.data,
       email: email.data,
-      passwordHash,
       rootBindingId: rootBindingId.data,
       occurredAt: command.now,
       auditEvent,
+      enrollmentStatements: enrollment.statements,
+    })
+    if (bootstrap instanceof Error || bootstrap.kind !== "created") return bootstrap
+    return Object.freeze({
+      ...bootstrap,
+      enrollment: Object.freeze({ token: enrollment.token, expiresAt: enrollment.expiresAt }),
     })
   }
 }

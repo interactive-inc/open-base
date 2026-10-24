@@ -1,7 +1,5 @@
 import type { SystemReadAuthentication } from "@system/domain/definitions/system-read-authentication.definition"
 import { systemWorkItemSchema } from "@system/infrastructure/schema/system-work-item"
-import type { OidcClientRegistryValue } from "@system/domain/values/oauth/oidc-client-registry.value"
-import type { OidcIssuerConfigurationValue } from "@system/domain/values/oauth/oidc-issuer-configuration.value"
 import type { AccessTokenClaims } from "@system/domain/schemas/auth/access-token-claims.schema"
 import * as systemAttachmentSchema from "@system/infrastructure/schema/system-attachment"
 import * as systemCoreSchema from "@system/infrastructure/schema/system-core"
@@ -77,13 +75,6 @@ export type SystemJwtSecretContext = Readonly<{
   env: Readonly<{ JWT_SECRET?: string }>
 }>
 
-export type SystemSessionConfigurationContext = Readonly<{
-  env: Readonly<{
-    SYSTEM_SESSION_TTL_SECONDS?: string
-    SYSTEM_SESSION_MAX_LIFETIME_SECONDS?: string
-  }>
-}>
-
 export type SystemExternalIdentityContext = Readonly<{
   env: Readonly<{
     IDENTITY_JWKS?: string
@@ -93,24 +84,7 @@ export type SystemExternalIdentityContext = Readonly<{
     IDENTITY_ACCESS_TOKEN_AUDIENCE?: string
     // Service Binding RPC入口だけが受理するaud。未設定ならRPC入口は全て拒否する。
     SERVICE_BINDING_ACCESS_TOKEN_AUDIENCE?: string
-    IDENTITY_LOGIN_URL?: string
-    API_ORIGIN?: string
   }>
-}>
-
-export type SystemOidcSigningContext = Readonly<{
-  env: Readonly<{ OIDC_SIGNING_KEYS?: string }>
-}>
-
-export type SystemOidcConfigurationContext = Readonly<{
-  var: Readonly<{
-    oidcClientRegistry: OidcClientRegistryValue
-    oidcIssuerConfiguration: OidcIssuerConfigurationValue
-  }>
-}>
-
-export type SystemPasswordHashContext = Readonly<{
-  env: Readonly<{ PEPPER_SECRET?: string }>
 }>
 
 export type SystemBootstrapContext = Readonly<{

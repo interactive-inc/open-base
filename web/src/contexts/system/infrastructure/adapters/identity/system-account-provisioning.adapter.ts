@@ -48,22 +48,24 @@ export class SystemAccountProvisioningAdapter {
   prepare(input: {
     actorAccountId: AccountId | null
     provider: IdentityProvider
-    subject: string
+    /** パスキーではAccount IDを使うので渡さない。 */
+    subject?: string
     email: string
-    passwordHash: string | null
     roleId: IamRoleId
     now: Date
   }): PreparedSystemAccountProvisioning | Error {
     const accountId = zAccountId.safeParse(crypto.randomUUID())
     const identityId = zIdentityId.safeParse(crypto.randomUUID())
-    const subject = identitySubjectSchema.safeParse(input.subject)
-    if (!accountId.success || !identityId.success || !subject.success) {
+    if (!accountId.success || !identityId.success) {
       return new Error("invalid System provisioning identity")
     }
-    if (
-      !Number.isSafeInteger(input.now.getTime()) ||
-      (input.provider === "password") !== (input.passwordHash !== null)
-    ) {
+    // パスキーのIdentityはBetter AuthのユーザーIDとなるAccount IDをsubjectにし、登録まで未登録にする。
+    const isPasskey = input.provider === "passkey"
+    const subject = identitySubjectSchema.safeParse(isPasskey ? accountId.data : input.subject)
+    if (!subject.success || (isPasskey && input.subject !== undefined)) {
+      return new Error("invalid System provisioning identity")
+    }
+    if (!Number.isSafeInteger(input.now.getTime())) {
       return new Error("invalid System provisioning input")
     }
     const afterJson = StableSystemAuditJsonValue.create({
@@ -134,9 +136,16 @@ export class SystemAccountProvisioningAdapter {
         .prepare(
           `INSERT INTO system_identity_bindings
              (id, account_id, provider, subject, created_at, activated_at, revoked_at)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?5, NULL)`,
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL)`,
         )
-        .bind(identityId.data, accountId.data, input.provider, subject.data, input.now.getTime()),
+        .bind(
+          identityId.data,
+          accountId.data,
+          input.provider,
+          subject.data,
+          input.now.getTime(),
+          isPasskey ? null : input.now.getTime(),
+        ),
       database
         .prepare(
           `INSERT INTO system_identity_profiles
@@ -144,17 +153,6 @@ export class SystemAccountProvisioningAdapter {
            VALUES (?1, ?2, 1, NULL, ?3)`,
         )
         .bind(identityId.data, input.email, input.now.getTime()),
-      ...(input.passwordHash === null
-        ? []
-        : [
-            database
-              .prepare(
-                `INSERT INTO system_password_credentials
-                   (identity_id, password_hash, changed_at, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?3, ?3)`,
-              )
-              .bind(identityId.data, input.passwordHash, input.now.getTime()),
-          ]),
       database
         .prepare(
           `INSERT INTO system_role_bindings

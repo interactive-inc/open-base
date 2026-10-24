@@ -44,7 +44,6 @@ type CreateProps = Readonly<{
   binding: IdentityBindingEntity
   email: string | null
   isEmailVerified: boolean
-  passwordHash: string | null
   auditStatements: ReadonlyArray<D1PreparedStatement>
 }>
 
@@ -152,9 +151,6 @@ export class SystemIdentityCatalogRepository {
   }
 
   async create(props: CreateProps): Promise<SystemIdentityMutation | Error> {
-    if (props.binding.provider === "password" && props.passwordHash === null) return "conflict"
-    if (props.binding.provider !== "password" && props.passwordHash !== null) return "conflict"
-
     try {
       const statements = [
         this.prepareActorAccountGuard(props.actorAccountId, props.binding.accountId),
@@ -164,11 +160,11 @@ export class SystemIdentityCatalogRepository {
            SELECT ?1, ?2, ?3, ?4, ?5, ?6, NULL
            WHERE EXISTS (SELECT 1 FROM system_accounts WHERE id = ?2)
              AND (
-               ?3 <> 'password'
+               ?3 <> 'passkey'
                OR NOT EXISTS (
                  SELECT 1 FROM system_identity_bindings
                  WHERE account_id = ?2
-                   AND provider = 'password'
+                   AND provider = 'passkey'
                    AND revoked_at IS NULL
                )
              )`,
@@ -193,15 +189,6 @@ export class SystemIdentityCatalogRepository {
           props.isEmailVerified ? 1 : 0,
           props.binding.createdAt.getTime(),
         ),
-        ...(props.passwordHash === null
-          ? []
-          : [
-              this.c.env.DB.prepare(
-                `INSERT INTO system_password_credentials
-                   (identity_id, password_hash, changed_at, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?3, ?3)`,
-              ).bind(props.binding.id, props.passwordHash, props.binding.createdAt.getTime()),
-            ]),
         this.c.env.DB.prepare(
           `UPDATE system_accounts
            SET token_version = token_version + 1,
@@ -252,9 +239,6 @@ export class SystemIdentityCatalogRepository {
         this.c.env.DB.prepare(
           "SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('', '$') END AS ok",
         ),
-        this.c.env.DB.prepare(
-          "DELETE FROM system_password_credentials WHERE identity_id = ?1",
-        ).bind(props.identity.binding.id),
         this.c.env.DB.prepare(
           `UPDATE system_accounts
            SET token_version = token_version + 1,

@@ -1,16 +1,17 @@
 import { zValidator } from "@hono/zod-validator"
 import { z } from "zod"
+import { startDeviceLogin, waitForDeviceLogin } from "@/lib/auth/device-login"
 import { resolveBaseUrl } from "@/lib/config/resolve-base-url"
 import { SettingsFile } from "@/lib/config/settings-file"
 import { createClient } from "@/lib/http/hc-client"
 import { factory } from "@/factory"
-import { UsageError } from "@/lib/errors"
 
-export const help = `base login — ログインしてトークンを取得
+export const help = `base login — ブラウザのパスキーで承認してトークンを取得
 
 usage:
-  base login --email <email> --password <password> [--base-url <url>]
+  base login [--base-url <url>] [--no-browser]
 
+表示されたURLをブラウザで開き、パスキーでサインインしてコードを承認します。
 接続先は --base-url ?? 環境変数 BASE_API ?? 既定。接続先ごとにトークンを保存する。`
 
 export default factory.createHandlers(
@@ -18,9 +19,8 @@ export default factory.createHandlers(
     "json",
     z.object({
       help: z.string().optional(),
-      email: z.string().optional(),
-      password: z.string().optional(),
       "base-url": z.string().optional(),
+      "no-browser": z.string().optional(),
     }),
   ),
   async (c) => {
@@ -28,44 +28,48 @@ export default factory.createHandlers(
 
     if (query.help) return c.text(help)
 
-    if (!query.email || !query.password) {
-      throw new UsageError("--email と --password が必要です")
-    }
-
     const baseUrl = resolveBaseUrl(query["base-url"])
 
-    const client = await createClient(baseUrl)
+    const authorization = await startDeviceLogin(baseUrl)
 
-    // createClient の fetch ラッパーが 4xx/5xx を ApiError として throw するため、
-    // ここに来た時点で response は必ず成功。手動の ok チェックは不要。
-    const response = await client.system.sessions.$post({
-      json: { subject: query.email, password: query.password },
-    })
-
-    const result = z
-      .object({
-        access_token: z.string(),
-        refresh_token: z.string().nullable(),
-      })
-      .parse(await response.json())
-
-    const name = await fetchName(baseUrl, result.access_token)
-
-    await new SettingsFile().saveLogin(
-      baseUrl,
-      { token: result.access_token, refresh_token: result.refresh_token },
-      query.email,
-      name,
+    process.stderr.write(
+      `ブラウザで次のURLを開き、コード ${authorization.userCode} を確認して承認してください:\n${authorization.verificationUrl}\n`,
     )
+
+    if (query["no-browser"] === undefined) openBrowser(authorization.verificationUrl)
+
+    const token = await waitForDeviceLogin(baseUrl, authorization)
+
+    const profile = await fetchProfile(baseUrl, token)
+
+    await new SettingsFile().saveLogin(baseUrl, { token }, profile.email, profile.name)
 
     return c.text(`ログイン成功 base_url=${baseUrl}`)
   },
 )
 
+/** 承認を待つ間にブラウザを開く。開けなくてもURLは表示済みなので失敗にしない。 */
+function openBrowser(url: string): void {
+  const command =
+    process.platform === "darwin"
+      ? ["open", url]
+      : process.platform === "win32"
+        ? ["cmd", "/c", "start", "", url]
+        : ["xdg-open", url]
+  try {
+    Bun.spawn(command, { stdout: "ignore", stderr: "ignore" }).unref()
+  } catch {
+    // URLは表示済み。
+  }
+}
+
 /**
- * ログイン直後の access_token で /me を叩き name を取得する。失敗しても "" を返しログインは通す。
+ * ログイン直後のトークンで本人の名前とメールアドレスを取得する。失敗しても空文字でログインは通す。
  */
-async function fetchName(baseUrl: string, accessToken: string): Promise<string> {
+async function fetchProfile(
+  baseUrl: string,
+  accessToken: string,
+): Promise<{ name: string; email: string }> {
   try {
     const client = await createClient(baseUrl)
 
@@ -74,10 +78,12 @@ async function fetchName(baseUrl: string, accessToken: string): Promise<string> 
       { headers: { Authorization: `Bearer ${accessToken}` } },
     )
 
-    const me = z.object({ name: z.string() }).parse(await response.json())
+    const me = z
+      .object({ name: z.string(), email: z.string().nullable().optional() })
+      .parse(await response.json())
 
-    return me.name
+    return { name: me.name, email: me.email ?? "" }
   } catch {
-    return ""
+    return { name: "", email: "" }
   }
 }

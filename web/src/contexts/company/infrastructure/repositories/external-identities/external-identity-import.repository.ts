@@ -404,7 +404,6 @@ export class ExternalIdentityImportRepository {
       provider: "oidc",
       subject: input.subject,
       email: input.email,
-      passwordHash: null,
       roleId: role.id,
       now: context.now,
     })

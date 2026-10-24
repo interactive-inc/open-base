@@ -14,6 +14,7 @@ import { SystemAccessTokenStateAdapter } from "@system/infrastructure/adapters/a
 import { AccessTokenService } from "@system/lib/auth/access-token-service"
 import { SYSTEM_ACCESS_TOKEN_PROFILE } from "@system/lib/auth/system-access-token-profile"
 import type { SystemReadAuthentication } from "@system/domain/definitions/system-read-authentication.definition"
+import type { SystemSignedInSession } from "@system/interface/request-environment/system-signed-in-session-channel"
 
 type Bindings = (SystemD1Context & SystemExternalIdentityContext & SystemJwtSecretContext)["env"]
 
@@ -45,6 +46,8 @@ async function resolveSystemSession(props: {
 
   const accountId = zAccountId.safeParse(claims.sub)
   if (!accountId.success) return { kind: "rejected", reason: "invalid token" }
+  // 人のログインはBetter Authのセッションだけで受け付ける。System JWTは機械credentialのものだけ通す。
+  if (claims.machineCredentialId === undefined) return { kind: "rejected", reason: "invalid token" }
 
   const authentication = await new SystemAccessTokenStateAdapter({
     database: props.env.DB,
@@ -53,7 +56,6 @@ async function resolveSystemSession(props: {
     tokenVersion: claims.ver,
     issuedAtMs: claims.issuedAtMs,
     machineCredentialId: claims.machineCredentialId,
-    sessionFamilyId: claims.sid ?? null,
     at: props.now,
   })
   if (authentication instanceof Error) return { kind: "unavailable" }
@@ -93,7 +95,7 @@ export type VerifiedExternalAccessTokenAccount = Extract<
   Readonly<{ kind: "accepted" }>
 >
 
-/** Bearerを外部access tokenまたは従来System sessionとしてAccountへ解決する。 */
+/** Bearerを外部access tokenまたは機械credentialのaccess tokenとしてAccountへ解決する。 */
 type Context = Readonly<{ env: Bindings }>
 export class ResolveBearerAccountAdapter {
   constructor(private readonly c: Context) {}
@@ -112,6 +114,45 @@ export class ResolveBearerAccountAdapter {
   }
 
   /**
+   * 製品のcompositionが検証したサインイン済みセッションを、Accountの現在状態と照合する。
+   * セッション作成時のtoken版が現在の値と違えば、Accountの停止や失効の後のセッションとして拒否する。
+   */
+  async resolveSignedIn(
+    input: Readonly<{ session: SystemSignedInSession; now: Date }>,
+  ): Promise<BearerAccountResolution> {
+    const session = input.session
+    const accountId = zAccountId.safeParse(session.accountId)
+    if (!accountId.success) return { kind: "rejected", reason: "invalid session" }
+    if (session.expiresAt.getTime() <= input.now.getTime()) {
+      return { kind: "rejected", reason: "session expired" }
+    }
+    const authentication = await new SystemAccessTokenStateAdapter({
+      database: this.c.env.DB,
+    }).resolve({
+      accountId: accountId.data,
+      tokenVersion: session.accountTokenVersion,
+      issuedAtMs: session.authenticatedAt.getTime(),
+      at: input.now,
+    })
+    if (authentication instanceof Error) return { kind: "unavailable" }
+    if (authentication.kind === "rejected") return { kind: "rejected", reason: "invalid session" }
+
+    return {
+      kind: "accepted",
+      accountId: accountId.data,
+      tokenVersion: authentication.account.tokenVersion,
+      readAuthentication: {
+        accountId: accountId.data,
+        tokenVersion: authentication.account.tokenVersion,
+        issuedAtMs: session.authenticatedAt.getTime(),
+        expiresAtMs: session.expiresAt.getTime(),
+        machineCredentialId: null,
+        identityBindingId: null,
+      },
+    }
+  }
+
+  /**
    * 検証済みの外部access tokenの主体を、Accountの現在状態と照合して認証結果にする。
    * HTTPのBearerとService Binding RPCが同じ照合を通るよう、ここだけで組み立てる。
    */
@@ -127,7 +168,6 @@ export class ResolveBearerAccountAdapter {
       accountId: accountId.data,
       tokenVersion: external.tokenVersion,
       issuedAtMs: 0,
-      sessionFamilyId: null,
       at: input.now,
     })
     if (authentication instanceof Error) return { kind: "unavailable" }

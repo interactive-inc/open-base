@@ -18,7 +18,6 @@ const bodySchema = z.strictObject({
   code: z.string().trim().min(1).max(64),
   name: z.string().trim().min(1).max(200),
   email: z.string().email().max(320),
-  password: z.string().min(12).max(200),
   role: z.enum(["member", "manager", "hr", "root"]),
   hire_on: z.string().date(),
   employment_type: z.enum(["FULL_TIME", "PART_TIME"]),
@@ -27,7 +26,7 @@ const bodySchema = z.strictObject({
   manager_employee_code: z.string().trim().min(1).max(64).nullable().optional(),
 })
 
-// @authorization permission - employee:create、lifecycle、IAM権限をApplicationで再検証する
+// @authorization permission - employee:create、lifecycle、IAM権限をApplicationで再検証してパスキー招待を発行する
 export const POST = factory.createHandlers(
   verifyBearer,
   zValidator("json", bodySchema),
@@ -54,7 +53,6 @@ export const POST = factory.createHandlers(
       action,
       expectedCompanyRevision: body.expected_company_revision,
       email: body.email,
-      password: body.password,
       roleKey: body.role,
       idempotencyKey,
       now: context.var.now(),
@@ -70,6 +68,14 @@ export const POST = factory.createHandlers(
         status: "active",
         role: result.role,
         replayed: result.replayed,
+        // 従業員はこの招待でパスキーを登録する。再送の応答には含めない。
+        passkey_enrollment:
+          result.passkeyEnrollment === null
+            ? null
+            : {
+                token: result.passkeyEnrollment.token,
+                expires_at: result.passkeyEnrollment.expiresAt.toISOString(),
+              },
       },
       result.replayed ? 200 : 201,
     )

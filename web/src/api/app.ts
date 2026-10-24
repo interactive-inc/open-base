@@ -81,7 +81,7 @@ import * as systemAccountsRoute from "@system/interface/routes/system.accounts"
 import * as systemAccountsAccountIdRoute from "@system/interface/routes/system.accounts.$accountId"
 import * as systemAccountsAccountIdIdentitiesRoute from "@system/interface/routes/system.accounts.$accountId.identities"
 import * as systemAccountsAccountIdIdentitiesIdentityIdRoute from "@system/interface/routes/system.accounts.$accountId.identities.$identityId"
-import * as systemAccountsAccountIdPasswordCredentialsRoute from "@system/interface/routes/system.accounts.$accountId.password-credentials"
+import * as systemAccountsAccountIdPasskeyEnrollmentsRoute from "@system/interface/routes/system.accounts.$accountId.passkey-enrollments"
 import * as systemAccountsAccountIdRoleBindingsRoute from "@system/interface/routes/system.accounts.$accountId.role-bindings"
 import * as systemAccountsAccountIdRoleBindingsBindingIdRoute from "@system/interface/routes/system.accounts.$accountId.role-bindings.$bindingId"
 import * as systemAttachmentsRoute from "@system/interface/routes/system.attachments"
@@ -92,14 +92,8 @@ import * as systemAttachmentsPurgeUnlinkedRoute from "@system/interface/routes/s
 import * as systemAuditDisclosurePoliciesRoute from "@system/interface/routes/system.audit-disclosure-policies"
 import * as systemAuditEventsRoute from "@system/interface/routes/system.audit-events"
 import * as systemAuditEventsEventIdRoute from "@system/interface/routes/system.audit-events.$eventId"
-import * as systemAuthPasswordResetRoute from "@system/interface/routes/system.auth.password.reset"
 import * as systemBatchJobsRoute from "@system/interface/routes/system.batch-jobs"
 import * as systemBootstrapRoute from "@system/interface/routes/system.bootstrap"
-import * as systemBrowserLoginCodesRoute from "@system/interface/routes/system.browser-login-codes"
-import * as systemBrowserSessionsRoute from "@system/interface/routes/system.browser-sessions"
-import * as systemCliAuthorizationCallbackRoute from "@system/interface/routes/system.cli-authorization-callback"
-import * as systemCliAuthorizationsRoute from "@system/interface/routes/system.cli-authorizations"
-import * as systemCliSessionsRoute from "@system/interface/routes/system.cli-sessions"
 import * as systemConnectorsRoute from "@system/interface/routes/system.connectors"
 import * as systemConnectorsConnectorIdRoute from "@system/interface/routes/system.connectors.$connectorId"
 import * as systemDeadLettersRoute from "@system/interface/routes/system.dead-letters"
@@ -107,7 +101,6 @@ import * as systemDeadLettersDeadLetterIdRequeueRoute from "@system/interface/ro
 import * as systemDeliveriesRoute from "@system/interface/routes/system.deliveries"
 import * as systemDeliveriesDeliveryIdRoute from "@system/interface/routes/system.deliveries.$deliveryId"
 import * as systemHealthRoute from "@system/interface/routes/system.health"
-import * as systemIdentitySessionsRoute from "@system/interface/routes/system.identity-sessions"
 import * as systemInboxMessagesMessageIdRoute from "@system/interface/routes/system.inbox-messages.$messageId"
 import * as systemIntegrationExchangesRoute from "@system/interface/routes/system.integration-exchanges"
 import * as systemIntegrationExchangesExchangeIdRoute from "@system/interface/routes/system.integration-exchanges.$exchangeId"
@@ -116,10 +109,7 @@ import * as systemMachineSessionsRoute from "@system/interface/routes/system.mac
 import * as systemNotificationsRoute from "@system/interface/routes/system.notifications"
 import * as systemNotificationsIdRoute from "@system/interface/routes/system.notifications.$id"
 import * as systemNotificationsUnreadCountRoute from "@system/interface/routes/system.notifications.unread-count"
-import * as systemOauthAuthorizationsRoute from "@system/interface/routes/system.oauth.authorizations"
-import * as systemOauthMcpGrantsRoute from "@system/interface/routes/system.oauth.mcp-grants"
-import * as systemOauthTokenRoute from "@system/interface/routes/system.oauth.token"
-import * as systemOauthUserinfoRoute from "@system/interface/routes/system.oauth.userinfo"
+import * as systemPasskeyRecoveriesRoute from "@system/interface/routes/system.passkey-recoveries"
 import * as systemPreservedRecordsRoute from "@system/interface/routes/system.preserved-records"
 import * as systemPreservedRecordsRecordIdContentRoute from "@system/interface/routes/system.preserved-records.$recordId.content"
 import * as systemPreservedRecordsRecordIdDossierRoute from "@system/interface/routes/system.preserved-records.$recordId.dossier"
@@ -130,7 +120,6 @@ import * as systemPrincipalsPrincipalIdMachineCredentialsCredentialIdRoute from 
 import * as systemProposalsNumberVersionsVersionRoute from "@system/interface/routes/system.proposals.$number.versions.$version"
 import * as systemRolesRoute from "@system/interface/routes/system.roles"
 import * as systemRolesRoleIdRoute from "@system/interface/routes/system.roles.$roleId"
-import * as systemSessionsRoute from "@system/interface/routes/system.sessions"
 import * as systemStepUpGrantsRoute from "@system/interface/routes/system.step-up-grants"
 import * as systemWorkItemsRoute from "@system/interface/routes/system.work-items"
 import * as systemWorkItemsIdRoute from "@system/interface/routes/system.work-items.$id"
@@ -392,9 +381,9 @@ const routePart28 = createRouteApp()
     "/system/accounts/:accountId/identities/:identityId",
     ...systemAccountsAccountIdIdentitiesIdentityIdRoute.DELETE,
   )
-  .patch(
-    "/system/accounts/:accountId/password-credentials",
-    ...systemAccountsAccountIdPasswordCredentialsRoute.PATCH,
+  .post(
+    "/system/accounts/:accountId/passkey-enrollments",
+    ...systemAccountsAccountIdPasskeyEnrollmentsRoute.POST,
   )
   .get("/system/accounts/:accountId/role-bindings", ...systemAccountsAccountIdRoleBindingsRoute.GET)
   .post(
@@ -424,15 +413,8 @@ const routePart28 = createRouteApp()
   .post("/system/audit-disclosure-policies", ...systemAuditDisclosurePoliciesRoute.POST)
   .get("/system/audit-events", ...systemAuditEventsRoute.GET)
   .get("/system/audit-events/:eventId", ...systemAuditEventsEventIdRoute.GET)
-  .post("/system/auth/password/reset", ...systemAuthPasswordResetRoute.POST)
-  .patch("/system/auth/password/reset", ...systemAuthPasswordResetRoute.PATCH)
   .get("/system/batch-jobs", ...systemBatchJobsRoute.GET)
   .post("/system/bootstrap", ...systemBootstrapRoute.POST)
-  .post("/system/browser-login-codes", ...systemBrowserLoginCodesRoute.POST)
-  .post("/system/browser-sessions", ...systemBrowserSessionsRoute.POST)
-  .get("/system/cli-authorization-callback", ...systemCliAuthorizationCallbackRoute.GET)
-  .get("/system/cli-authorizations", ...systemCliAuthorizationsRoute.GET)
-  .post("/system/cli-sessions", ...systemCliSessionsRoute.POST)
   .get("/system/connectors", ...systemConnectorsRoute.GET)
   .post("/system/connectors", ...systemConnectorsRoute.POST)
   .patch("/system/connectors/:connectorId", ...systemConnectorsConnectorIdRoute.PATCH)
@@ -443,11 +425,8 @@ const routePart28 = createRouteApp()
   )
   .get("/system/deliveries", ...systemDeliveriesRoute.GET)
   .post("/system/deliveries", ...systemDeliveriesRoute.POST)
-
-const routePart29 = createRouteApp()
   .patch("/system/deliveries/:deliveryId", ...systemDeliveriesDeliveryIdRoute.PATCH)
   .get("/system/health", ...systemHealthRoute.GET)
-  .post("/system/identity-sessions", ...systemIdentitySessionsRoute.POST)
   .patch("/system/inbox-messages/:messageId", ...systemInboxMessagesMessageIdRoute.PATCH)
   .get("/system/integration-exchanges", ...systemIntegrationExchangesRoute.GET)
   .post("/system/integration-exchanges", ...systemIntegrationExchangesRoute.POST)
@@ -459,6 +438,8 @@ const routePart29 = createRouteApp()
     "/system/integration-exchanges/:exchangeId",
     ...systemIntegrationExchangesExchangeIdRoute.PATCH,
   )
+
+const routePart29 = createRouteApp()
   .get(
     "/system/integration-exchanges/:exchangeId/reconciliations",
     ...systemIntegrationExchangesExchangeIdReconciliationsRoute.GET,
@@ -475,10 +456,7 @@ const routePart29 = createRouteApp()
   .get("/system/notifications/:id", ...systemNotificationsIdRoute.GET)
   .patch("/system/notifications/:id", ...systemNotificationsIdRoute.PATCH)
   .delete("/system/notifications/:id", ...systemNotificationsIdRoute.DELETE)
-  .post("/system/oauth/authorizations", ...systemOauthAuthorizationsRoute.POST)
-  .post("/system/oauth/mcp-grants", ...systemOauthMcpGrantsRoute.POST)
-  .post("/system/oauth/token", ...systemOauthTokenRoute.POST)
-  .get("/system/oauth/userinfo", ...systemOauthUserinfoRoute.GET)
+  .post("/system/passkey-recoveries", ...systemPasskeyRecoveriesRoute.POST)
   .get("/system/permission-definitions", ...systemPermissionDefinitionsRoute.GET)
   .get("/system/preserved-records", ...systemPreservedRecordsRoute.GET)
   .get(
@@ -514,17 +492,12 @@ const routePart29 = createRouteApp()
   .get("/system/roles/:roleId", ...systemRolesRoleIdRoute.GET)
   .patch("/system/roles/:roleId", ...systemRolesRoleIdRoute.PATCH)
   .delete("/system/roles/:roleId", ...systemRolesRoleIdRoute.DELETE)
-  .post("/system/sessions", ...systemSessionsRoute.POST)
-  .patch("/system/sessions", ...systemSessionsRoute.PATCH)
-  .delete("/system/sessions", ...systemSessionsRoute.DELETE)
   .post("/system/step-up-grants", ...systemStepUpGrantsRoute.POST)
   .get("/system/work-items", ...systemWorkItemsRoute.GET)
   .post("/system/work-items", ...systemWorkItemsRoute.POST)
   .get("/system/work-items/:id", ...systemWorkItemsIdRoute.GET)
   .post("/system/work-items/:id/accept", ...systemWorkItemsIdAcceptRoute.POST)
   .post("/system/work-items/:id/approve", ...systemWorkItemsIdApproveRoute.POST)
-
-const routePart30 = createRouteApp()
   .post("/system/work-items/:id/cancel", ...systemWorkItemsIdCancelRoute.POST)
   .get(
     "/system/work-items/:id/evidence/:attachmentId",
@@ -568,7 +541,6 @@ export const app = createAppBase()
   .route("/", routePart27)
   .route("/", routePart28)
   .route("/", routePart29)
-  .route("/", routePart30)
 
 export type AppType = typeof app
 
@@ -607,7 +579,6 @@ type ApiClientPart26 = ReturnType<typeof hc<typeof routePart26>>
 type ApiClientPart27 = ReturnType<typeof hc<typeof routePart27>>
 type ApiClientPart28 = ReturnType<typeof hc<typeof routePart28>>
 type ApiClientPart29 = ReturnType<typeof hc<typeof routePart29>>
-type ApiClientPart30 = ReturnType<typeof hc<typeof routePart30>>
 export type ApiClient = ApiClientPart0 &
   ApiClientPart1 &
   ApiClientPart2 &
@@ -637,5 +608,4 @@ export type ApiClient = ApiClientPart0 &
   ApiClientPart26 &
   ApiClientPart27 &
   ApiClientPart28 &
-  ApiClientPart29 &
-  ApiClientPart30
+  ApiClientPart29

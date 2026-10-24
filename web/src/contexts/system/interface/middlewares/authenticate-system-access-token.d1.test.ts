@@ -2,7 +2,10 @@ import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { SystemSessionTestContext } from "@system/test/system-session-test-context.test-support"
 import { systemFactory } from "@system/interface/request-environment/system-factory"
 import { authenticateSystemAccessToken } from "@system/interface/middlewares/authenticate-system-access-token"
-import { createSystemSessionApplications } from "@system/test/create-system-session-applications.test-support"
+import {
+  createSystemSessionApplications,
+  systemTestSignedInSession,
+} from "@system/test/create-system-session-applications.test-support"
 import { describe, expect, setDefaultTimeout, test } from "bun:test"
 import { hc } from "hono/client"
 
@@ -41,7 +44,7 @@ describe("authenticateSystemAccessToken", () => {
 
     const applications = createSystemSessionApplications({
       context: fixture.context,
-      jwtSecret,
+
       sessionTtlMilliseconds: 604_800_000,
     })
     expect(applications).not.toBeInstanceOf(Error)
@@ -57,6 +60,7 @@ describe("authenticateSystemAccessToken", () => {
 
     const app = systemFactory
       .createApp()
+      .use("*", systemTestSignedInSession)
       .use("*", async (context, next) => {
         context.set("now", () => now)
         await next()

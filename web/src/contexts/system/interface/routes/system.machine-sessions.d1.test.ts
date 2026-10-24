@@ -1,7 +1,8 @@
+import { AccessTokenService } from "@system/lib/auth/access-token-service"
+import { SYSTEM_ACCESS_TOKEN_PROFILE } from "@system/lib/auth/system-access-token-profile"
 import { execSql } from "@system/test/local-d1/exec-sql.test-support"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { SystemMachineCredentialRepository } from "@system/infrastructure/repositories/iam/system-machine-credential.repository"
-import { SystemAccessTokenIssuer } from "@system/lib/auth/system-access-token-issuer"
 import { SystemPrincipalSecretService } from "@system/lib/auth/system-principal-secret-service"
 import { systemFactory } from "@system/interface/request-environment/system-factory"
 import { POST } from "@system/interface/routes/system.machine-sessions"
@@ -191,12 +192,16 @@ describe("System machine access token", () => {
     const context = await createFixture()
     await issuedToken(await context.issue())
     for (const machineCredentialId of [undefined, "unknown-credential"]) {
-      const token = await new SystemAccessTokenIssuer(secret).issue({
-        accountId: zAccountId.parse("13943a8c-a101-4ba6-82d3-560dfa60c19b"),
-        tokenVersion: 0,
-        machineCredentialId,
-        now: context.clock.at,
-      })
+      // 発行元のないtokenは発行器では作れないので、署名だけを直接行う。
+      const token = await new AccessTokenService({ profile: SYSTEM_ACCESS_TOKEN_PROFILE }).create(
+        {
+          accountId: "13943a8c-a101-4ba6-82d3-560dfa60c19b",
+          tokenVersion: 0,
+          ...(machineCredentialId === undefined ? {} : { machineCredentialId }),
+        },
+        secret,
+        context.clock.at,
+      )
       expect(token).not.toBeInstanceOf(Error)
       if (token instanceof Error) throw token
       expect((await context.read(token)).status).toBe(401)

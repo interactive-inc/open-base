@@ -42,7 +42,7 @@ describe("config (endpoints 形式)", () => {
   test("saveLogin writes a 4-field string entry keyed by the resolved base url", async () => {
     await new SettingsFile().saveLogin(
       baseUrl,
-      { token: "access-a", refresh_token: "refresh-a" },
+      { token: "access-a" },
       "you@example.com",
       "You Example",
     )
@@ -55,7 +55,7 @@ describe("config (endpoints 形式)", () => {
     const entry = (settings.endpoints as Record<string, unknown>)[baseUrl]
 
     expect(entry).toEqual({
-      refreshToken: "refresh-a",
+      refreshToken: "",
       accessToken: "access-a",
       email: "you@example.com",
       name: "You Example",
@@ -91,16 +91,18 @@ describe("config (endpoints 形式)", () => {
 
     await new SettingsFile().saveLogin(
       baseUrl,
-      { token: "access-a", refresh_token: "refresh-a" },
+      { token: "access-a" },
       "you@example.com",
       "You Example",
     )
 
-    // tokens-only 経路の merge 漏れも検出するため 2 回書き込む。
-    await new SettingsFile().saveTokens(baseUrl, {
-      token: "access-a2",
-      refresh_token: "refresh-a2",
-    })
+    // 2 回目の書き込みでも merge 漏れが無いことを検出する。
+    await new SettingsFile().saveLogin(
+      baseUrl,
+      { token: "access-a2" },
+      "you@example.com",
+      "You Example",
+    )
 
     const settings = await readSettings()
 
@@ -118,9 +120,9 @@ describe("config (endpoints 形式)", () => {
       extraField: "keep-me",
     })
 
-    // 自分のエントリは email / name と独自フィールドを温存しトークンだけ更新される。
+    // 自分のエントリは独自フィールドを温存し、使わないrefresh tokenは空にする。
     expect(endpoints[baseUrl]).toEqual({
-      refreshToken: "refresh-a2",
+      refreshToken: "",
       accessToken: "access-a2",
       email: "you@example.com",
       name: "You Example",
@@ -128,26 +130,10 @@ describe("config (endpoints 形式)", () => {
     })
   })
 
-  test("saveTokens creates an entry with empty email/name when none exists", async () => {
-    await new SettingsFile().saveTokens(baseUrl, {
-      token: "access-a",
-      refresh_token: "refresh-a",
-    })
-
-    const entry = (await readSettings()).endpoints as Record<string, unknown>
-
-    expect(entry[baseUrl]).toEqual({
-      refreshToken: "refresh-a",
-      accessToken: "access-a",
-      email: "",
-      name: "",
-    })
-  })
-
-  test('stores a null refresh_token as "" and reads it back as null', async () => {
+  test('stores the unused refresh token as "" and reads the access token back', async () => {
     await new SettingsFile().saveLogin(
       baseUrl,
-      { token: "access-a", refresh_token: null },
+      { token: "access-a" },
       "you@example.com",
       "You Example",
     )
@@ -159,8 +145,6 @@ describe("config (endpoints 形式)", () => {
 
     const loaded = await loadConfig(baseUrl)
 
-    // 読み込みでは "" を null に戻す。
-    expect(loaded.refresh_token).toBeNull()
     expect(loaded.token).toBe("access-a")
     expect(loaded.base_url).toBe(baseUrl)
   })
@@ -169,7 +153,6 @@ describe("config (endpoints 形式)", () => {
     const loaded = await loadConfig(baseUrl)
 
     expect(loaded.token).toBeNull()
-    expect(loaded.refresh_token).toBeNull()
   })
 
   test("write hardens dir to 0700 and file to 0600 even if pre-existing perms are loose", async () => {
@@ -178,7 +161,7 @@ describe("config (endpoints 形式)", () => {
 
     await new SettingsFile().saveLogin(
       baseUrl,
-      { token: "access-a", refresh_token: "refresh-a" },
+      { token: "access-a" },
       "you@example.com",
       "You Example",
     )
@@ -198,10 +181,7 @@ describe("config (endpoints 形式)", () => {
     await writeFile(file, "{}\n")
     await chmod(file, 0o644)
 
-    await new SettingsFile().saveTokens(baseUrl, {
-      token: "access-a",
-      refresh_token: "refresh-a",
-    })
+    await new SettingsFile().saveLogin(baseUrl, { token: "access-a" }, "you@example.com", "You")
 
     const fileStat = await stat(file)
 
@@ -216,7 +196,6 @@ describe("config (endpoints 形式)", () => {
     const loaded = await loadConfig(baseUrl)
 
     expect(loaded.token).toBeNull()
-    expect(loaded.refresh_token).toBeNull()
   })
 
   test("refuses to overwrite a malformed file (protects other CLIs' entries)", async () => {
@@ -226,12 +205,7 @@ describe("config (endpoints 形式)", () => {
 
     // 破損ファイルを endpoints 形式で上書きすると他 CLI のエントリを全消去してしまうため中断する。
     const outcome = await new SettingsFile()
-      .saveLogin(
-        baseUrl,
-        { token: "access-a", refresh_token: "refresh-a" },
-        "you@example.com",
-        "You Example",
-      )
+      .saveLogin(baseUrl, { token: "access-a" }, "you@example.com", "You Example")
       .then(() => null)
       .catch((error: unknown) => error)
 

@@ -5,11 +5,9 @@ import { z } from "zod"
 
 export type EndpointTokens = {
   token: string | null
-  refresh_token: string | null
 }
 
 const zEndpoint = z.object({
-  refreshToken: z.string(),
   accessToken: z.string(),
   email: z.string(),
   name: z.string(),
@@ -39,7 +37,7 @@ export class SettingsFile {
   }
 
   /**
-   * 指定 URL のエントリからトークンを取り出す。エントリが無ければ両方 null。
+   * 指定 URL のエントリからトークンを取り出す。エントリが無ければ null。
    * 空文字は「未設定」として null に戻す（保存時は "" を使う）。
    */
   async tokensFor(baseUrl: string): Promise<EndpointTokens> {
@@ -54,19 +52,16 @@ export class SettingsFile {
       // 破損 JSON は warning + 既定値で続行する（読み取り専用パスを塞がない）。
       process.stderr.write(`warning: ${this.file} を解析できませんでした。既定設定で続行します\n`)
 
-      return { token: null, refresh_token: null }
+      return { token: null }
     }
 
     const parsed = zEndpoint.safeParse(root.endpoints[baseUrl])
 
     if (parsed.success === false) {
-      return { token: null, refresh_token: null }
+      return { token: null }
     }
 
-    return {
-      token: parsed.data.accessToken === "" ? null : parsed.data.accessToken,
-      refresh_token: parsed.data.refreshToken === "" ? null : parsed.data.refreshToken,
-    }
+    return { token: parsed.data.accessToken === "" ? null : parsed.data.accessToken }
   }
 
   /**
@@ -81,17 +76,10 @@ export class SettingsFile {
     await this.write(baseUrl, tokens, { email, name })
   }
 
-  /**
-   * トークンのみ更新（refresh 後）。既存エントリの email / name は温存し、無ければ "" で作る。
-   */
-  async saveTokens(baseUrl: string, tokens: EndpointTokens): Promise<void> {
-    await this.write(baseUrl, tokens, null)
-  }
-
   private async write(
     baseUrl: string,
     tokens: EndpointTokens,
-    identity: { email: string; name: string } | null,
+    identity: { email: string; name: string },
   ): Promise<void> {
     const root = await this.read()
 
@@ -110,16 +98,15 @@ export class SettingsFile {
 
     const previous = toRawEntry(root.endpoints[baseUrl])
 
-    const existing = zEndpoint.safeParse(previous)
-
     // 同一エンドポイントのエントリに保存済みの追加フィールドを消さないよう、生の既存
-    // エントリへ上書きする形でマージする。email / name は identity 指定時のみ差し替える。
-    const entry: Record<string, unknown> & Endpoint = {
+    // エントリへ上書きする形でマージする。refresh tokenは使わないが、同じファイルを読む
+    // 他のCLIが全フィールドをstringで要求するため "" を書く。
+    const entry: Record<string, unknown> & Endpoint & { refreshToken: string } = {
       ...previous,
-      refreshToken: tokens.refresh_token ?? "",
+      refreshToken: "",
       accessToken: tokens.token ?? "",
-      email: identity !== null ? identity.email : existing.success ? existing.data.email : "",
-      name: identity !== null ? identity.name : existing.success ? existing.data.name : "",
+      email: identity.email,
+      name: identity.name,
     }
 
     const merged: Root = { ...root, endpoints: { ...root.endpoints, [baseUrl]: entry } }

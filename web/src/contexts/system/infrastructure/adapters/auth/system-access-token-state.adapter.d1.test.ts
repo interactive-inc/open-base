@@ -12,7 +12,6 @@ const input = {
   accountId: zAccountId.parse("d5858208-e680-4db8-a05d-8bf4f900c24e"),
   tokenVersion: 0,
   issuedAtMs: 1_000,
-  sessionFamilyId: null,
   at: new Date(1_000),
 }
 

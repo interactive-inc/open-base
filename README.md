@@ -10,27 +10,27 @@ Bunとportlessを用意し、次を実行します。
 
 ```sh
 vp install
-cp api/wrangler.example.jsonc api/wrangler.jsonc
-cp web/.env.local.example web/.env.local
-bun run --cwd api setup:dev-vars
-bun run --cwd api db:migrate:local
+bun run --cwd web setup:dev-vars
+bun run --cwd web db:migrate:local
 make dev
 ```
 
-APIは `https://base.localhost`、Web UIは `https://app.base.localhost` です。APIの直接接続先は `http://127.0.0.1:18787`。ホスト名は `portless.json` が正本です。
+画面とAPIは `https://base.localhost` です。APIは `/api` 配下にあります。直接の接続先は `http://127.0.0.1:18787` ですが、パスキーはIPアドレスのoriginで使えないため、ブラウザではホスト名で開きます。ホスト名は `portless.json` が正本です。
 
-秘密値は `api/.dev.vars` に環境ごとに生成されます。本番の配備設定、秘密値、DB、個人情報をコミットしないでください。
+秘密値は `web/.env` に生成されます。本番の配備設定、秘密値、DB、個人情報をコミットしないでください。
 
-## 初期化とログイン
+## 初期化とサインイン
 
-既定のパスワードや従業員データは投入しません。`api/.dev.vars` のBOOTSTRAP_TOKENと、確認済みの会社情報を使って初期化します。
+サインインはパスキーだけです。パスワードや従業員データは投入しません。`web/.env` のBOOTSTRAP_TOKENと、確認済みの会社情報を使って初期化します。
 
 ```sh
 bun cli/index.ts bootstrap --help
-bun cli/index.ts bootstrap --email you@example.com --password "$INITIAL_PASSWORD" \
+bun cli/index.ts bootstrap --email you@example.com \
   --company-data /path/to/confirmed-company.json \
   --idempotency-key "$COMMAND_ID" --token "$BOOTSTRAP_TOKEN"
 ```
+
+初回は初期アカウントを作り、パスキー招待のURLを表示します。URLをブラウザで開いてパスキーを登録し、`bun cli/index.ts login` でログインしてから、同じコマンドをもう一度実行すると会社を初期化します。
 
 会社情報JSONには以下の形式を使います。実際の情報を記入したファイルはリポジトリ外に置いてください。
 
@@ -50,7 +50,11 @@ bun cli/index.ts bootstrap --email you@example.com --password "$INITIAL_PASSWORD
 }
 ```
 
-COMMAND_IDはUUIDを使用します。初期化後はBOOTSTRAP_TOKENを設定から除去してAPIを再起動します。Web UIで登録したメールアドレスとパスワードを使ってログインできます。外部IdPも環境変数で設定できます。
+COMMAND_IDはUUIDを使用します。初期化後はBOOTSTRAP_TOKENを設定から除去してAPIを再起動します。
+
+アカウントを追加するときは、管理者がパスキーのIdentityを作り、返ったパスキー招待のURLを本人へ渡します。パスキーを失くした人には `POST /api/system/accounts/{accountId}/passkey-enrollments` で招待を発行し直します。管理者が全員サインインできなくなったときは、BOOTSTRAP_TOKENを一時的に設定し、`POST /api/system/passkey-recoveries` で復旧用の招待を発行します。
+
+CLIの `login` はデバイス認証です。表示されたURLをブラウザで開き、パスキーでサインインし直してコードを承認します。MCPはCLIのログインを共有します。再認証が必要な管理操作は、ブラウザでパスキーでサインインした直後だけ行えます。
 
 ## Service Bindingによる照会と操作
 
@@ -58,7 +62,7 @@ COMMAND_IDはUUIDを使用します。初期化後はBOOTSTRAP_TOKENを設定か
 
 受理するtokenは、外部IdPが発行したEdDSAの `at+jwt` で、`aud` が `SERVICE_BINDING_ACCESS_TOKEN_AUDIENCE` と一致する単一値のものだけです。発行者と検証鍵は `IDENTITY_ACCESS_TOKEN_ISSUER`（未設定なら `IDENTITY_ISSUER`）と `IDENTITY_JWKS`（未設定なら発行者のOpenID Connect discovery）を共有します。`sub`、`client_id`、`scope`、`iat`、`exp`、`jti` を必須とし、委任や交換を表す `act` を持つtokenは拒否します。`sub` は有効なIdentity bindingを通じてactiveな人のAccountへ対応付けます。
 
-`SERVICE_BINDING_ACCESS_TOKEN_AUDIENCE` が未設定、空、または `IDENTITY_ACCESS_TOKEN_AUDIENCE` や `IDENTITY_AUDIENCE` と同じ値のとき、RPC入口は全ての呼び出しを拒否します。HTTP APIは、Bearerとしても外部IdPのログインや再認証のtokenとしても、このaudienceを含むtokenを受理しません。そのため同じ値を設定すると、HTTP APIの外部access tokenや外部IdPのログインも拒否されます。
+`SERVICE_BINDING_ACCESS_TOKEN_AUDIENCE` が未設定、空、または `IDENTITY_ACCESS_TOKEN_AUDIENCE` や `IDENTITY_AUDIENCE` と同じ値のとき、RPC入口は全ての呼び出しを拒否します。HTTP APIは、Bearerとしてこのaudienceを含むtokenを受理しません。そのため同じ値を設定すると、HTTP APIの外部access tokenも拒否されます。
 
 `whoami` の結果は `{ ok: true, account: { accountId } }`、または `{ ok: false, reason: "rejected" | "unavailable" }` です。拒否の理由は返しません。`unavailable` は検証鍵やDBを一時的に使えない状態を表します。
 
@@ -66,7 +70,7 @@ COMMAND_IDはUUIDを使用します。初期化後はBOOTSTRAP_TOKENを設定か
 
 `input` は `{ method, path, query, body }` です。`method` は `GET`、`HEAD`、`POST`、`PUT`、`PATCH`、`DELETE` のいずれか、`path` は `/` で始まる絶対pathで、scheme、host、`..`、query、fragmentを含められません。ASCII以外の文字などURLで符号化が必要な文字は、呼び出し側で百分率符号化して渡します。`query` は文字列の値だけを持つobject（100件まで）、`body` はJSONとして送る値（1 MBまで、GETとHEADでは不可）です。不正な入力は `{ ok: false, reason: "rejected" }` になり、appを呼びません。headerは渡せないため、`idempotency-key`、`if-match`、再認証などのheaderを必要とする操作はまだ呼べません。
 
-ブラウザ用のlogin code、OAuth認可、MCP grantのように、認証済みの本人から別の資格情報を発行する経路は、RPCからは拒否します。短命のtokenを長命の資格情報へ変えさせないためです。
+デバイス認証の承認やパスキー招待の発行のように、認証済みの本人から別の資格情報を発行する経路は、RPCからは拒否します。短命のtokenを長命の資格情報へ変えさせないためです。
 
 `request` の結果は `{ ok: true, status, headers: { contentType }, body, truncated }` です。JSONの応答は解析した値、それ以外は文字列で返します。本文が1 MBを超えるときは先頭1 MBを文字列で返し、`truncated` をtrueにします。
 
@@ -117,7 +121,7 @@ make ci
 
 新規DBにはSystemとCompanyのテーブル、view、制約、初期カタログだけを作成します。実データや業務アプリのテーブルは作成しません。ローカルD1の受入テストで初期化、認証、雇用、組織、判断資格、承認、通知、監査を検証します。
 
-`api/tests/fixtures/released-migrations` は共有contextの過去のschema変換を検証するための固定fixtureです。業務テーブルの旧DDLも含みますが、実行時のmigrationや配備には使いません。実行時の正本は `api/migrations` だけです。
+`web/tests/fixtures/released-migrations` は共有contextの過去のschema変換を検証するための固定fixtureです。業務テーブルの旧DDLも含みますが、実行時のmigrationや配備には使いません。実行時の正本は `web/src/db/migrations` だけです。
 
 新規インストール用の基盤であり、他の製品の稼働DBへこのmigrationを適用しないでください。
 

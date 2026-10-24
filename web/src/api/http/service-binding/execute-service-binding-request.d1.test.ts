@@ -17,7 +17,6 @@ setDefaultTimeout(60_000)
 const issuer = "https://identity.example.com"
 const apiAudience = "https://api.example.com"
 const serviceBindingAudience = "urn:example:service-binding"
-const rootPassword = "correct horse battery staple"
 const rootSubject = "subject-root"
 const plainSubject = "subject-plain"
 const plainAccountId = "7b1f3e52-8f0e-4f53-9d38-1c2f7c0d9a11"
@@ -91,7 +90,6 @@ beforeAll(async () => {
     DB: await createLocalD1Database(),
     BOOTSTRAP_TOKEN: "service-binding-request-bootstrap-token",
     JWT_SECRET: "service-binding-request-jwt-secret",
-    PEPPER_SECRET: "service-binding-request-pepper",
     AUDIT_HMAC_SECRET: "service-binding-request-audit-secret",
     COMPANY_TIME_ZONE: "Asia/Tokyo",
     IDENTITY_ACCESS_TOKEN_ISSUER: issuer,
@@ -100,19 +98,21 @@ beforeAll(async () => {
     IDENTITY_JWKS: key.jwks,
   }
 
-  expect(
-    (
-      await http("POST", "/system/bootstrap", {
-        body: { token: env.BOOTSTRAP_TOKEN, email: "root@example.com", password: rootPassword },
-      })
-    ).status,
-  ).toBe(201)
-  const session = await http("POST", "/system/sessions", {
-    body: { subject: "root@example.com", password: rootPassword },
+  const bootstrap = await http("POST", "/system/bootstrap", {
+    body: { token: env.BOOTSTRAP_TOKEN, email: "root@example.com" },
   })
-  const root = z.object({ access_token: z.string(), account_id: z.string() }).parse(session.body)
+  expect(bootstrap.status).toBe(201)
+  const root = z.object({ account_id: z.string() }).parse(bootstrap.body)
+  // rootは外部access tokenで呼ぶ。人のサインインはBetter Authが担い、このtestでは扱わない。
+  await env.DB.prepare(
+    `INSERT INTO system_identity_bindings
+       (id, account_id, provider, subject, created_at, activated_at, revoked_at)
+     VALUES ('b5d0c0c1-3f7e-4d8e-9a54-0c5c1f0e2a01', ?1, 'oidc', ?2, 0, 0, NULL)`,
+  )
+    .bind(root.account_id, rootSubject)
+    .run()
   const company = await http("POST", "/company/bootstrap", {
-    token: root.access_token,
+    token: await tokenOf(rootSubject, apiAudience),
     headers: { "idempotency-key": "service-binding-request-company" },
     body: {
       name: "First Member",
@@ -131,11 +131,6 @@ beforeAll(async () => {
   expect(company.status).toBe(201)
 
   await env.DB.batch([
-    env.DB.prepare(
-      `INSERT INTO system_identity_bindings
-         (id, account_id, provider, subject, created_at, activated_at, revoked_at)
-       VALUES ('b5d0c0c1-3f7e-4d8e-9a54-0c5c1f0e2a01', ?1, 'oidc', ?2, 0, 0, NULL)`,
-    ).bind(root.account_id, rootSubject),
     env.DB.prepare(
       `INSERT INTO system_accounts (id, status, token_version, created_at, updated_at)
        VALUES (?1, 'active', 0, 0, 0)`,

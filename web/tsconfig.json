@@ -8,7 +8,7 @@
     "lib": ["ESNext"],
     "types": ["bun", "@cloudflare/workers-types"],
     "jsx": "react-jsx",
-    "jsxImportSource": "hono/jsx",
+    "jsxImportSource": "react",
     "paths": {
       "@/*": ["./src/*"],
       "@tests/*": ["./tests/*"],
@@ -19,7 +19,9 @@
       "@system/interface/*": ["./src/contexts/system/interface/*"],
       "@system/lib/*": ["./src/contexts/system/lib/*"],
       "@system/test/*": ["./src/contexts/system/test/*"]
-    }
+    },
+    "noEmit": true,
+    "allowImportingTsExtensions": true
   },
-  "exclude": ["dist", "node_modules"]
+  "exclude": ["dist", "node_modules", "src/pages", "src/client"]
 }

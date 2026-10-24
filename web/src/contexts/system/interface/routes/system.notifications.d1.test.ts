@@ -1,5 +1,8 @@
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
-import { createSystemSessionApplications } from "@system/test/create-system-session-applications.test-support"
+import {
+  createSystemSessionApplications,
+  systemTestSignedInSession,
+} from "@system/test/create-system-session-applications.test-support"
 import { SystemSessionTestContext } from "@system/test/system-session-test-context.test-support"
 import {
   DELETE as DELETE_ONE,
@@ -52,7 +55,6 @@ describe("System Notification HTTP", () => {
 
     const applications = createSystemSessionApplications({
       context: fixture.context,
-      jwtSecret: "system-session-test-jwt-secret",
       sessionTtlMilliseconds: 604_800_000,
     })
     expect(applications).not.toBeInstanceOf(Error)
@@ -68,6 +70,7 @@ describe("System Notification HTTP", () => {
 
     const app = systemFactory
       .createApp()
+      .use("*", systemTestSignedInSession)
       .use("*", async (context, next) => {
         context.set("now", () => now)
         await next()

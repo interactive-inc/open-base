@@ -496,36 +496,6 @@ export const systemRouteManifest = [
     },
   },
   {
-    method: "POST",
-    path: "/system/sessions",
-    phase: "public",
-    handler: {
-      kind: "module",
-      module: "@system/interface/routes/system.sessions",
-      exportName: "POST",
-    },
-  },
-  {
-    method: "PATCH",
-    path: "/system/sessions",
-    phase: "public",
-    handler: {
-      kind: "module",
-      module: "@system/interface/routes/system.sessions",
-      exportName: "PATCH",
-    },
-  },
-  {
-    method: "DELETE",
-    path: "/system/sessions",
-    phase: "public",
-    handler: {
-      kind: "module",
-      module: "@system/interface/routes/system.sessions",
-      exportName: "DELETE",
-    },
-  },
-  {
     method: "GET",
     path: "/system/accounts",
     phase: "public",
@@ -603,16 +573,6 @@ export const systemRouteManifest = [
       kind: "module",
       module: "@system/interface/routes/system.accounts.$accountId.identities.$identityId",
       exportName: "DELETE",
-    },
-  },
-  {
-    method: "PATCH",
-    path: "/system/accounts/:accountId/password-credentials",
-    phase: "public",
-    handler: {
-      kind: "module",
-      module: "@system/interface/routes/system.accounts.$accountId.password-credentials",
-      exportName: "PATCH",
     },
   },
   {
@@ -647,6 +607,26 @@ export const systemRouteManifest = [
   },
   {
     method: "POST",
+    path: "/system/accounts/:accountId/passkey-enrollments",
+    phase: "public",
+    handler: {
+      kind: "module",
+      module: "@system/interface/routes/system.accounts.$accountId.passkey-enrollments",
+      exportName: "POST",
+    },
+  },
+  {
+    method: "POST",
+    path: "/system/passkey-recoveries",
+    phase: "public",
+    handler: {
+      kind: "module",
+      module: "@system/interface/routes/system.passkey-recoveries",
+      exportName: "POST",
+    },
+  },
+  {
+    method: "POST",
     path: "/system/bootstrap",
     phase: "public",
     handler: {
@@ -672,66 +652,6 @@ export const systemRouteManifest = [
     handler: {
       kind: "module",
       module: "@system/interface/routes/system.attachments.purge-unlinked",
-      exportName: "POST",
-    },
-  },
-  {
-    method: "POST",
-    path: "/system/browser-login-codes",
-    phase: "public",
-    handler: {
-      kind: "module",
-      module: "@system/interface/routes/system.browser-login-codes",
-      exportName: "POST",
-    },
-  },
-  {
-    method: "POST",
-    path: "/system/browser-sessions",
-    phase: "public",
-    handler: {
-      kind: "module",
-      module: "@system/interface/routes/system.browser-sessions",
-      exportName: "POST",
-    },
-  },
-  {
-    method: "GET",
-    path: "/system/cli-authorization-callback",
-    phase: "public",
-    handler: {
-      kind: "module",
-      module: "@system/interface/routes/system.cli-authorization-callback",
-      exportName: "GET",
-    },
-  },
-  {
-    method: "GET",
-    path: "/system/cli-authorizations",
-    phase: "public",
-    handler: {
-      kind: "module",
-      module: "@system/interface/routes/system.cli-authorizations",
-      exportName: "GET",
-    },
-  },
-  {
-    method: "POST",
-    path: "/system/cli-sessions",
-    phase: "public",
-    handler: {
-      kind: "module",
-      module: "@system/interface/routes/system.cli-sessions",
-      exportName: "POST",
-    },
-  },
-  {
-    method: "POST",
-    path: "/system/identity-sessions",
-    phase: "public",
-    handler: {
-      kind: "module",
-      module: "@system/interface/routes/system.identity-sessions",
       exportName: "POST",
     },
   },
@@ -874,66 +794,6 @@ export const systemRouteManifest = [
       kind: "module",
       module: "@system/interface/routes/system.audit-events.$eventId",
       exportName: "GET",
-    },
-  },
-  {
-    method: "POST",
-    path: "/system/auth/password/reset",
-    phase: "public",
-    handler: {
-      kind: "module",
-      module: "@system/interface/routes/system.auth.password.reset",
-      exportName: "POST",
-    },
-  },
-  {
-    method: "PATCH",
-    path: "/system/auth/password/reset",
-    phase: "public",
-    handler: {
-      kind: "module",
-      module: "@system/interface/routes/system.auth.password.reset",
-      exportName: "PATCH",
-    },
-  },
-  {
-    method: "POST",
-    path: "/system/oauth/token",
-    phase: "public",
-    handler: {
-      kind: "module",
-      module: "@system/interface/routes/system.oauth.token",
-      exportName: "POST",
-    },
-  },
-  {
-    method: "GET",
-    path: "/system/oauth/userinfo",
-    phase: "public",
-    handler: {
-      kind: "module",
-      module: "@system/interface/routes/system.oauth.userinfo",
-      exportName: "GET",
-    },
-  },
-  {
-    method: "POST",
-    path: "/system/oauth/authorizations",
-    phase: "authenticated",
-    handler: {
-      kind: "module",
-      module: "@system/interface/routes/system.oauth.authorizations",
-      exportName: "POST",
-    },
-  },
-  {
-    method: "POST",
-    path: "/system/oauth/mcp-grants",
-    phase: "audited",
-    handler: {
-      kind: "module",
-      module: "@system/interface/routes/system.oauth.mcp-grants",
-      exportName: "POST",
     },
   },
 ] as const

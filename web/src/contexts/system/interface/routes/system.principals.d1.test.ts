@@ -12,7 +12,10 @@ import {
   GET as principalsGET,
   POST as principalsPOST,
 } from "@system/interface/routes/system.principals"
-import { createSystemSessionApplications } from "@system/test/create-system-session-applications.test-support"
+import {
+  createSystemSessionApplications,
+  systemTestSignedInSession,
+} from "@system/test/create-system-session-applications.test-support"
 import { SystemSessionTestContext } from "@system/test/system-session-test-context.test-support"
 import { describe, expect, setDefaultTimeout, test } from "bun:test"
 import { hc } from "hono/client"
@@ -43,6 +46,7 @@ describe("System Principal HTTP", () => {
 
     const app = systemFactory
       .createApp()
+      .use("*", systemTestSignedInSession)
       .use("*", async (context, next) => {
         context.set("now", () => now)
         await next()
@@ -177,7 +181,7 @@ async function seedRoot(fixture: SystemSessionTestContext): Promise<void> {
 async function issueRootAccessToken(fixture: SystemSessionTestContext): Promise<string | Error> {
   const applications = createSystemSessionApplications({
     context: fixture.context,
-    jwtSecret,
+
     sessionTtlMilliseconds: 604_800_000,
   })
   if (applications instanceof Error) return applications
@@ -188,7 +192,7 @@ async function issueRootAccessToken(fixture: SystemSessionTestContext): Promise<
     auditContext: { authorizationJson: null, metadataJson: null },
   })
   if (result instanceof Error || result.kind === "rejected") {
-    return result instanceof Error ? result : new Error(result.reason)
+    return result instanceof Error ? result : new Error("session rejected")
   }
   return result.accessToken
 }

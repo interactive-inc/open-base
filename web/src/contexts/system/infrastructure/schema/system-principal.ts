@@ -85,7 +85,7 @@ export const systemStepUpGrants = sqliteTable(
       .notNull()
       .references(() => systemAccounts.id, { onDelete: "restrict" }),
     tokenHash: text("token_hash").notNull().unique(),
-    method: text("method", { enum: ["password", "external_identity"] }).notNull(),
+    method: text("method", { enum: ["passkey", "password", "external_identity"] }).notNull(),
     issuedAt: integer("issued_at", { mode: "timestamp_ms" }).notNull(),
     expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
     lastUsedAt: integer("last_used_at", { mode: "timestamp_ms" }),

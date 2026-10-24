@@ -25,17 +25,15 @@ generate_secret() {
 cat >"$TARGET" <<EOF
 JWT_SECRET="$(generate_secret)"
 AUDIT_HMAC_SECRET="$(generate_secret)"
-PEPPER_SECRET="$(generate_secret)"
 ATTACHMENT_KEKS='{"1": "$(generate_secret)"}'
 COMPANY_TIME_ZONE="Asia/Tokyo"
 IDENTITY_JWKS=
 IDENTITY_ISSUER=
 IDENTITY_AUDIENCE="https://app.base.localhost"
-IDENTITY_LOGIN_URL=
 API_ORIGIN="https://base.localhost"
 BOOTSTRAP_TOKEN="$(generate_secret)"
 EOF
 
 chmod 600 "$TARGET"
 
-echo "$TARGET を生成した。署名・暗号鍵はランダム値、PEPPER_SECRET・初期化tokenもランダム値。"
+echo "$TARGET を生成した。署名・暗号鍵と初期化tokenはランダム値。"

@@ -3,13 +3,14 @@ import { UnauthorizedError } from "@/lib/http/errors"
 import { resolveSystemBearerPrincipal } from "@system/interface/operations/resolve-system-bearer-principal"
 import { readBearerAuthorization } from "@system/interface/operations/bearer-authorization"
 import { SystemServiceBindingAccountChannel } from "@system/interface/request-environment/system-service-binding-account-channel"
+import { SystemSignedInSessionChannel } from "@system/interface/request-environment/system-signed-in-session-channel"
 import type { Context } from "hono"
 
 const INVALID_TOKEN_MESSAGE = "invalid token"
 
 /**
  * Service Binding RPCが検証済みの主体を渡したときは、Authorization headerを読まずにそれを使う。
- * それ以外はAuthorization headerのBearerだけを読む。
+ * 次にBetter Authのサインイン済みセッションを使い、無ければAuthorization headerのBearerを読む。
  */
 async function resolvePrincipal(
   c: Context<HonoEnv>,
@@ -19,6 +20,10 @@ async function resolvePrincipal(
   if (serviceBindingAccount !== null) {
     return await resolveSystemBearerPrincipal({ env: c.env }, { serviceBindingAccount, now })
   }
+  const signedInSession = new SystemSignedInSessionChannel({ env: c.env }).read()
+  if (signedInSession !== null) {
+    return await resolveSystemBearerPrincipal({ env: c.env }, { signedInSession, now })
+  }
 
   const authorization = readBearerAuthorization(c.req.header("authorization"))
   if (authorization.kind !== "token") throw new UnauthorizedError(INVALID_TOKEN_MESSAGE)
@@ -26,7 +31,7 @@ async function resolvePrincipal(
 }
 
 /**
- * 外部access tokenまたは従来System sessionを検証し、System主体を注入する。
+ * サインイン済みセッション、外部access token、機械credentialのaccess tokenを検証し、System主体を注入する。
  * Service Binding RPCが検証済みの主体を渡したときは、Authorization headerを読まずにそれを使う。
  */
 export async function authenticateSystemBearer(c: Context<HonoEnv>): Promise<void> {

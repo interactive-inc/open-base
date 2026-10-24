@@ -51,15 +51,6 @@ const schema = `
     updated_at INTEGER NOT NULL
   );
 
-  CREATE TABLE system_password_credentials (
-    identity_id TEXT PRIMARY KEY NOT NULL
-      REFERENCES system_identity_bindings(id) ON DELETE CASCADE,
-    password_hash TEXT NOT NULL,
-    changed_at INTEGER NOT NULL,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
-  );
-
   CREATE TABLE system_authentication_attempts (
     id TEXT PRIMARY KEY NOT NULL,
     identifier TEXT NOT NULL,
@@ -111,107 +102,19 @@ const schema = `
     completed_at INTEGER NOT NULL
   );
 
-  CREATE TABLE system_sessions (
-    id TEXT PRIMARY KEY NOT NULL CHECK (length(id) BETWEEN 1 AND 255),
+  CREATE TABLE system_passkey_enrollments (
+    id TEXT PRIMARY KEY NOT NULL,
     account_id TEXT NOT NULL REFERENCES system_accounts(id) ON DELETE RESTRICT,
-    family_id TEXT NOT NULL CHECK (length(family_id) BETWEEN 1 AND 255),
-    token_hash TEXT NOT NULL CHECK (length(token_hash) BETWEEN 32 AND 512),
-    token_version INTEGER NOT NULL CHECK (token_version >= 0),
+    identity_id TEXT NOT NULL REFERENCES system_identity_bindings(id) ON DELETE RESTRICT,
+    token_hash TEXT NOT NULL UNIQUE,
+    reason TEXT NOT NULL CHECK (reason IN ('bootstrap', 'provisioning', 'reissue', 'recovery')),
+    issued_by_account_id TEXT REFERENCES system_accounts(id) ON DELETE RESTRICT,
     created_at INTEGER NOT NULL,
     expires_at INTEGER NOT NULL CHECK (expires_at > created_at),
-    rotated_at INTEGER CHECK (
-      rotated_at IS NULL OR (rotated_at >= created_at AND rotated_at < expires_at)
-    ),
-    revoked_at INTEGER CHECK (
-      revoked_at IS NULL OR (
-        revoked_at >= created_at AND (rotated_at IS NULL OR revoked_at >= rotated_at)
-      )
-    ),
-    authenticated_at INTEGER CHECK (authenticated_at IS NULL OR authenticated_at <= created_at)
+    consumed_at INTEGER,
+    revoked_at INTEGER,
+    CHECK (consumed_at IS NULL OR revoked_at IS NULL)
   );
-
-  CREATE UNIQUE INDEX system_sessions_token_hash_uniq ON system_sessions (token_hash);
-  CREATE INDEX system_sessions_account_idx ON system_sessions (account_id, created_at);
-  CREATE INDEX system_sessions_active_family_idx
-    ON system_sessions (family_id) WHERE revoked_at IS NULL;
-
-  CREATE TABLE system_identity_login_tokens (
-    jti TEXT PRIMARY KEY NOT NULL,
-    expires_at INTEGER NOT NULL,
-    used_at INTEGER NOT NULL
-  );
-
-  CREATE INDEX system_identity_login_tokens_expires_idx
-    ON system_identity_login_tokens (expires_at);
-
-  CREATE TABLE system_cli_login_states (
-    state TEXT PRIMARY KEY NOT NULL,
-    port INTEGER NOT NULL,
-    cli_state TEXT NOT NULL,
-    code_verifier TEXT NOT NULL,
-    created_at INTEGER NOT NULL,
-    expires_at INTEGER NOT NULL
-  );
-
-  CREATE INDEX system_cli_login_states_expires_idx
-    ON system_cli_login_states (expires_at);
-
-  CREATE TABLE system_cli_login_codes (
-    code_hash TEXT PRIMARY KEY NOT NULL,
-    account_id TEXT NOT NULL REFERENCES system_accounts(id) ON DELETE CASCADE,
-    token_version INTEGER NOT NULL,
-    created_at INTEGER NOT NULL,
-    expires_at INTEGER NOT NULL
-  );
-
-  CREATE INDEX system_cli_login_codes_expires_idx
-    ON system_cli_login_codes (expires_at);
-
-  CREATE TABLE system_oidc_authorization_codes (
-    code_hash TEXT PRIMARY KEY NOT NULL,
-    issuer TEXT NOT NULL,
-    client_id TEXT NOT NULL,
-    redirect_uri TEXT NOT NULL,
-    account_id TEXT NOT NULL REFERENCES system_accounts(id) ON DELETE CASCADE,
-    code_challenge TEXT NOT NULL,
-    nonce TEXT NOT NULL,
-    scope TEXT NOT NULL,
-    expires_at INTEGER NOT NULL,
-    created_at INTEGER NOT NULL
-  );
-
-  CREATE INDEX system_oidc_authorization_codes_expires_idx
-    ON system_oidc_authorization_codes (expires_at);
-
-  CREATE TABLE system_oidc_access_tokens (
-    token_hash TEXT PRIMARY KEY NOT NULL,
-    issuer TEXT NOT NULL,
-    client_id TEXT NOT NULL,
-    account_id TEXT NOT NULL REFERENCES system_accounts(id) ON DELETE CASCADE,
-    scope TEXT NOT NULL,
-    expires_at INTEGER NOT NULL,
-    created_at INTEGER NOT NULL
-  );
-
-  CREATE INDEX system_oidc_access_tokens_expires_idx
-    ON system_oidc_access_tokens (expires_at);
-
-  CREATE TRIGGER system_sessions_monotonic_lifecycle
-  BEFORE UPDATE ON system_sessions
-  WHEN
-    NEW.id IS NOT OLD.id
-    OR NEW.account_id IS NOT OLD.account_id
-    OR NEW.family_id IS NOT OLD.family_id
-    OR NEW.token_hash IS NOT OLD.token_hash
-    OR NEW.token_version IS NOT OLD.token_version
-    OR NEW.created_at IS NOT OLD.created_at
-    OR NEW.expires_at IS NOT OLD.expires_at
-    OR (OLD.authenticated_at IS NOT NULL AND NEW.authenticated_at IS NOT OLD.authenticated_at)
-    OR (OLD.rotated_at IS NOT NULL AND NEW.rotated_at IS NOT OLD.rotated_at)
-    OR (OLD.revoked_at IS NOT NULL AND NEW.revoked_at IS NOT OLD.revoked_at)
-  BEGIN
-    SELECT RAISE(ABORT, 'session lifecycle is not monotonic');
-  END;
 
   CREATE TABLE system_audit_events (
     event_id TEXT PRIMARY KEY NOT NULL CHECK (length(event_id) BETWEEN 1 AND 255),

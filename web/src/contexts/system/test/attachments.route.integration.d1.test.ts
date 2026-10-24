@@ -4,7 +4,10 @@ import { createSystemIdentityTestKey } from "@system/test/create-system-identity
 import { describe, expect, setDefaultTimeout, test } from "bun:test"
 import { drizzle } from "drizzle-orm/d1"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
-import { createSystemSessionApplications } from "@system/test/create-system-session-applications.test-support"
+import {
+  createSystemSessionApplications,
+  systemTestSignedInSession,
+} from "@system/test/create-system-session-applications.test-support"
 import { systemFactory } from "@system/interface/request-environment/system-factory"
 import { GET } from "@system/interface/routes/system.attachments.$attachmentId"
 import { POST } from "@system/interface/routes/system.attachments"
@@ -99,6 +102,7 @@ async function createFixture(
 
   const app = systemFactory
     .createApp()
+    .use("*", systemTestSignedInSession)
     .use("*", async (context, next) => {
       context.set("now", () => clock.current)
       context.set(
@@ -112,7 +116,7 @@ async function createFixture(
 
   const applications = createSystemSessionApplications({
     context: { env: { DB: db } },
-    jwtSecret,
+
     sessionTtlMilliseconds: 604_800_000,
   })
 

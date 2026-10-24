@@ -17,23 +17,24 @@
 
 依存方向は Company → System の一方向。Systemは会社の語彙を知らず、Companyは業務アプリを知らない。
 
-- `api/src/contexts/system` はPrincipal、Account、Identity、認証、認可、汎用手続き、案件、判断、委任、承認、実行許可、監査、証跡、通知、非同期処理、添付、外部接続、運用診断を所有する。
-- `api/src/contexts/company` は法人、会社文脈、人、従業員、雇用、組織、所属、役職、等級、責任、会社上の判断資格とAccount対応を所有する。
-- `api/src/api` は認証middleware、context登録、複数contextのread modelとHTTP合成だけを持つ。業務事実の正本を持たない。
-- `api/src/lib` はcontext、API、DB所有schemaに依存しない技術部品だけを置く。
+- `web/src/contexts/system` はPrincipal、Account、Identity、認証、認可、汎用手続き、案件、判断、委任、承認、実行許可、監査、証跡、通知、非同期処理、添付、外部接続、運用診断を所有する。
+- `web/src/contexts/company` は法人、会社文脈、人、従業員、雇用、組織、所属、役職、等級、責任、会社上の判断資格とAccount対応を所有する。
+- `web/src/api` は認証middleware、context登録、複数contextのread modelとHTTP合成だけを持つ。業務事実の正本を持たない。
+- `web/src/auth.ts` はBetter Authの設定だけを持つ。人のサインインはパスキーだけで、SystemはcompositionがBetter Authで検証したセッションを受け取ってAccountの現在状態と照合する。
+- `web/src/lib` はcontext、API、DB所有schemaに依存しない技術部品だけを置く。
 - 給与、税、会計、決済、信用調査、法的・医学的判断や個別業務アプリを実装しない。
 - Account roleとtechnical permissionを会社上の判断資格の代用にしない。未定義、候補ゼロ、評価不能はfail closedにする。
 
 ## 構成と実装規約
 
-- Bun Workspaces: `api` はHono/Workers、`cli` はHono/Bun、`mcp` はMCP SDK/Bun、`web` はNext.js/React。
+- Bun Workspaces: `web` はVoid（Vite、Cloudflare Workers、D1、Better Auth）とReactの画面、`cli` はHono/Bun、`mcp` はMCP SDK/Bun。
 - contextの層はdomain / application / infrastructure / interface。詳細は各階層のAGENTS.mdに従う。
-- contextのrouteは `interface/routes` のflat file。動的segmentは `$name`。HTTP methodをexportし、`api/src/api/route-module.registry.ts` で登録する。
-- API route変更後は `bun run --cwd api gen:app`。生成されたappとruntime-appを手で編集しない。
+- contextのrouteは `interface/routes` のflat file。動的segmentは `$name`。HTTP methodをexportし、context の `interface/route-manifest.ts` で登録する。APIは `/api` 配下に公開する。
+- API route変更後は `bun run --cwd web gen:app`。生成されたapp、runtime-app、`src/routes/api` を手で編集しない。
 - routeにはmethodごとに `@authorization` の方針を明記する。宣言の検査は実際の認可の代わりにならない。
 - CLI route追加時は `cli/app/index.ts` に登録する。CLI名は `base`、環境変数は `BASE_` prefix、設定ディレクトリは `~/.config/base` を使う。
-- webのルート直下は規約ファイル、画面部品は `_components`、純粋な表示処理は `_lib` に置く。shadcn生成物は直接編集せず、variantとtheme tokenで表現する。`web/DESIGN.md` に従う。
-- web/cliから `api/app` を参照するときは型のみimportし、実行時は各クライアントの `hc` を使う。
+- 画面はVoidの `web/src/pages` に置く。ブラウザだけで使うclientは `web/src/client` に置き、サーバーでの描画時に読み込まない。
+- cliから `web/app` を参照するときは型のみimportし、実行時は各クライアントの `hc` を使う。
 - libは利用者の最小共通祖先に置く。re-exportや互換barrelは作らない。Errorは所有単位の `errors.ts` にまとめる。
 - `.claude/rules/` の書式規約に従う。
 
@@ -46,16 +47,16 @@
 - 重要な変更に監査、actor chain、理由、証拠、再構成可能な履歴を持つ。
 - Web、CLI、MCP、APIで同じapplication ruleを適用する。
 - 認可、失敗、競合、再試行をテストする。外部連携のtimeout、重複、順序逆転、部分失敗も安全側に扱う。
-- パスワードと外部IdPの切替を維持し、特定の社内認証に固定しない。
+- 人のサインインはパスキーだけにする。CLIとMCPはデバイス認証のセッション、他のサービスは機械credentialか外部access tokenを使う。高リスク操作の再認証は直前のパスキーのサインインに限る。
 
 ## 開発と検証
 
-`README.md` の手順でローカル設定と新規DBを用意する。秘密値は `bun run --cwd api setup:dev-vars` で生成する。
+`README.md` の手順でローカル設定と新規DBを用意する。秘密値は `bun run --cwd web setup:dev-vars` で生成する。
 
-`portless.json` がホスト名の正本。APIは `https://base.localhost`、UIは `https://app.base.localhost`。API直接接続はport 18787。
+`portless.json` がホスト名の正本。画面とAPIは `https://base.localhost`（APIは `/api` 配下）。直接接続はport 18787。パスキーはIPアドレスのoriginで使えないため、ブラウザではホスト名で開く。
 
 - 変更後は `make ci` を実行する。重い検査は同時に一つだけ実行する。
 - 型生成、API/CLI/MCP/Webの型検査、formatter/linter、単体テスト、ローカルD1受入を行う。
 - DB判断のunit testは型付きport fakeを使う。SQL・HTTP入口はCloudflareのローカルD1で検証し、D1互換ラッパーを自作しない。
-- SystemとCompanyのmanifestとlockは実ディレクトリ全体を検証する。正当な変更時だけ更新する。
+- SystemとCompanyのmanifestとlockは実ディレクトリ全体を検証する。正当な変更時だけ `--write` で更新する。
 - Push、公開、配備、リモートDB変更は、それぞれユーザーの明示的な指示がある場合だけ行う。

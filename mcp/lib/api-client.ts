@@ -1,11 +1,10 @@
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises"
+import { readFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { apiUrl } from "@/lib/api-url.ts"
 
 type EndpointTokens = {
   token: string | null
-  refresh_token: string | null
 }
 
 function resolveBaseUrl(): string {
@@ -15,7 +14,8 @@ function resolveBaseUrl(): string {
     return fromEnv
   }
 
-  return "http://127.0.0.1:18787"
+  // パスキーはIPアドレスのoriginで使えないため、CLIと同じくportlessのホスト名を既定にする。
+  return "https://base.localhost"
 }
 
 async function readTokens(baseUrl: string): Promise<EndpointTokens> {
@@ -26,11 +26,11 @@ async function readTokens(baseUrl: string): Promise<EndpointTokens> {
   try {
     raw = await readFile(file, "utf8")
   } catch {
-    return { token: null, refresh_token: null }
+    return { token: null }
   }
 
   if (raw.trim() === "") {
-    return { token: null, refresh_token: null }
+    return { token: null }
   }
 
   let value: unknown
@@ -38,68 +38,30 @@ async function readTokens(baseUrl: string): Promise<EndpointTokens> {
   try {
     value = JSON.parse(raw)
   } catch {
-    return { token: null, refresh_token: null }
+    return { token: null }
   }
 
   if (typeof value !== "object" || value === null) {
-    return { token: null, refresh_token: null }
+    return { token: null }
   }
 
   const endpoints = (value as Record<string, unknown>).endpoints
 
   if (typeof endpoints !== "object" || endpoints === null) {
-    return { token: null, refresh_token: null }
+    return { token: null }
   }
 
   const entry = (endpoints as Record<string, unknown>)[baseUrl]
 
   if (typeof entry !== "object" || entry === null) {
-    return { token: null, refresh_token: null }
+    return { token: null }
   }
 
   const e = entry as Record<string, unknown>
   const accessToken =
     typeof e.accessToken === "string" && e.accessToken !== "" ? e.accessToken : null
-  const refreshToken =
-    typeof e.refreshToken === "string" && e.refreshToken !== "" ? e.refreshToken : null
 
-  return { token: accessToken, refresh_token: refreshToken }
-}
-
-async function tryRefresh(
-  baseUrl: string,
-  refreshToken: string,
-): Promise<{ access_token: string; refresh_token: string | null } | null> {
-  try {
-    const url = apiUrl("/system/sessions", baseUrl)
-
-    const res = await fetch(url, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ refresh_token: refreshToken }),
-      signal: AbortSignal.timeout(15_000),
-    })
-
-    if (res.ok === false) {
-      return null
-    }
-
-    const body = (await res.json()) as { access_token?: unknown; refresh_token?: unknown }
-
-    if (typeof body.access_token !== "string" || body.access_token === "") {
-      return null
-    }
-
-    return {
-      access_token: body.access_token,
-      refresh_token:
-        typeof body.refresh_token === "string" && body.refresh_token !== ""
-          ? body.refresh_token
-          : null,
-    }
-  } catch {
-    return null
-  }
+  return { token: accessToken }
 }
 
 function configDir(): string {
@@ -108,54 +70,6 @@ function configDir(): string {
 
 function configFile(): string {
   return join(configDir(), "settings.json")
-}
-
-async function writeTokens(
-  baseUrl: string,
-  accessToken: string,
-  refreshToken: string | null,
-): Promise<void> {
-  const dir = configDir()
-  const file = configFile()
-
-  let root: Record<string, unknown> = { endpoints: {} }
-
-  try {
-    const raw = await readFile(file, "utf8")
-
-    if (raw.trim() !== "") {
-      const parsed = JSON.parse(raw)
-
-      if (typeof parsed === "object" && parsed !== null) {
-        root = { ...parsed }
-      }
-    }
-  } catch {
-    // File missing or corrupt — start fresh with endpoints only.
-  }
-
-  const endpoints =
-    typeof root.endpoints === "object" && root.endpoints !== null
-      ? { ...(root.endpoints as Record<string, unknown>) }
-      : {}
-
-  const existing =
-    typeof endpoints[baseUrl] === "object" && endpoints[baseUrl] !== null
-      ? { ...(endpoints[baseUrl] as Record<string, unknown>) }
-      : {}
-
-  endpoints[baseUrl] = {
-    ...existing,
-    accessToken,
-    refreshToken: refreshToken ?? "",
-  }
-
-  root.endpoints = endpoints
-
-  await mkdir(dir, { recursive: true, mode: 0o700 })
-  await writeFile(file, `${JSON.stringify(root, null, 2)}\n`, { mode: 0o600 })
-  await chmod(dir, 0o700)
-  await chmod(file, 0o600)
 }
 
 type RequestOptions = {
@@ -207,38 +121,17 @@ export async function apiRequest<T = unknown>(
     headers["content-type"] = "application/json"
   }
 
-  let res = await fetch(url, {
+  const res = await fetch(url, {
     method: options.method ?? "GET",
     headers,
     body: options.json !== undefined ? JSON.stringify(options.json) : undefined,
     signal: AbortSignal.timeout(15_000),
   })
 
+  // セッションの延長はサーバーが行う。切れたセッションはCLIでログインし直してもらう。
   if (res.status === 401) {
-    const tokens = await readTokens(baseUrl)
-
-    if (tokens.refresh_token !== null) {
-      const refreshed = await tryRefresh(baseUrl, tokens.refresh_token)
-
-      if (refreshed !== null) {
-        cachedToken = refreshed.access_token
-        headers.Authorization = `Bearer ${refreshed.access_token}`
-
-        // 更新で refresh token も入れ替わる。使い終えた古い token を保存し直すと、次の更新が必ず失敗する。
-        await writeTokens(
-          baseUrl,
-          refreshed.access_token,
-          refreshed.refresh_token ?? tokens.refresh_token,
-        ).catch(() => {})
-
-        res = await fetch(url, {
-          method: options.method ?? "GET",
-          headers,
-          body: options.json !== undefined ? JSON.stringify(options.json) : undefined,
-          signal: AbortSignal.timeout(15_000),
-        })
-      }
-    }
+    await res.body?.cancel()
+    throw new Error("API 401: セッションが切れています。base login でログインし直してください")
   }
 
   if (res.ok === false) {

@@ -13,5 +13,6 @@ export function resolveBaseUrl(override?: string | null): string {
     return fromEnv
   }
 
-  return "http://127.0.0.1:18787"
+  // パスキーはIPアドレスのoriginで使えないため、既定はportlessのホスト名にする。
+  return "https://base.localhost"
 }

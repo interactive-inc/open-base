@@ -35,7 +35,7 @@ import { and, count, eq, gt, lte } from "drizzle-orm"
  *
  * DB 障害時は fail-open。record 系の best-effort な監査書き込み (record-auth-audit-log.ts) と同じく、
  * レートリミットの読み書き失敗でログイン処理自体を巻き戻さない。レートリミットは Basic 認証の背後に
- * 置く defense-in-depth であり、正の認証は verifyPassword 側で行われる。D1 が実際に落ちていれば
+ * 置く defense-in-depth であり、正の認証は機械credentialの秘密値の照合で行われる。D1 が実際に落ちていれば
  * ログインの identity 参照も同じ DB で失敗するため、fail-open が認証バイパスを生むことはない。
  * ここでの throw 禁止 (T | Error でなく boolean/void を返す) はこの best-effort 方針に合わせたもの。
  */
@@ -203,14 +203,14 @@ export type LoginRateLimitGateResult = { limited: boolean }
 /**
  * ログイン専用の原子的レートリミットゲート 。
  *
- * verifyPassword を呼ぶ前に必ず呼ぶ。まず試行行を 1 行 insert し、同じ db.batch 往復内で
+ * 機械credentialの秘密値を照合する前に必ず呼ぶ。まず試行行を 1 行 insert し、同じ db.batch 往復内で
  * pair (identifier+ip) / account (identifier 単独) / ip (ip 単独) の 3 バケットを、自分の行を
  * 含めて count する。D1 は 1 つの D1 database につき単一の SQLite 接続を直列実行するため、
  * db.batch でまとめた insert→count は 1 つの実行単位として他リクエストの書込と割り込まない。
  * 「上限確認 → (別リクエストの insert が割り込む) → 記録」の TOCTOU ( の指摘) はこれで消える。
  *
  * いずれかのバケットが閾値を超えていれば、自分の行だけを削除して limited:true を返す
- * (呼び出し側は verifyPassword を呼ばない。高コストな PBKDF2 を上限到達後に走らせないためであり、
+ * (呼び出し側は秘密値を照合しない。上限到達後に照合を走らせないためであり、
  * 429 が続いても行が残らないので窓も延びない)。閾値未満なら行を残したまま limited:false を返す。
  *
  * 呼び出し側 (login.ts) の後続の扱い:

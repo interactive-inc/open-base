@@ -4,13 +4,15 @@ import { systemFactory } from "@system/interface/request-environment/system-fact
 import { SystemD1AuthorizationAdapter } from "@system/infrastructure/adapters/iam/system-authorization.adapter"
 import { readBearerAuthorization } from "@system/interface/operations/bearer-authorization"
 import { SystemServiceBindingAccountChannel } from "@system/interface/request-environment/system-service-binding-account-channel"
+import { SystemSignedInSessionChannel } from "@system/interface/request-environment/system-signed-in-session-channel"
 
 /**
  * Service Binding RPCが検証済みの主体を渡したときは、Authorization headerを読まずにそれを使う。
- * それ以外はAuthorization headerのBearerだけを読む。
+ * 次にcompositionが検証したサインイン済みセッションを使い、無ければAuthorization headerの
+ * Bearer（外部access tokenまたは機械credentialのaccess token）を読む。
  */
 async function authenticate(
-  env: ConstructorParameters<typeof ResolveBearerAccountAdapter>[0]["env"],
+  env: ConstructorParameters<typeof ResolveBearerAccountAdapter>[0]["env"] & object,
   header: string | undefined,
   now: Date,
 ): Promise<Awaited<ReturnType<ResolveBearerAccountAdapter["resolve"]>>> {
@@ -19,6 +21,8 @@ async function authenticate(
   if (serviceBindingAccount !== null) {
     return await adapter.resolveVerifiedExternal({ external: serviceBindingAccount, now })
   }
+  const signedIn = new SystemSignedInSessionChannel({ env }).read()
+  if (signedIn !== null) return await adapter.resolveSignedIn({ session: signedIn, now })
 
   const authorization = readBearerAuthorization(header)
   if (authorization.kind !== "token") throw new SystemInvalidSessionError()

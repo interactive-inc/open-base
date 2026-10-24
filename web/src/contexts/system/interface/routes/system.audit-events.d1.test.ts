@@ -2,7 +2,10 @@ import { testAccountId } from "@system/test/system-test-id.test-support"
 import { SystemAuditEventEntity } from "@system/domain/entities/system-audit-event.entity"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { SystemAuditEventRepository } from "@system/infrastructure/repositories/audit/system-audit-event.repository"
-import { createSystemSessionApplications } from "@system/test/create-system-session-applications.test-support"
+import {
+  createSystemSessionApplications,
+  systemTestSignedInSession,
+} from "@system/test/create-system-session-applications.test-support"
 import { SystemSessionTestContext } from "@system/test/system-session-test-context.test-support"
 import { systemFactory } from "@system/interface/request-environment/system-factory"
 import { GET as GET_ONE } from "@system/interface/routes/system.audit-events.$eventId"
@@ -63,7 +66,6 @@ describe("System Audit HTTP", () => {
 
     const applications = createSystemSessionApplications({
       context: fixture.context,
-      jwtSecret: "system-session-test-jwt-secret",
       sessionTtlMilliseconds: 604_800_000,
     })
     expect(applications).not.toBeInstanceOf(Error)
@@ -93,6 +95,7 @@ describe("System Audit HTTP", () => {
 
     const app = systemFactory
       .createApp()
+      .use("*", systemTestSignedInSession)
       .use("*", async (context, next) => {
         context.set("now", () => now)
         await next()
@@ -121,7 +124,7 @@ describe("System Audit HTTP", () => {
     const listedBody = await listed.json()
     expect("events" in listedBody).toBe(true)
     if (!("events" in listedBody)) return
-    expect(listedBody.total).toBe(3)
+    expect(listedBody.total).toBe(1)
     expect(listedBody.events.some((event) => event.event_id === seedEvent.eventId)).toBe(true)
 
     const detailed = await reader.system["audit-events"][":eventId"].$get({

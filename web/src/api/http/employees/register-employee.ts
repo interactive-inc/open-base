@@ -15,10 +15,9 @@ import {
 import { fingerprintPersonnelAction } from "@/contexts/company/domain/definitions/fingerprint-personnel-action.definition"
 import type { PersonnelActionInput } from "@/contexts/company/domain/definitions/lifecycle-types.definition"
 import { CompanyOperationError } from "@/contexts/company/domain/errors"
-import { SystemPasswordValue } from "@system/domain/values/auth/system-password.value"
-import { hashPassword } from "@system/lib/auth/hash-password"
 import { openSystemAccountProvisioning } from "@system/interface/operations/open-system-account-provisioning"
 import { openSystemRoleCatalog } from "@system/interface/operations/open-system-role-catalog"
+import { prepareSystemPasskeyEnrollment } from "@system/interface/operations/prepare-system-passkey-enrollment"
 import { isCompanyWriteAbortedByGuard as isAbortedByGuard } from "@/contexts/company/interface/operations/is-company-write-aborted-by-guard"
 import { COMPANY_DEFAULT_ORGANIZATION_ID } from "@/contexts/company/domain/definitions/company-organization-identity.definition"
 
@@ -28,7 +27,10 @@ import { COMPANY_DEFAULT_ORGANIZATION_ID } from "@/contexts/company/domain/defin
  */
 const BASELINE_REGISTRATION_ROLE_KEY = "member"
 
-/** Company採用、System Account、Identity、Role、両者のlinkを一つのD1 batchで作る。 */
+/**
+ * Company採用、System Account、パスキーIdentity、Role、両者のlink、パスキー招待を一つのD1 batchで作る。
+ * パスワードは持たない。従業員は返した招待でパスキーを登録してからサインインする。
+ */
 export class RegisterEmployee {
   constructor(private readonly c: Context) {
     Object.freeze(this)
@@ -38,7 +40,6 @@ export class RegisterEmployee {
     action: Extract<PersonnelActionInput, { kind: "hire" }>
     expectedCompanyRevision?: number
     email: string
-    password: string
     roleKey: "member" | "manager" | "hr" | "root"
     idempotencyKey: string
     now: Date
@@ -51,6 +52,8 @@ export class RegisterEmployee {
         email: string
         role: "member" | "manager" | "hr" | "root"
         replayed: boolean
+        /** 再送では招待を返さない。必要なら招待を発行し直す。 */
+        passkeyEnrollment: { token: string; expiresAt: Date } | null
       }
     | ApplicationError
   > {
@@ -89,14 +92,6 @@ export class RegisterEmployee {
     if (role === undefined) return new ValidationError("Roleが見つかりません", "role_not_found")
     if (!role.permissionKeys.every((permission) => session.hasPermission(permission))) {
       return new ForbiddenError("保持していない権限を含むRoleは割り当てられません", "forbidden")
-    }
-    const password = SystemPasswordValue.create(input.password)
-    if (password instanceof Error) {
-      return new ValidationError("パスワードは12文字以上200文字以下です", password.code)
-    }
-    const pepper = this.c.env.PEPPER_SECRET
-    if (pepper === undefined || pepper === "") {
-      return new UnexpectedError("パスワード登録が構成されていません")
     }
     const payloadFingerprint = await fingerprintPersonnelAction(
       `prospective:${input.action.employeeCode}`,
@@ -158,18 +153,26 @@ export class RegisterEmployee {
       if (completed !== null) return completed
       return new UnexpectedError("入社発令を準備できません", { cause: prepared })
     }
-    const passwordHash = await hashPassword(password.toString(), pepper)
-    const system = openSystemAccountProvisioning({ env: { DB: this.c.env.DB } }).prepare({
+    const systemContext = { env: { DB: this.c.env.DB } }
+    const system = openSystemAccountProvisioning(systemContext).prepare({
       actorAccountId: session.accountId,
-      provider: "password",
-      subject: input.email,
+      provider: "passkey",
       email: input.email,
-      passwordHash,
       roleId: role.id,
       now: input.now,
     })
     if (system instanceof Error) {
       return new UnexpectedError("System Accountを準備できません", { cause: system })
+    }
+    const enrollment = await prepareSystemPasskeyEnrollment(systemContext, {
+      accountId: system.accountId,
+      identityId: system.identityId,
+      reason: "provisioning",
+      issuedByAccountId: session.accountId,
+      now: input.now,
+    })
+    if (enrollment instanceof Error) {
+      return new UnexpectedError("パスキー招待を準備できません", { cause: enrollment })
     }
     const persistence = {
       ...prepared.persistence,
@@ -196,6 +199,7 @@ export class RegisterEmployee {
           at: input.now.getTime(),
         }),
         ...system.identityStatements,
+        ...enrollment.statements,
       ])
       if (executions.some((execution) => !execution.success)) {
         return new UnexpectedError("従業員登録transactionが完了しませんでした")
@@ -226,6 +230,7 @@ export class RegisterEmployee {
       email: input.email,
       role: input.roleKey,
       replayed: false,
+      passkeyEnrollment: { token: enrollment.token, expiresAt: enrollment.expiresAt },
     }
   }
 
@@ -248,6 +253,7 @@ export class RegisterEmployee {
         email: string
         role: "member" | "manager" | "hr" | "root"
         replayed: boolean
+        passkeyEnrollment: null
       }
     | ApplicationError
     | null
@@ -259,8 +265,7 @@ export class RegisterEmployee {
       )
       if (registered instanceof Error) throw registered
       if (registered === null) return null
-      // 再送の照合に現在のpasswordを使わない。登録後に変わったpasswordを推測する手段になるため、
-      // passwordを除いた登録内容だけで同じ要求かを判断し、応答もpasswordに依存させない。
+      // 再送は登録内容だけで同じ要求かを判断する。招待tokenは再送の応答に含めない。
       const credential = await this.c.env.DB.prepare(
         `SELECT identity_profile.email,
                 EXISTS (
@@ -275,7 +280,7 @@ export class RegisterEmployee {
            FROM (SELECT 1) AS account
            LEFT JOIN system_identity_bindings AS identity
              ON identity.account_id = ?1
-            AND identity.provider = 'password'
+            AND identity.provider = 'passkey'
             AND identity.revoked_at IS NULL
            LEFT JOIN system_identity_profiles AS identity_profile
              ON identity_profile.identity_id = identity.id`,
@@ -320,6 +325,7 @@ export class RegisterEmployee {
         email: input.email,
         role: input.roleKey,
         replayed: true,
+        passkeyEnrollment: null,
       }
     } catch (cause) {
       return new UnexpectedError("完了済み従業員登録を検証できません", { cause })

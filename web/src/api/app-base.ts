@@ -14,15 +14,11 @@ import { requestContextMiddleware } from "@/api/http/middlewares/request-context
 import { factory } from "@/api/http/factory"
 import { auditNoStore } from "@/api/http/middlewares/audit-no-store"
 import { verifyBearer } from "@/api/http/verify-bearer"
-import { issueSystemBrowserLoginCode } from "@/api/http/issue-system-browser-login-code"
 import {
   CompanyActorValue,
   type CompanyCapability,
 } from "@/contexts/company/domain/values/company-actor.value"
 import { toCompanyActorGrants } from "@/api/http/company/to-company-actor-grants"
-import { OidcClientRegistryValue } from "@system/domain/values/oauth/oidc-client-registry.value"
-import { OidcIssuerConfigurationValue } from "@system/domain/values/oauth/oidc-issuer-configuration.value"
-import { SystemIdentityUnavailableError } from "@system/interface/errors"
 import { COMPANY_DEFAULT_ORGANIZATION_ID } from "@/contexts/company/domain/definitions/company-organization-identity.definition"
 
 /** CORS_ORIGIN 未設定時に許可するローカル開発用 Origin。 */
@@ -31,14 +27,6 @@ const defaultAllowedOrigins = [
   "http://localhost:3000",
   "http://localhost:5173",
 ]
-const disabledOidcClientRegistry = OidcClientRegistryValue.restore({})
-if (disabledOidcClientRegistry instanceof Error) throw disabledOidcClientRegistry
-const disabledOidcIssuerConfiguration = OidcIssuerConfigurationValue.create({
-  issuersByHostname: Object.freeze({}),
-  localProxyHostnames: Object.freeze([]),
-  localIssuerHostname: null,
-})
-if (disabledOidcIssuerConfiguration instanceof Error) throw disabledOidcIssuerConfiguration
 
 let corsWarningLogged = false
 
@@ -77,32 +65,8 @@ const nowProductionGuardMiddleware = factory.createMiddleware(async (c, next) =>
 })
 
 const systemContextMiddleware = factory.createMiddleware(async (c, next) => {
-  const oidcClientRegistry =
-    c.env.OIDC_CLIENT_REGISTRY === undefined
-      ? disabledOidcClientRegistry
-      : OidcClientRegistryValue.restore(c.env.OIDC_CLIENT_REGISTRY)
-  const oidcIssuerConfiguration =
-    c.env.OIDC_ISSUER_CONFIGURATION === undefined
-      ? disabledOidcIssuerConfiguration
-      : OidcIssuerConfigurationValue.create(c.env.OIDC_ISSUER_CONFIGURATION)
-  if (oidcClientRegistry instanceof Error || oidcIssuerConfiguration instanceof Error) {
-    throw new SystemIdentityUnavailableError()
-  }
-
   c.set("now", () => new Date(c.env.NOW ?? Date.now()))
   c.set("companyClock", () => new Date(c.env.NOW ?? Date.now()))
-  c.set("oidcClientRegistry", oidcClientRegistry)
-  c.set("oidcIssuerConfiguration", oidcIssuerConfiguration)
-  await next()
-})
-
-const systemAuthorizationMiddleware = factory.createMiddleware(async (c, next) => {
-  const session = c.var.session
-  if (!session) throw new HTTPException(401, { message: "authentication required" })
-
-  c.set("userId", session.accountId)
-  c.set("permissions", session.permissions)
-  c.set("role", session.roleKeys[0] ?? "authenticated")
   await next()
 })
 
@@ -199,11 +163,6 @@ export function createAppBase() {
       .use("*", systemContextMiddleware)
       .use("*", featureGate)
       .use("*", databaseMiddleware)
-      .use("/system/browser-login-codes", issueSystemBrowserLoginCode)
-      .use("/system/oauth/authorizations", verifyBearer)
-      .use("/system/oauth/authorizations", systemAuthorizationMiddleware)
-      .use("/system/oauth/mcp-grants", verifyBearer)
-      .use("/system/oauth/mcp-grants", systemAuthorizationMiddleware)
       .use("/company/*", companyAuthenticationMiddleware)
       .onError(handleApiError)
   )

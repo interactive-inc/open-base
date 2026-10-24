@@ -47,6 +47,20 @@ export function resolveTableOwner(
 }
 
 const FOUNDATION_CONTEXTS: ReadonlySet<string> = new Set(["system", "company"])
+
+/**
+ * Better Authが所有するtable。製品のcomposition（src/auth.ts）が設定し、contextは読み書きしない。
+ * contextのtableを外部キーで参照せず、contextからも参照されないことを下の検査で確かめる。
+ */
+const AUTH_TABLES: ReadonlySet<string> = new Set([
+  "account",
+  "deviceCode",
+  "passkey",
+  "rateLimit",
+  "session",
+  "user",
+  "verification",
+])
 const SOFT_REFERENCE_COLUMN_PATTERN = /^([a-z][a-z0-9_]*)_(?:id|code|key|number)$/u
 
 function referencedTableNames(stem: string): string[] {
@@ -193,6 +207,19 @@ export async function collectTableOwnershipViolations(
 
   const owners = new Map<string, string>()
   for (const table of tables) {
+    if (AUTH_TABLES.has(table)) {
+      for (const foreignKey of database
+        .query<{ table: string }, []>(`PRAGMA foreign_key_list("${table}")`)
+        .all()) {
+        if (AUTH_TABLES.has(foreignKey.table)) continue
+        violations.push({
+          file: "migrations",
+          reason: `Better Authのtableがcontextのtableを参照しています: ${table} -> ${foreignKey.table}`,
+        })
+      }
+      owners.set(table, "auth")
+      continue
+    }
     const owner = resolveTableOwner(table, declaredOwners, contexts)
     if (owner === null) {
       violations.push({

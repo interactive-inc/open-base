@@ -6,20 +6,18 @@ import {
   SystemIdentityInvalidError,
   SystemIdentityUnavailableError,
   SystemInvalidSessionError,
-  SystemPasswordInvalidError,
 } from "@system/interface/errors"
 /** /system/accounts/:accountId/identities */
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
-import { SystemPasswordValue } from "@system/domain/values/auth/system-password.value"
 import { SystemAuditEventEntity } from "@system/domain/entities/system-audit-event.entity"
 import { StableSystemAuditJsonValue } from "@system/domain/values/audit/stable-system-audit-json.value"
 import { IdentityBindingEntity } from "@system/domain/entities/identity-binding.entity"
-import { hashPassword } from "@system/lib/auth/hash-password"
 import { SystemAuditEventRepository } from "@system/infrastructure/repositories/audit/system-audit-event.repository"
 import { SystemAccountCatalogRepository } from "@system/infrastructure/repositories/iam/system-account-catalog.repository"
 import { SystemIdentityCatalogRepository } from "@system/infrastructure/repositories/identity/system-identity-catalog.repository"
 import { authenticateSystemAccessToken } from "@system/interface/middlewares/authenticate-system-access-token"
 import { requireSystemStepUp } from "@system/interface/middlewares/require-system-step-up"
+import { issueSystemPasskeyEnrollment } from "@system/interface/operations/issue-system-passkey-enrollment"
 import { systemFactory } from "@system/interface/request-environment/system-factory"
 import { zValidator } from "@hono/zod-validator"
 import { z } from "zod"
@@ -70,7 +68,7 @@ export const GET = systemFactory.createHandlers(authenticateSystemAccessToken, a
   )
 })
 
-// @authorization permission iam:write - provider credentialをIdentityと同じtransactionで作る
+// @authorization permission iam:write - Identityを作り、パスキーのIdentityには登録用の招待を発行する
 export const POST = systemFactory.createHandlers(
   authenticateSystemAccessToken,
   requireSystemStepUp,
@@ -79,7 +77,7 @@ export const POST = systemFactory.createHandlers(
     z.discriminatedUnion("provider", [
       z
         .object({
-          provider: z.literal("password"),
+          provider: z.literal("passkey"),
           email: z
             .string()
             .trim()
@@ -88,7 +86,6 @@ export const POST = systemFactory.createHandlers(
             .min(3)
             .max(254)
             .regex(/^[\x20-\x7e]+$/),
-          password: z.string().min(12).max(200),
         })
         .strict(),
       z
@@ -122,42 +119,22 @@ export const POST = systemFactory.createHandlers(
       throw new SystemIdentityUnavailableError()
     }
     const body = context.req.valid("json")
-    if (
-      body.provider === "password" &&
-      !(SystemPasswordValue.create(body.password) instanceof SystemPasswordValue)
-    ) {
-      throw new SystemPasswordInvalidError()
-    }
-    const subject = body.provider === "password" ? body.email : body.subject
+    // パスキーのIdentityはBetter AuthのユーザーIDとなるAccount IDをsubjectにし、登録が済むまで未登録にする。
+    const isPasskey = body.provider === "passkey"
+    const subject = isPasskey ? targetAccountId.data : body.subject
     const email = body.email
-    const isEmailVerified = body.provider === "password" ? true : body.email_verified
+    const isEmailVerified = isPasskey ? true : body.email_verified
     const binding = IdentityBindingEntity.create({
       id: crypto.randomUUID(),
       accountId: targetAccountId.data,
       provider: body.provider,
       subject,
       createdAt: now,
-      activatedAt: now,
+      activatedAt: isPasskey ? null : now,
       revokedAt: null,
     })
     if (binding instanceof Error) {
       throw new SystemIdentityInvalidError()
-    }
-    const pepper = context.env.PEPPER_SECRET
-    if (body.provider === "password" && (pepper === undefined || pepper.length === 0)) {
-      throw new SystemIdentityUnavailableError()
-    }
-    const passwordHash =
-      body.provider === "password" && pepper !== undefined
-        ? await hashPassword(body.password, pepper).catch((caught: unknown) =>
-            caught instanceof Error ? caught : new Error("failed to hash System password"),
-          )
-        : null
-    if (passwordHash instanceof Error) {
-      console.error(
-        JSON.stringify({ event: "system_identity_password_hash_failed", error: passwordHash.name }),
-      )
-      throw new SystemIdentityUnavailableError()
     }
     const afterJson = StableSystemAuditJsonValue.create({
       account_id: binding.accountId,
@@ -195,7 +172,6 @@ export const POST = systemFactory.createHandlers(
       binding,
       email,
       isEmailVerified,
-      passwordHash,
       auditStatements,
     })
     if (creation instanceof Error) {
@@ -206,6 +182,20 @@ export const POST = systemFactory.createHandlers(
     }
     if (creation === "conflict") {
       throw new SystemIdentityConflictError()
+    }
+    const enrollment = isPasskey
+      ? await issueSystemPasskeyEnrollment(
+          { env: { DB: context.env.DB } },
+          {
+            accountId: targetAccountId.data,
+            reason: "provisioning",
+            issuedByAccountId: actorAccountId.data,
+            now,
+          },
+        )
+      : null
+    if (enrollment instanceof Error || enrollment === "no_identity") {
+      throw new SystemIdentityUnavailableError()
     }
 
     return context.json(
@@ -221,6 +211,11 @@ export const POST = systemFactory.createHandlers(
         created_at: binding.createdAt.toISOString(),
         activated_at: binding.activatedAt?.toISOString() ?? null,
         revoked_at: null,
+        // パスキーの登録に使う招待。tokenはこの応答でだけ返す。
+        passkey_enrollment:
+          enrollment === null
+            ? null
+            : { token: enrollment.token, expires_at: enrollment.expiresAt.toISOString() },
       },
       201,
     )

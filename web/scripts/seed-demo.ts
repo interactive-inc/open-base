@@ -3,11 +3,16 @@ import { z } from "zod"
 import { COMPANY_DEFAULT_ORGANIZATION_ID } from "@/contexts/company/domain/definitions/company-organization-identity.definition"
 
 /**
- * 公開デモ用に、初期化直後の空のDBへ架空のサンプルデータをHTTP APIで投入する。
- * 起動中のAPIへfetchで接続するため、ローカルの `wrangler dev` と配備先のどちらにも使える。
- * 通常のセットアップでは使わない。明示的に実行したときだけ、管理者、会社、組織、従業員、
- * 申請の例と、閲覧専用roleを持つ共有のデモAccountを作る。
- * 秘密値と接続先は環境変数から受け取り、パスワードとtokenは出力しない。
+ * 公開デモ用に、初期化直後のDBへ架空のサンプルデータをHTTP APIで投入する。
+ * 起動中のAPIへfetchで接続するため、ローカルの開発サーバーと配備先のどちらにも使える。
+ * 通常のセットアップでは使わない。明示的に実行したときだけ、会社、組織、従業員、
+ * 申請の例と、閲覧専用roleを持つデモAccountを作る。
+ *
+ * サインインはパスキーだけなので、このscriptはサインインしない。先に次を済ませる。
+ * 1. `base bootstrap` で初期rootを作り、表示された招待URLでパスキーを登録する。
+ * 2. ブラウザでサインインし直し、そのセッションtokenを DEMO_ADMIN_TOKEN、
+ *    直後に発行した再認証tokenを DEMO_STEP_UP_TOKEN に設定する（再認証tokenは5分で切れる）。
+ * デモAccountにはパスキー招待を発行し、その招待URLを出力する。セッションと再認証のtokenは出力しない。
  */
 
 type Json = Record<string, unknown>
@@ -37,23 +42,12 @@ function requireEnv(name: string): string {
   return value
 }
 
-const api = (process.env.BASE_API ?? "http://127.0.0.1:18787").replace(/\/+$/u, "")
-const bootstrapToken = requireEnv("BOOTSTRAP_TOKEN")
-const adminEmail = requireEnv("DEMO_ADMIN_EMAIL")
-const adminPassword = requireEnv("DEMO_ADMIN_PASSWORD")
+const origin = (process.env.BASE_API ?? "https://base.localhost").replace(/\/+$/u, "")
+const api = `${origin}/api`
+const root = requireEnv("DEMO_ADMIN_TOKEN")
+const stepUp = requireEnv("DEMO_STEP_UP_TOKEN")
 const viewerEmail = requireEnv("DEMO_VIEWER_EMAIL")
-const viewerPassword = requireEnv("DEMO_VIEWER_PASSWORD")
-const secrets = [bootstrapToken, adminPassword, viewerPassword]
-
-for (const [name, password] of [
-  ["DEMO_ADMIN_PASSWORD", adminPassword],
-  ["DEMO_VIEWER_PASSWORD", viewerPassword],
-] as const) {
-  if (password.length < 12) {
-    console.error(`${name} は12文字以上にしてください`)
-    process.exit(1)
-  }
-}
+const secrets = [root, stepUp]
 
 class SeedError extends Error {}
 
@@ -111,39 +105,6 @@ function expectStatus(
 }
 
 async function main() {
-  // System管理者の初期化。初期化済みのDBには重複して投入しない。
-  const bootstrap = await call("POST", "/system/bootstrap", {
-    body: { token: bootstrapToken, email: adminEmail, password: adminPassword },
-  })
-  if (bootstrap.status === 409) {
-    throw new SeedError("Systemは初期化済みです。デモデータは初期化直後の空のDBにだけ投入します")
-  }
-  if (bootstrap.status === 404) {
-    throw new SeedError("POST /system/bootstrap が無効です。APIにBOOTSTRAP_TOKENを設定してください")
-  }
-  expectStatus(bootstrap, 201, "Systemの初期化")
-
-  const login = async (email: string, password: string, label: string) =>
-    z
-      .object({ access_token: z.string(), account_id: z.string() })
-      .parse(
-        expectStatus(
-          await call("POST", "/system/sessions", { body: { subject: email, password } }),
-          201,
-          label,
-        ),
-      )
-  const root = (await login(adminEmail, adminPassword, "管理者のログイン")).access_token
-  const stepUp = z.object({ step_up_token: z.string() }).parse(
-    expectStatus(
-      await call("POST", "/system/step-up-grants", {
-        token: root,
-        body: { method: "password", password: adminPassword },
-      }),
-      201,
-      "管理者の再認証",
-    ),
-  ).step_up_token
   const elevated = { "x-system-step-up": stepUp }
 
   // 会社の初期化。管理者自身が最初の従業員になる。
@@ -579,15 +540,17 @@ async function main() {
         "デモAccountの作成",
       ),
     )
-  expectStatus(
-    await call("POST", `/system/accounts/${viewer.id}/identities`, {
-      token: root,
-      headers: elevated,
-      body: { provider: "password", email: viewerEmail, password: viewerPassword },
-    }),
-    201,
-    "デモAccountのパスワード登録",
-  )
+  const viewerEnrollment = z.object({ passkey_enrollment: z.object({ token: z.string() }) }).parse(
+    expectStatus(
+      await call("POST", `/system/accounts/${viewer.id}/identities`, {
+        token: root,
+        headers: elevated,
+        body: { provider: "passkey", email: viewerEmail },
+      }),
+      201,
+      "デモAccountのパスキー招待",
+    ),
+  ).passkey_enrollment.token
   expectStatus(
     await call("POST", `/system/accounts/${viewer.id}/role-bindings`, {
       token: root,
@@ -620,7 +583,6 @@ async function main() {
       employeeId: approverEmployee.employeeId,
     }),
   ])
-  await login(viewerEmail, viewerPassword, "デモAccountのログイン確認")
 
   // 申請テンプレートと申請の例
   const templates = [
@@ -771,6 +733,7 @@ async function main() {
       `デモデータを ${api} へ投入しました`,
       `組織 ${units.length}、従業員 ${members.length + 1}、等級 ${grades.length}、役職 ${positions.length}、申請テンプレート ${templates.length}、申請 ${applications.length}`,
       `デモAccount ${viewerEmail} に role ${DEMO_ROLE_KEY}（${DEMO_VIEWER_PERMISSION_KEYS.join(", ")}）を割り当てました`,
+      `デモAccountのパスキー招待: ${origin}/enroll?token=${viewerEnrollment}`,
     ].join("\n"),
   )
 }

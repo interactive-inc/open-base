@@ -1,6 +1,9 @@
 import { testAccountId } from "@system/test/system-test-id.test-support"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
-import { createSystemSessionApplications } from "@system/test/create-system-session-applications.test-support"
+import {
+  createSystemSessionApplications,
+  systemTestSignedInSession,
+} from "@system/test/create-system-session-applications.test-support"
 import { SystemSessionTestContext } from "@system/test/system-session-test-context.test-support"
 import { seedSystemStepUpGrant } from "@system/test/seed-system-step-up-grant.test-support"
 import { systemFactory } from "@system/interface/request-environment/system-factory"
@@ -56,7 +59,6 @@ describe("System AccountEntity HTTP", () => {
 
     const applications = createSystemSessionApplications({
       context: fixture.context,
-      jwtSecret: "system-session-test-jwt-secret",
       sessionTtlMilliseconds: 604_800_000,
     })
     expect(applications).not.toBeInstanceOf(Error)
@@ -72,6 +74,7 @@ describe("System AccountEntity HTTP", () => {
 
     const app = systemFactory
       .createApp()
+      .use("*", systemTestSignedInSession)
       .use("*", async (context, next) => {
         context.set("now", () => now)
         await next()

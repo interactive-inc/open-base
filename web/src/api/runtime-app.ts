@@ -159,8 +159,8 @@ const systemAccountsAccountIdIdentitiesRoute: RouteModuleLoader = () =>
   import("@system/interface/routes/system.accounts.$accountId.identities")
 const systemAccountsAccountIdIdentitiesIdentityIdRoute: RouteModuleLoader = () =>
   import("@system/interface/routes/system.accounts.$accountId.identities.$identityId")
-const systemAccountsAccountIdPasswordCredentialsRoute: RouteModuleLoader = () =>
-  import("@system/interface/routes/system.accounts.$accountId.password-credentials")
+const systemAccountsAccountIdPasskeyEnrollmentsRoute: RouteModuleLoader = () =>
+  import("@system/interface/routes/system.accounts.$accountId.passkey-enrollments")
 const systemAccountsAccountIdRoleBindingsRoute: RouteModuleLoader = () =>
   import("@system/interface/routes/system.accounts.$accountId.role-bindings")
 const systemAccountsAccountIdRoleBindingsBindingIdRoute: RouteModuleLoader = () =>
@@ -182,22 +182,10 @@ const systemAuditEventsRoute: RouteModuleLoader = () =>
   import("@system/interface/routes/system.audit-events")
 const systemAuditEventsEventIdRoute: RouteModuleLoader = () =>
   import("@system/interface/routes/system.audit-events.$eventId")
-const systemAuthPasswordResetRoute: RouteModuleLoader = () =>
-  import("@system/interface/routes/system.auth.password.reset")
 const systemBatchJobsRoute: RouteModuleLoader = () =>
   import("@system/interface/routes/system.batch-jobs")
 const systemBootstrapRoute: RouteModuleLoader = () =>
   import("@system/interface/routes/system.bootstrap")
-const systemBrowserLoginCodesRoute: RouteModuleLoader = () =>
-  import("@system/interface/routes/system.browser-login-codes")
-const systemBrowserSessionsRoute: RouteModuleLoader = () =>
-  import("@system/interface/routes/system.browser-sessions")
-const systemCliAuthorizationCallbackRoute: RouteModuleLoader = () =>
-  import("@system/interface/routes/system.cli-authorization-callback")
-const systemCliAuthorizationsRoute: RouteModuleLoader = () =>
-  import("@system/interface/routes/system.cli-authorizations")
-const systemCliSessionsRoute: RouteModuleLoader = () =>
-  import("@system/interface/routes/system.cli-sessions")
 const systemConnectorsRoute: RouteModuleLoader = () =>
   import("@system/interface/routes/system.connectors")
 const systemConnectorsConnectorIdRoute: RouteModuleLoader = () =>
@@ -211,8 +199,6 @@ const systemDeliveriesRoute: RouteModuleLoader = () =>
 const systemDeliveriesDeliveryIdRoute: RouteModuleLoader = () =>
   import("@system/interface/routes/system.deliveries.$deliveryId")
 const systemHealthRoute: RouteModuleLoader = () => import("@system/interface/routes/system.health")
-const systemIdentitySessionsRoute: RouteModuleLoader = () =>
-  import("@system/interface/routes/system.identity-sessions")
 const systemInboxMessagesMessageIdRoute: RouteModuleLoader = () =>
   import("@system/interface/routes/system.inbox-messages.$messageId")
 const systemIntegrationExchangesRoute: RouteModuleLoader = () =>
@@ -229,14 +215,8 @@ const systemNotificationsIdRoute: RouteModuleLoader = () =>
   import("@system/interface/routes/system.notifications.$id")
 const systemNotificationsUnreadCountRoute: RouteModuleLoader = () =>
   import("@system/interface/routes/system.notifications.unread-count")
-const systemOauthAuthorizationsRoute: RouteModuleLoader = () =>
-  import("@system/interface/routes/system.oauth.authorizations")
-const systemOauthMcpGrantsRoute: RouteModuleLoader = () =>
-  import("@system/interface/routes/system.oauth.mcp-grants")
-const systemOauthTokenRoute: RouteModuleLoader = () =>
-  import("@system/interface/routes/system.oauth.token")
-const systemOauthUserinfoRoute: RouteModuleLoader = () =>
-  import("@system/interface/routes/system.oauth.userinfo")
+const systemPasskeyRecoveriesRoute: RouteModuleLoader = () =>
+  import("@system/interface/routes/system.passkey-recoveries")
 const systemPreservedRecordsRoute: RouteModuleLoader = () =>
   import("@system/interface/routes/system.preserved-records")
 const systemPreservedRecordsRecordIdContentRoute: RouteModuleLoader = () =>
@@ -256,8 +236,6 @@ const systemProposalsNumberVersionsVersionRoute: RouteModuleLoader = () =>
 const systemRolesRoute: RouteModuleLoader = () => import("@system/interface/routes/system.roles")
 const systemRolesRoleIdRoute: RouteModuleLoader = () =>
   import("@system/interface/routes/system.roles.$roleId")
-const systemSessionsRoute: RouteModuleLoader = () =>
-  import("@system/interface/routes/system.sessions")
 const systemStepUpGrantsRoute: RouteModuleLoader = () =>
   import("@system/interface/routes/system.step-up-grants")
 const systemWorkItemsRoute: RouteModuleLoader = () =>
@@ -442,9 +420,9 @@ const ROUTES: ReadonlyArray<readonly [RouteMethod, string, RouteModuleLoader]> =
     systemAccountsAccountIdIdentitiesIdentityIdRoute,
   ],
   [
-    "PATCH",
-    "/system/accounts/:accountId/password-credentials",
-    systemAccountsAccountIdPasswordCredentialsRoute,
+    "POST",
+    "/system/accounts/:accountId/passkey-enrollments",
+    systemAccountsAccountIdPasskeyEnrollmentsRoute,
   ],
   ["GET", "/system/accounts/:accountId/role-bindings", systemAccountsAccountIdRoleBindingsRoute],
   ["POST", "/system/accounts/:accountId/role-bindings", systemAccountsAccountIdRoleBindingsRoute],
@@ -475,15 +453,8 @@ const ROUTES: ReadonlyArray<readonly [RouteMethod, string, RouteModuleLoader]> =
   ["POST", "/system/audit-disclosure-policies", systemAuditDisclosurePoliciesRoute],
   ["GET", "/system/audit-events", systemAuditEventsRoute],
   ["GET", "/system/audit-events/:eventId", systemAuditEventsEventIdRoute],
-  ["POST", "/system/auth/password/reset", systemAuthPasswordResetRoute],
-  ["PATCH", "/system/auth/password/reset", systemAuthPasswordResetRoute],
   ["GET", "/system/batch-jobs", systemBatchJobsRoute],
   ["POST", "/system/bootstrap", systemBootstrapRoute],
-  ["POST", "/system/browser-login-codes", systemBrowserLoginCodesRoute],
-  ["POST", "/system/browser-sessions", systemBrowserSessionsRoute],
-  ["GET", "/system/cli-authorization-callback", systemCliAuthorizationCallbackRoute],
-  ["GET", "/system/cli-authorizations", systemCliAuthorizationsRoute],
-  ["POST", "/system/cli-sessions", systemCliSessionsRoute],
   ["GET", "/system/connectors", systemConnectorsRoute],
   ["POST", "/system/connectors", systemConnectorsRoute],
   ["PATCH", "/system/connectors/:connectorId", systemConnectorsConnectorIdRoute],
@@ -493,7 +464,6 @@ const ROUTES: ReadonlyArray<readonly [RouteMethod, string, RouteModuleLoader]> =
   ["POST", "/system/deliveries", systemDeliveriesRoute],
   ["PATCH", "/system/deliveries/:deliveryId", systemDeliveriesDeliveryIdRoute],
   ["GET", "/system/health", systemHealthRoute],
-  ["POST", "/system/identity-sessions", systemIdentitySessionsRoute],
   ["PATCH", "/system/inbox-messages/:messageId", systemInboxMessagesMessageIdRoute],
   ["GET", "/system/integration-exchanges", systemIntegrationExchangesRoute],
   ["POST", "/system/integration-exchanges", systemIntegrationExchangesRoute],
@@ -517,10 +487,7 @@ const ROUTES: ReadonlyArray<readonly [RouteMethod, string, RouteModuleLoader]> =
   ["GET", "/system/notifications/:id", systemNotificationsIdRoute],
   ["PATCH", "/system/notifications/:id", systemNotificationsIdRoute],
   ["DELETE", "/system/notifications/:id", systemNotificationsIdRoute],
-  ["POST", "/system/oauth/authorizations", systemOauthAuthorizationsRoute],
-  ["POST", "/system/oauth/mcp-grants", systemOauthMcpGrantsRoute],
-  ["POST", "/system/oauth/token", systemOauthTokenRoute],
-  ["GET", "/system/oauth/userinfo", systemOauthUserinfoRoute],
+  ["POST", "/system/passkey-recoveries", systemPasskeyRecoveriesRoute],
   ["GET", "/system/permission-definitions", systemPermissionDefinitionsRoute],
   ["GET", "/system/preserved-records", systemPreservedRecordsRoute],
   [
@@ -558,9 +525,6 @@ const ROUTES: ReadonlyArray<readonly [RouteMethod, string, RouteModuleLoader]> =
   ["GET", "/system/roles/:roleId", systemRolesRoleIdRoute],
   ["PATCH", "/system/roles/:roleId", systemRolesRoleIdRoute],
   ["DELETE", "/system/roles/:roleId", systemRolesRoleIdRoute],
-  ["POST", "/system/sessions", systemSessionsRoute],
-  ["PATCH", "/system/sessions", systemSessionsRoute],
-  ["DELETE", "/system/sessions", systemSessionsRoute],
   ["POST", "/system/step-up-grants", systemStepUpGrantsRoute],
   ["GET", "/system/work-items", systemWorkItemsRoute],
   ["POST", "/system/work-items", systemWorkItemsRoute],

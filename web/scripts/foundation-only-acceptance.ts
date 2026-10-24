@@ -3,21 +3,68 @@ import { randomUUID } from "node:crypto"
 import { z } from "zod"
 import { app } from "@/api/app"
 import { COMPANY_DEFAULT_ORGANIZATION_ID } from "@/contexts/company/domain/definitions/company-organization-identity.definition"
-import { createSystemIdentityTestKey } from "@system/test/create-system-identity-test-key.test-support"
-import { createSystemIdentityToken } from "@system/test/create-system-identity-token.test-support"
+import { completeSystemPasskeyEnrollment } from "@system/interface/operations/complete-system-passkey-enrollment"
+import { readSystemAccountTokenVersion } from "@system/interface/operations/read-system-account-token-version"
+import {
+  SystemSignedInSessionChannel,
+  type SystemSignedInSession,
+} from "@system/interface/request-environment/system-signed-in-session-channel"
 import { startLocalD1, stopLocalD1 } from "@system/test/local-d1/start-local-d1.test-support"
 
 /**
  * 業務contextを一つも登録しないWorkerで、SystemとCompanyだけの受入を通す。
- * 会社の初期化、人・雇用・組織・責務と時点参照、パスワードと外部IdPの認証と再認証、
+ * 会社の初期化、人・雇用・組織・責務と時点参照、パスキーの招待とサインインと再認証、
  * 機械主体、共通の作業承認、監査、通知を、実migrationを適用したローカルD1で順に確かめる。
+ *
+ * パスキーの署名の検証はBetter Authが行う。この受入では製品のcompositionの役を担い、
+ * パスキーの登録とサインインが済んだ後の状態をSystemへ渡す。
  */
 
 type Env = Readonly<Record<string, unknown>>
 type Json = Record<string, unknown>
 
 const ORGANIZATION = COMPANY_DEFAULT_ORGANIZATION_ID
-const ROOT_PASSWORD = "correct horse battery staple"
+
+/** サインイン済みセッションを指すtoken。callはこれをBearerでなくcompositionの経路で渡す。 */
+const signedInSessions = new Map<string, SystemSignedInSession>()
+
+/**
+ * Better Authのパスキーのサインインと同じ判定で、サインイン済みセッションを作る。
+ * パスキーを登録していないAccountや、無効なAccountはサインインできない。
+ */
+async function signIn(
+  env: Env,
+  accountId: string,
+  options: Readonly<{ method?: SystemSignedInSession["method"]; authenticatedAt?: Date }> = {},
+): Promise<string | null> {
+  const tokenVersion = await readSystemAccountTokenVersion(
+    { env: { DB: env.DB as D1Database } },
+    accountId,
+  )
+  if (tokenVersion instanceof Error) throw tokenVersion
+  if (tokenVersion === null) return null
+  const authenticatedAt = options.authenticatedAt ?? new Date()
+  const token = randomUUID()
+  signedInSessions.set(token, {
+    accountId,
+    sessionId: randomUUID(),
+    authenticatedAt,
+    expiresAt: new Date(authenticatedAt.getTime() + 7 * 24 * 60 * 60 * 1000),
+    method: options.method ?? "passkey",
+    accountTokenVersion: tokenVersion,
+  })
+  return token
+}
+
+/** パスキーの登録の検証が済んだ後に、Better Authが招待を消費するのと同じ処理を行う。 */
+async function enrollPasskey(env: Env, enrollmentToken: string): Promise<string | null> {
+  const enrolled = await completeSystemPasskeyEnrollment(
+    { env: { DB: env.DB as D1Database } },
+    { token: enrollmentToken, now: new Date() },
+  )
+  if (enrolled instanceof Error) throw enrolled
+  return enrolled?.accountId ?? null
+}
 
 async function call(
   env: Env,
@@ -25,18 +72,20 @@ async function call(
   path: string,
   options: Readonly<{ token?: string; headers?: Record<string, string>; body?: unknown }> = {},
 ): Promise<{ status: number; body: Json; etag: string | null }> {
+  const session = options.token === undefined ? undefined : signedInSessions.get(options.token)
+  const bearer = options.token !== undefined && session === undefined ? options.token : undefined
   const response = await app.request(
     path,
     {
       method,
       headers: {
         "content-type": "application/json",
-        ...(options.token === undefined ? {} : { authorization: `Bearer ${options.token}` }),
+        ...(bearer === undefined ? {} : { authorization: `Bearer ${bearer}` }),
         ...options.headers,
       },
       ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
     },
-    env,
+    session === undefined ? env : new SystemSignedInSessionChannel({ env }).attach(session),
   )
   const text = await response.text()
   let body: Json = {}
@@ -77,72 +126,63 @@ assert.deepEqual(
 
 const local = await startLocalD1({ migrated: ["foundation-only-acceptance"] })
 try {
-  const identityKey = await createSystemIdentityTestKey()
   const env: Env = {
     DB: await local.database("foundation-only-acceptance"),
     BOOTSTRAP_TOKEN: "foundation-acceptance-bootstrap-token",
     JWT_SECRET: "foundation-acceptance-jwt-secret-value",
-    PEPPER_SECRET: "foundation-acceptance-pepper-value",
     AUDIT_HMAC_SECRET: "foundation-acceptance-audit-value",
     COMPANY_TIME_ZONE: "Asia/Tokyo",
-    IDENTITY_ISSUER: "https://identity-provider.example/",
-    IDENTITY_AUDIENCE: "urn:system:identity-login",
-    IDENTITY_JWKS: identityKey.jwks,
   }
-  const identityToken = (sub: string, overrides: Readonly<{ authTime?: number | null }> = {}) =>
-    createSystemIdentityToken(identityKey.signingKey, Math.floor(Date.now() / 1000), {
-      sub,
-      jti: randomUUID(),
-      audience: "urn:system:identity-login",
-      keyId: identityKey.keyId,
-      ...overrides,
-    })
 
-  // 初期化とパスワードログイン
-  expectStatus(
-    await call(env, "POST", "/system/bootstrap", {
-      body: { token: env.BOOTSTRAP_TOKEN, email: "root@example.com", password: ROOT_PASSWORD },
-    }),
-    201,
-    "System初期化",
+  // 初期化とパスキーの登録・サインイン
+  const bootstrap = z
+    .object({ account_id: z.string(), passkey_enrollment: z.object({ token: z.string() }) })
+    .parse(
+      expectStatus(
+        await call(env, "POST", "/system/bootstrap", {
+          body: { token: env.BOOTSTRAP_TOKEN, email: "root@example.com" },
+        }),
+        201,
+        "System初期化",
+      ),
+    )
+  assert.equal(
+    await signIn(env, bootstrap.account_id),
+    null,
+    "パスキーを登録する前にサインインできます",
   )
-  const rootSession = z.object({ access_token: z.string(), account_id: z.string() }).parse(
-    expectStatus(
-      await call(env, "POST", "/system/sessions", {
-        body: { subject: "root@example.com", password: ROOT_PASSWORD },
-      }),
-      201,
-      "パスワードログイン",
-    ),
+  assert.equal(
+    await enrollPasskey(env, bootstrap.passkey_enrollment.token),
+    bootstrap.account_id,
+    "初期rootのパスキー招待を使えません",
   )
-  const root = rootSession.access_token
-  expectStatus(
-    await call(env, "POST", "/system/sessions", {
-      body: { subject: "root@example.com", password: "wrong password value" },
-    }),
-    401,
-    "誤ったパスワードのログイン",
+  assert.equal(
+    await enrollPasskey(env, bootstrap.passkey_enrollment.token),
+    null,
+    "同じパスキー招待を二度使えます",
   )
+  const root = await signIn(env, bootstrap.account_id)
+  assert.ok(root !== null, "パスキーを登録したrootがサインインできません")
 
-  // パスワードによる再認証。再認証の無い管理操作は拒否する。
+  // パスキーで入り直した直後だけ再認証できる。再認証の無い管理操作は拒否する。
+  const staleRoot = await signIn(env, bootstrap.account_id, {
+    authenticatedAt: new Date(Date.now() - 10 * 60 * 1000),
+  })
+  assert.ok(staleRoot !== null)
   expectStatus(
-    await call(env, "POST", "/system/step-up-grants", {
-      token: root,
-      body: { method: "password", password: "wrong password value" },
-    }),
+    await call(env, "POST", "/system/step-up-grants", { token: staleRoot }),
     401,
-    "誤ったパスワードの再認証",
+    "古いサインインの再認証",
   )
-  const stepUp = z.object({ step_up_token: z.string() }).parse(
-    expectStatus(
-      await call(env, "POST", "/system/step-up-grants", {
-        token: root,
-        body: { method: "password", password: ROOT_PASSWORD },
-      }),
-      201,
-      "パスワードの再認証",
-    ),
-  ).step_up_token
+  const stepUp = z
+    .object({ step_up_token: z.string() })
+    .parse(
+      expectStatus(
+        await call(env, "POST", "/system/step-up-grants", { token: root }),
+        201,
+        "パスキーの再認証",
+      ),
+    ).step_up_token
   const elevated = { "x-system-step-up": stepUp }
   expectStatus(
     await call(env, "POST", "/system/accounts", { token: root }),
@@ -344,7 +384,7 @@ try {
   assert.ok(organization.includes("EXAMPLE-DEPT"), "組織の時点参照に登録した組織がありません")
   assert.ok(organization.includes(employeeId), "組織の時点参照に責務の任命がありません")
 
-  // 外部IdPのログインと再認証
+  // 管理者が作ったAccountのパスキー招待とサインイン、デバイス認証のセッションでの再認証
   const member = z
     .object({ id: z.string() })
     .parse(
@@ -354,55 +394,33 @@ try {
         "Account作成",
       ),
     )
-  expectStatus(
-    await call(env, "POST", `/system/accounts/${member.id}/identities`, {
-      token: root,
-      headers: elevated,
-      body: {
-        provider: "oidc",
-        subject: "external-member",
-        email: "member@example.com",
-        email_verified: true,
-      },
-    }),
-    201,
-    "外部identityの接続",
-  )
-  expectStatus(
-    await call(env, "POST", "/system/identity-sessions", {
-      body: { token: await identityToken("unlinked-subject") },
-    }),
-    401,
-    "未接続の外部identityのログイン",
-  )
-  const memberSession = z.object({ access_token: z.string(), account_id: z.string() }).parse(
+  const memberEnrollment = z.object({ passkey_enrollment: z.object({ token: z.string() }) }).parse(
     expectStatus(
-      await call(env, "POST", "/system/identity-sessions", {
-        body: { token: await identityToken("external-member") },
+      await call(env, "POST", `/system/accounts/${member.id}/identities`, {
+        token: root,
+        headers: elevated,
+        body: { provider: "passkey", email: "member@example.com" },
       }),
       201,
-      "外部IdPのログイン",
+      "パスキーのIdentityの作成",
     ),
-  )
-  assert.equal(memberSession.account_id, member.id)
+  ).passkey_enrollment.token
+  assert.equal(await signIn(env, member.id), null, "招待を使う前にサインインできます")
+  assert.equal(await enrollPasskey(env, memberEnrollment), member.id, "招待を使えません")
+  const memberToken = await signIn(env, member.id)
+  assert.ok(memberToken !== null, "招待を使ったAccountがサインインできません")
+  const memberSession = { access_token: memberToken, account_id: member.id }
+  const memberDevice = await signIn(env, member.id, { method: "device" })
+  assert.ok(memberDevice !== null)
   expectStatus(
-    await call(env, "POST", "/system/step-up-grants", {
-      token: memberSession.access_token,
-      body: {
-        method: "external_identity",
-        token: await identityToken("external-member", { authTime: null }),
-      },
-    }),
+    await call(env, "POST", "/system/step-up-grants", { token: memberDevice }),
     401,
-    "認証時刻の無い外部IdPの再認証",
+    "デバイス認証のセッションでの再認証",
   )
   expectStatus(
-    await call(env, "POST", "/system/step-up-grants", {
-      token: memberSession.access_token,
-      body: { method: "external_identity", token: await identityToken("external-member") },
-    }),
+    await call(env, "POST", "/system/step-up-grants", { token: memberSession.access_token }),
     201,
-    "外部IdPの再認証",
+    "パスキーの再認証",
   )
 
   // 機械主体
@@ -613,9 +631,9 @@ try {
     "権限の無い監査参照",
   )
   for (const action of [
-    "auth.session.create",
+    "auth.passkey_enrollment.issued",
+    "auth.passkey_enrollment.completed",
     "auth.step_up.issued",
-    "auth.session.identity_login_denied",
     "system.principal.created",
     "auth.machine_token.issued",
     "system.work.approve",
@@ -656,7 +674,7 @@ try {
   )
 
   console.log(
-    "System・Companyだけの構成: 会社の初期化、人・雇用・組織・責務と時点参照、パスワードと外部IdPの認証と再認証、機械主体、共通の作業承認、通知、監査を確認しました",
+    "System・Companyだけの構成: 会社の初期化、人・雇用・組織・責務と時点参照、パスキーの招待とサインインと再認証、機械主体、共通の作業承認、通知、監査を確認しました",
   )
 } finally {
   await local.dispose()

@@ -1,6 +1,9 @@
 import { createAppBase } from "@/api/app-base"
+import { readSignedInSession } from "@/api/http/auth/read-signed-in-session"
 import type { RouteMethod } from "@/api/http/lazy-route-handlers"
+import { SystemSignedInSessionChannel } from "@system/interface/request-environment/system-signed-in-session-channel"
 import type { Context, MiddlewareHandler } from "hono"
+import { getSession } from "void/auth"
 
 /** Voidが `/api` の下へ公開するAPIの接頭辞。Honoのrouteは接頭辞なしの経路で登録する。 */
 const API_PREFIX = "/api"
@@ -10,6 +13,7 @@ const API_PREFIX = "/api"
  *
  * 共通middleware（認証、CORS、入力上限、監査、エラー変換）は `createAppBase` が持つ。
  * route fileごとに、その経路だけを載せたappを作り、`/api` を外した要求を通す。
+ * Voidが検証したBetter Authのセッションは、envの複製へ結び付けてSystemへ渡す。
  * route fileはVoidが要求された経路の分だけ読み込むので、全routeを評価しない。
  */
 export function voidApiRoute(method: RouteMethod, path: string, exported: unknown) {
@@ -24,7 +28,10 @@ export function voidApiRoute(method: RouteMethod, path: string, exported: unknow
     const url = new URL(c.req.url)
     if (!url.pathname.startsWith(`${API_PREFIX}/`)) return c.notFound()
     url.pathname = url.pathname.slice(API_PREFIX.length)
-    return app.fetch(new Request(url.toString(), c.req.raw), c.env, executionContextOf(c))
+    const session = readSignedInSession(getSession())
+    const env =
+      session === null ? c.env : new SystemSignedInSessionChannel({ env: c.env }).attach(session)
+    return app.fetch(new Request(url.toString(), c.req.raw), env, executionContextOf(c))
   }
 }
 

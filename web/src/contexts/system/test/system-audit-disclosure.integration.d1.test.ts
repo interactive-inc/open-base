@@ -2,7 +2,10 @@ import { testDerivedId } from "@system/test/system-test-id.test-support"
 import { expect, setDefaultTimeout, spyOn, test } from "bun:test"
 import { drizzle } from "drizzle-orm/d1"
 import { createSystemAttachmentTestDatabase } from "@system/test/create-system-attachment-test-database.test-support"
-import { createSystemSessionApplications } from "@system/test/create-system-session-applications.test-support"
+import {
+  createSystemSessionApplications,
+  systemTestSignedInSession,
+} from "@system/test/create-system-session-applications.test-support"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { SystemPrincipalSecretService } from "@system/lib/auth/system-principal-secret-service"
 import { systemFactory } from "@system/interface/request-environment/system-factory"
@@ -83,6 +86,7 @@ async function fixture() {
     .run()
   const app = systemFactory
     .createApp()
+    .use("*", systemTestSignedInSession)
     .use("*", async (context, next) => {
       context.set("now", () => clock.now)
       context.set("database", database)
@@ -95,7 +99,7 @@ async function fixture() {
   const jwtSecret = "audit-disclosure-test-jwt-secret"
   const applications = createSystemSessionApplications({
     context: { env: { DB: db } },
-    jwtSecret,
+
     sessionTtlMilliseconds: 604_800_000,
   })
   if (applications instanceof Error) throw applications

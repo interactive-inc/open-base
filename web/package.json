@@ -31,12 +31,15 @@
     "test:unit": "bun test src/contexts src/lib src/api --path-ignore-patterns='**/*.d1.test.ts'",
     "test:d1": "bun ../scripts/test-d1.ts",
     "test:acceptance": "bun scripts/foundation-only-acceptance.ts",
-    "check": "bun run gen:app:check && bun run gen:composition:check && bun run lint:route-authorization && bun run lint:system-source && bun run lint:company-source && bun run lint:boundaries && bun run build:types && tsc --noEmit",
+    "check": "bun run gen:app:check && bun run gen:composition:check && bun run lint:route-authorization && bun run lint:system-source && bun run lint:company-source && bun run lint:boundaries && bun run build:types && tsc --noEmit && tsc --noEmit -p tsconfig.pages.json",
     "lint:boundaries": "bun scripts/check-context-boundaries.ts && bun scripts/check-system-context-boundary.ts && bun scripts/check-table-ownership-isolation.ts && bun scripts/check-api-composition-routes.ts",
     "postinstall": "void prepare"
   },
   "dependencies": {
+    "@better-auth/oauth-provider": "1.7.12",
+    "@better-auth/passkey": "1.7.12",
     "@hono/zod-validator": "^0.7.6",
+    "better-auth": "1.7.12",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.27",
     "jose": "^5.10.0",
