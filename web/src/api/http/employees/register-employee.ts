@@ -18,7 +18,9 @@ import {
 import { fingerprintPersonnelAction } from "@/contexts/company/domain/definitions/fingerprint-personnel-action.definition"
 import type { PersonnelActionInput } from "@/contexts/company/domain/definitions/lifecycle-types.definition"
 import { CompanyOperationError } from "@/contexts/company/domain/errors"
-import { openSystemAccountProvisioning } from "@system/interface/operations/open-system-account-provisioning"
+import { prepareSystemAccountProvisioning } from "@system/interface/operations/prepare-system-account-provisioning"
+import { hasSystemRegisteredEmail } from "@system/interface/operations/has-system-registered-email"
+import { readSystemAccountRegistration } from "@system/interface/operations/read-system-account-registration"
 import { openSystemRoleCatalog } from "@system/interface/operations/open-system-role-catalog"
 import { prepareSystemPasskeyEnrollment } from "@system/interface/operations/prepare-system-passkey-enrollment"
 import { isCompanyWriteAbortedByGuard as isAbortedByGuard } from "@/contexts/company/interface/operations/is-company-write-aborted-by-guard"
@@ -135,12 +137,7 @@ export class RegisterEmployee {
     if (replay !== null) return replay
     const [existingEmployee, existingIdentity] = await Promise.all([
       openCompanyEmployeeDirectory(company).findByCode(input.action.employeeCode),
-      this.c.env.DB.prepare(
-        `SELECT 1 AS found FROM system_identity_profiles
-         WHERE lower(email) = lower(?1) LIMIT 1`,
-      )
-        .bind(input.email)
-        .first<number>("found"),
+      hasSystemRegisteredEmail({ env: { DB: this.c.env.DB } }, input.email),
     ])
     if (existingEmployee instanceof Error) {
       return new UnexpectedError("従業員コードを検査できません", { cause: existingEmployee })
@@ -148,7 +145,10 @@ export class RegisterEmployee {
     if (existingEmployee !== null) {
       return new ConflictError("employee code already exists", "employee_code_conflict")
     }
-    if (existingIdentity !== null) {
+    if (existingIdentity instanceof Error) {
+      return new UnexpectedError("メールの登録状態を確認できません", { cause: existingIdentity })
+    }
+    if (existingIdentity) {
       return new ConflictError("email already exists", "email_conflict")
     }
     const lifecycleRevision = await readCompanyOrganizationLifecycleRevision({
@@ -193,7 +193,7 @@ export class RegisterEmployee {
             subject: method === "password" ? input.email.toLowerCase() : input.oidcSubject!,
             passwordHash,
           }
-    const system = openSystemAccountProvisioning(systemContext).prepare({
+    const system = prepareSystemAccountProvisioning(systemContext, {
       actorAccountId: session.accountId,
       ...identity,
       email: input.email,
@@ -311,52 +311,27 @@ export class RegisterEmployee {
       if (registered instanceof Error) throw registered
       if (registered === null) return null
       // 再送は登録内容だけで同じ要求かを判断する。招待tokenは再送の応答に含めない。
-      const credential = await this.c.env.DB.prepare(
-        `SELECT identity_profile.email,
-                EXISTS (
-                  SELECT 1
-                    FROM system_role_bindings AS binding
-                    JOIN system_iam_roles AS role ON role.id = binding.role_id
-                   WHERE binding.account_id = ?1
-                     AND binding.resource_type IS NULL
-                     AND binding.revoked_at IS NULL
-                     AND role.key = ?2
-                ) AS has_expected_role
-           FROM (SELECT 1) AS account
-           LEFT JOIN system_identity_bindings AS identity
-             ON identity.account_id = ?1
-            AND identity.provider = ?3
-            AND (?4 IS NULL OR identity.subject = ?4)
-            AND identity.revoked_at IS NULL
-           LEFT JOIN system_identity_profiles AS identity_profile
-             ON identity_profile.identity_id = identity.id`,
+      const credential = await readSystemAccountRegistration(
+        { env: { DB: this.c.env.DB } },
+        {
+          accountId: registered.accountId,
+          roleKey: `company:${input.roleKey}`,
+          provider: input.provider,
+          subject: input.subject,
+        },
       )
-        .bind(registered.accountId, `company:${input.roleKey}`, input.provider, input.subject)
-        .first<{ email: string | null; has_expected_role: number }>()
-      const row =
-        credential === null
-          ? null
-          : {
-              kind: registered.kind,
-              payload_fingerprint: registered.payloadFingerprint,
-              recorded_by_account_id: registered.recordedByAccountId,
-              employee_code: registered.employeeCode,
-              official_name: registered.officialName,
-              email: credential.email,
-              has_expected_role: credential.has_expected_role,
-            }
-      if (row === null) return null
-      if (row.email === null) {
+      if (credential instanceof Error) throw credential
+      if (credential.email === null) {
         return new UnexpectedError("完了済み従業員登録のSystem資格情報が見つかりません")
       }
       const matches =
-        row.kind === "hire" &&
-        row.payload_fingerprint === input.payloadFingerprint &&
-        row.recorded_by_account_id === input.actorAccountId &&
-        row.employee_code === input.employeeCode &&
-        row.official_name === input.employeeName &&
-        row.email.toLocaleLowerCase("en-US") === input.email.toLocaleLowerCase("en-US") &&
-        row.has_expected_role === 1
+        registered.kind === "hire" &&
+        registered.payloadFingerprint === input.payloadFingerprint &&
+        registered.recordedByAccountId === input.actorAccountId &&
+        registered.employeeCode === input.employeeCode &&
+        registered.officialName === input.employeeName &&
+        credential.email.toLocaleLowerCase("en-US") === input.email.toLocaleLowerCase("en-US") &&
+        credential.hasExpectedRole
       if (!matches) {
         return new ConflictError(
           "Idempotency-Key is already used by another employee registration",

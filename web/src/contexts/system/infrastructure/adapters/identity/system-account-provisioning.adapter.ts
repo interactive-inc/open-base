@@ -25,6 +25,54 @@ export class SystemAccountProvisioningAdapter {
     Object.freeze(this)
   }
 
+  /** 未有効・失効済みも含め、登録済みのメールを新規登録へ使わせない。 */
+  async hasRegisteredEmail(email: string): Promise<boolean | Error> {
+    try {
+      const row = await this.c.env.DB.prepare(
+        `SELECT 1 AS found FROM system_identity_profiles
+         WHERE lower(email) = lower(?1) LIMIT 1`,
+      )
+        .bind(email)
+        .first<number>("found")
+      return row !== null
+    } catch (cause) {
+      return cause instanceof Error ? cause : new Error("failed to check registered email")
+    }
+  }
+
+  /** 再送の照合に必要な登録情報だけを返す。認証や認可の判定には使わない。 */
+  async readRegistration(
+    input: Readonly<{
+      accountId: string
+      roleKey: string
+      provider: IdentityProvider
+      subject: string | null
+    }>,
+  ): Promise<Readonly<{ email: string | null; hasExpectedRole: boolean }> | Error> {
+    try {
+      const row = await this.c.env.DB.prepare(
+        `SELECT identity_profile.email,
+                EXISTS (
+                  SELECT 1 FROM system_role_bindings AS binding
+                  JOIN system_iam_roles AS role ON role.id = binding.role_id
+                  WHERE binding.account_id = ?1 AND binding.resource_type IS NULL
+                    AND binding.revoked_at IS NULL AND role.key = ?2
+                ) AS has_expected_role
+         FROM (SELECT 1) AS account
+         LEFT JOIN system_identity_bindings AS identity
+           ON identity.account_id = ?1 AND identity.provider = ?3
+          AND (?4 IS NULL OR identity.subject = ?4) AND identity.revoked_at IS NULL
+         LEFT JOIN system_identity_profiles AS identity_profile
+           ON identity_profile.identity_id = identity.id`,
+      )
+        .bind(input.accountId, input.roleKey, input.provider, input.subject)
+        .first<{ email: string | null; has_expected_role: number }>()
+      return { email: row?.email ?? null, hasExpectedRole: row?.has_expected_role === 1 }
+    } catch (cause) {
+      return cause instanceof Error ? cause : new Error("failed to read account registration")
+    }
+  }
+
   async canGrantInitialRole(
     actorAccountId: AccountId,
     role: IamRoleEntity,
