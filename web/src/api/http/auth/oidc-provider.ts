@@ -153,7 +153,10 @@ export async function verifyOidcIdToken(
     }
     const authTime = claims.data.auth_time
     const nowSeconds = Math.floor(input.now.getTime() / 1_000)
-    if (claims.data.iat > nowSeconds || (authTime !== undefined && authTime > nowSeconds))
+    if (
+      claims.data.iat > nowSeconds ||
+      (authTime !== undefined && (authTime > nowSeconds || authTime > claims.data.iat))
+    )
       return null
     return Object.freeze({
       subject: claims.data.sub,

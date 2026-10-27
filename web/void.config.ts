@@ -22,7 +22,7 @@ export default defineConfig({
         binding: "DB",
         database_name: "base",
         database_id: "00000000-0000-0000-0000-000000000000",
-        migrations_dir: "migrations",
+        migrations_dir: "src/db/migrations",
       },
     ],
     r2_buckets: [{ binding: "ATTACHMENTS", bucket_name: "base-attachments" }],

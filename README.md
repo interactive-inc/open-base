@@ -138,3 +138,15 @@ make ci
 新規インストール用の基盤であり、他の製品の稼働DBへこのmigrationを適用しないでください。
 
 開発規約は `AGENTS.md` と各contextの `AGENTS.md` に集約しています。
+
+## 配備
+
+Cloudflareの配備先は、管理対象外の `web/void.deploy.json` の `cloudflare` に設定します。`void.config.ts` がこの設定を読み、ビルドと移行前の検査で同じ配備先を使います。秘密値はこのファイルへ書かず、配備先の秘密値として管理します。
+
+D1の `migrations_dir` は `src/db/migrations` にします。`make ci` が通った変更で、次を実行します。
+
+```sh
+bun run --cwd web db:migrate
+```
+
+最初にリモートの適用記録を読み取り、移行の名前や順序の不整合があれば書き込み前に停止します。検査を通るとVoidがビルド、未適用の移行、配備を進めます。認証サービス側のクライアント登録と、選択した認証方式の設定も配備前に用意してください。

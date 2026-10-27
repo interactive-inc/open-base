@@ -16,7 +16,8 @@ const pendingSchema = z.object({
   codeVerifier: z.string().min(43),
   nonce: z.string().min(1),
   callbackURL: z.string(),
-  requireFreshSignIn: z.boolean().default(false),
+  requireFreshSignIn: z.boolean(),
+  startedAt: z.number().int().nonnegative(),
 })
 
 type Options = Readonly<{
@@ -63,6 +64,7 @@ export function oidcSignIn(options: Options) {
               nonce,
               callbackURL: sameOriginPath(ctx.query.callbackURL),
               requireFreshSignIn: ctx.query.prompt === "login",
+              startedAt: Math.floor(Date.now() / 1_000) * 1_000,
             }),
             expiresAt: new Date(Date.now() + STATE_LIFETIME_SECONDS * 1_000),
           })
@@ -143,6 +145,7 @@ export function oidcSignIn(options: Options) {
           if (
             pending.requireFreshSignIn &&
             (claims.authenticatedAt === null ||
+              claims.authenticatedAt.getTime() < pending.startedAt ||
               now.getTime() - claims.authenticatedAt.getTime() > 5 * 60 * 1_000)
           ) {
             throw ctx.redirect(signInErrorUrl("failed"))

@@ -163,10 +163,23 @@ test("stateとnonceの不一致、未登録の主体ではセッションを作�
 
 test("再認証では発行者の新しい認証時刻を必須にする", async () => {
   const f = await fixture()
-  for (const authTime of [null, Math.floor(Date.now() / 1_000) - 301]) {
+  for (const authTime of [
+    null,
+    Math.floor(Date.now() / 1_000) - 301,
+    Math.floor(Date.now() / 1_000) - 60,
+  ]) {
     const { cookie, callback } = await f.start(true)
     f.state.authTime = authTime
     expect((await f.call(callback, cookie)).headers.get("location")).toContain("error=failed")
   }
   expect(await f.database.prepare("SELECT COUNT(*) AS total FROM session").first("total")).toBe(0)
+}, 30_000)
+
+test("再認証を開始してから本人確認した応答でセッションを作る", async () => {
+  const f = await fixture()
+  const { cookie, callback } = await f.start(true)
+  f.state.authTime = Math.floor(Date.now() / 1_000)
+  const response = await f.call(callback, cookie)
+  expect(response.headers.get("location")).toBe("/")
+  expect(await f.database.prepare("SELECT COUNT(*) AS total FROM session").first("total")).toBe(1)
 }, 30_000)

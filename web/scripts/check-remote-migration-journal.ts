@@ -1,5 +1,7 @@
-import { readdirSync, readFileSync } from "node:fs"
-import { dirname, join } from "node:path"
+import { tmpdir } from "node:os"
+import { fileURLToPath } from "node:url"
+import { readdirSync, readFileSync, mkdtempSync, writeFileSync, rmSync } from "node:fs"
+import { dirname, resolve } from "node:path"
 import { parseArgs } from "node:util"
 import { parseConfigFileTextToJson } from "typescript"
 import { z } from "zod"
@@ -26,7 +28,7 @@ export async function checkRemoteMigrationJournal(configPath: string): Promise<v
     .parse(parsed.config)
   const failures: string[] = []
   for (const database of config.d1_databases) {
-    const directory = join(
+    const directory = resolve(
       dirname(configPath),
       database.migrations_dir ?? config.migrations_dir ?? "migrations",
     )
@@ -78,6 +80,45 @@ if (import.meta.main) {
     },
     strict: true,
   })
-  if (arguments_.values.config === undefined) throw new Error("--config is required")
-  await checkRemoteMigrationJournal(arguments_.values.config)
+  if (arguments_.values.config !== undefined) {
+    await checkRemoteMigrationJournal(arguments_.values.config)
+  } else {
+    // 配備と同じ設定だけを読み、秘密値を含まない最小の一時設定で照会する。
+    const { default: configuration } = await import("../void.config")
+    const projectRoot = fileURLToPath(new URL("../", import.meta.url))
+    const cloudflare = z
+      .object({
+        name: z.string().min(1),
+        account_id: z.string().optional(),
+        d1_databases: z
+          .array(
+            z.object({
+              binding: z.string().min(1),
+              database_name: z.string().optional(),
+              database_id: z.string().min(1),
+              migrations_dir: z.string().min(1),
+            }),
+          )
+          .min(1),
+      })
+      .parse(configuration.cloudflare)
+    const directory = mkdtempSync(resolve(tmpdir(), "database-preflight-"))
+    try {
+      const configPath = resolve(directory, "wrangler.json")
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          ...cloudflare,
+          d1_databases: cloudflare.d1_databases.map((database) => ({
+            ...database,
+            migrations_dir: resolve(projectRoot, database.migrations_dir),
+          })),
+        }),
+        { mode: 0o600 },
+      )
+      await checkRemoteMigrationJournal(configPath)
+    } finally {
+      rmSync(directory, { recursive: true, force: true })
+    }
+  }
 }
