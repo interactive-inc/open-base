@@ -1,15 +1,15 @@
 import { testAccountId } from "@system/test/system-test-id.test-support"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
-import {
-  createSystemSessionApplications,
-  systemTestSignedInSession,
-} from "@system/test/create-system-session-applications.test-support"
+import { createSystemSessionApplications } from "@system/test/create-system-session-applications.test-support"
+import { requireIssuedSystemSession } from "@system/test/require-issued-system-session.test-support"
 import { SystemSessionTestContext } from "@system/test/system-session-test-context.test-support"
 import { seedSystemStepUpGrant } from "@system/test/seed-system-step-up-grant.test-support"
 import { systemFactory } from "@system/interface/request-environment/system-factory"
+import { SystemAccountCatalogRepository } from "@system/infrastructure/repositories/iam/system-account-catalog.repository"
+import { SystemAuditEventRepository } from "@system/infrastructure/repositories/audit/system-audit-event.repository"
 import { GET as GET_ONE, PATCH } from "@system/interface/routes/system.accounts.$accountId"
 import { GET as GET_MANY, POST } from "@system/interface/routes/system.accounts"
-import { describe, expect, setDefaultTimeout, test } from "bun:test"
+import { describe, expect, setDefaultTimeout, spyOn, test } from "bun:test"
 import { hc } from "hono/client"
 
 // ローカルD1のtemplate作成とDBごとの往復を含むため、既定の5秒を超えることがある。
@@ -59,24 +59,25 @@ describe("System AccountEntity HTTP", () => {
 
     const applications = createSystemSessionApplications({
       context: fixture.context,
+      jwtSecret: "system-session-test-jwt-secret",
       sessionTtlMilliseconds: 604_800_000,
     })
     expect(applications).not.toBeInstanceOf(Error)
     if (applications instanceof Error) return
-    const issuance = await applications.issue.execute({
-      accountId: rootAccountId,
-      tokenVersion: 0,
-      now: new Date(),
-      auditContext: { authorizationJson: null, metadataJson: null },
-    })
-    expect(issuance).not.toBeInstanceOf(Error)
-    if (issuance instanceof Error || issuance.kind === "rejected") return
+    const issuance = requireIssuedSystemSession(
+      await applications.issue.execute({
+        accountId: rootAccountId,
+        tokenVersion: 0,
+        now: new Date(),
+        auditContext: { authorizationJson: null, metadataJson: null },
+      }),
+    )
 
+    const clock = { now }
     const app = systemFactory
       .createApp()
-      .use("*", systemTestSignedInSession)
       .use("*", async (context, next) => {
-        context.set("now", () => now)
+        context.set("now", () => clock.now)
         await next()
       })
       .get("/system/accounts", ...GET_MANY)
@@ -131,6 +132,17 @@ describe("System AccountEntity HTTP", () => {
     })
     expect(suspended.status).toBe(200)
     expect(await suspended.json()).toMatchObject({ status: "suspended", token_version: 1 })
+    expect(
+      await fixture.database
+        .prepare(
+          "SELECT before_json, after_json FROM system_audit_events WHERE target_id = ?1 AND action = 'system.account.status_updated'",
+        )
+        .bind(createdBody.id)
+        .first<Record<string, unknown>>(),
+    ).toEqual({
+      before_json: '{"status":"active","token_version":0}',
+      after_json: '{"status":"suspended","token_version":1}',
+    })
 
     const selfSuspension = await client.system.accounts[":accountId"].$patch({
       param: { accountId: rootAccountId },
@@ -144,6 +156,111 @@ describe("System AccountEntity HTTP", () => {
            WHERE action IN ('system.account.created', 'system.account.status_updated')`)
         .first<Record<string, unknown>>(),
     ).toEqual({ total: 2 })
+
+    const concurrent = await client.system.accounts.$post()
+    expect(concurrent.status).toBe(201)
+    const concurrentBody = await concurrent.json()
+    expect("id" in concurrentBody).toBe(true)
+    if (!("id" in concurrentBody)) return
+
+    const find = SystemAccountCatalogRepository.prototype.find
+    const interleaved = spyOn(
+      SystemAccountCatalogRepository.prototype,
+      "find",
+    ).mockImplementationOnce(async function (this: SystemAccountCatalogRepository, accountId) {
+      const snapshot = await find.call(this, accountId)
+      expect(snapshot).toMatchObject({ id: concurrentBody.id, status: "active", tokenVersion: 0 })
+      clock.now = new Date(now.getTime() + 1000)
+      const locked = await client.system.accounts[":accountId"].$patch({
+        param: { accountId: concurrentBody.id },
+        json: { status: "locked" },
+      })
+      expect(locked.status).toBe(200)
+      expect(await locked.json()).toMatchObject({ status: "locked", token_version: 1 })
+      clock.now = new Date(now.getTime() + 2000)
+      return snapshot
+    })
+    try {
+      const staleSuspension = await client.system.accounts[":accountId"].$patch({
+        param: { accountId: concurrentBody.id },
+        json: { status: "suspended" },
+      })
+      expect(Number(staleSuspension.status)).toBe(409)
+      expect(interleaved).toHaveBeenCalled()
+    } finally {
+      interleaved.mockRestore()
+    }
+    expect(
+      await fixture.database
+        .prepare("SELECT status, token_version, updated_at FROM system_accounts WHERE id = ?1")
+        .bind(concurrentBody.id)
+        .first<Record<string, unknown>>(),
+    ).toEqual({ status: "locked", token_version: 1, updated_at: now.getTime() + 1000 })
+    expect(
+      (
+        await fixture.database
+          .prepare(
+            "SELECT before_json, after_json FROM system_audit_events WHERE target_id = ?1 AND action = 'system.account.status_updated'",
+          )
+          .bind(concurrentBody.id)
+          .all<Record<string, unknown>>()
+      ).results,
+    ).toEqual([
+      {
+        before_json: '{"status":"active","token_version":0}',
+        after_json: '{"status":"locked","token_version":1}',
+      },
+    ])
+
+    const auditFailure = spyOn(
+      SystemAuditEventRepository.prototype,
+      "prepareAppend",
+    ).mockImplementationOnce(() => [
+      fixture.database.prepare("SELECT * FROM missing_audit_table"),
+      fixture.database.prepare("SELECT 1"),
+    ])
+    try {
+      const failedSuspension = await client.system.accounts[":accountId"].$patch({
+        param: { accountId: concurrentBody.id },
+        json: { status: "suspended" },
+      })
+      expect(Number(failedSuspension.status)).toBe(503)
+    } finally {
+      auditFailure.mockRestore()
+    }
+    expect(
+      await fixture.database
+        .prepare("SELECT status, token_version FROM system_accounts WHERE id = ?1")
+        .bind(concurrentBody.id)
+        .first<Record<string, unknown>>(),
+    ).toEqual({ status: "locked", token_version: 1 })
+
+    const retriedSuspension = await client.system.accounts[":accountId"].$patch({
+      param: { accountId: concurrentBody.id },
+      json: { status: "suspended" },
+    })
+    expect(retriedSuspension.status).toBe(200)
+    expect(await retriedSuspension.json()).toMatchObject({ status: "suspended", token_version: 2 })
+    expect(
+      (
+        await fixture.database
+          .prepare(
+            "SELECT before_json, after_json FROM system_audit_events WHERE target_id = ?1 AND action = 'system.account.status_updated' ORDER BY occurred_at",
+          )
+          .bind(concurrentBody.id)
+          .all<Record<string, unknown>>()
+      ).results,
+    ).toEqual([
+      {
+        before_json: '{"status":"active","token_version":0}',
+        after_json: '{"status":"locked","token_version":1}',
+      },
+      {
+        before_json: '{"status":"locked","token_version":1}',
+        after_json: '{"status":"suspended","token_version":2}',
+      },
+    ])
+    clock.now = now
 
     await fixture.database
       .prepare(`INSERT INTO system_accounts
@@ -180,19 +297,14 @@ describe("System AccountEntity HTTP", () => {
                  'example:organization', 'organization-1', ?3, NULL)`)
       .bind(delegatedAdministratorAccountId, scopedPrivilegedAccountId, now.getTime())
       .run()
-    const delegatedAdministratorIssuance = await applications.issue.execute({
-      accountId: delegatedAdministratorAccountId,
-      tokenVersion: 0,
-      now: new Date(),
-      auditContext: { authorizationJson: null, metadataJson: null },
-    })
-    expect(delegatedAdministratorIssuance).not.toBeInstanceOf(Error)
-    if (
-      delegatedAdministratorIssuance instanceof Error ||
-      delegatedAdministratorIssuance.kind === "rejected"
-    ) {
-      return
-    }
+    const delegatedAdministratorIssuance = requireIssuedSystemSession(
+      await applications.issue.execute({
+        accountId: delegatedAdministratorAccountId,
+        tokenVersion: 0,
+        now: new Date(),
+        auditContext: { authorizationJson: null, metadataJson: null },
+      }),
+    )
     const delegatedAdministratorClient = hc<typeof app>("http://system.test", {
       fetch: request,
       headers: {

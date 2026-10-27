@@ -2,7 +2,7 @@ import {
   CompanyHTTPException,
   type CompanyHTTPExceptionStatus,
 } from "@/contexts/company/interface/errors"
-import { OIDCHTTPException, SystemHTTPException } from "@system/interface/errors"
+import { SystemHTTPException } from "@system/interface/errors"
 import { ApplicationError } from "@/lib/errors"
 import type { Context, Env } from "hono"
 import { HTTPException } from "hono/http-exception"
@@ -27,18 +27,6 @@ const companyProblemTitleByStatus: Readonly<Record<CompanyHTTPExceptionStatus, s
  * API 全体の例外を外部向け JSON に変換し、内部情報を応答へ漏らさない。
  */
 export function handleApiError<E extends Env>(error: Error, context: Context<E>): Response {
-  if (error instanceof OIDCHTTPException) {
-    if (error.status >= 500) console.error("[expected server error]", error.cause ?? error)
-    if (error.authenticate !== null) {
-      context.header("WWW-Authenticate", error.authenticate)
-    }
-
-    return context.json({ error: error.code }, error.status, {
-      "Cache-Control": "no-store",
-      Pragma: "no-cache",
-    })
-  }
-
   if (error instanceof SystemHTTPException) {
     if (error.status >= 500) console.error("[expected server error]", error.cause ?? error)
 

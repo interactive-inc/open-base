@@ -113,14 +113,8 @@ export class SystemD1AuthorizationAdapter {
           resourceType: row.role_resource_type,
           name: row.role_name,
           permissionKeys: [...permissions].sort(),
-          createdAt:
-            typeof row.role_created_at === "number"
-              ? new Date(row.role_created_at)
-              : row.role_created_at,
-          updatedAt:
-            typeof row.role_updated_at === "number"
-              ? new Date(row.role_updated_at)
-              : row.role_updated_at,
+          createdAt: toStoredDate(row.role_created_at),
+          updatedAt: toStoredDate(row.role_updated_at),
         }),
       )
       const bindings = [...bindingRows.values()].map((row) =>
@@ -132,16 +126,8 @@ export class SystemD1AuthorizationAdapter {
             row.resource_type === null && row.resource_id === null
               ? null
               : { type: row.resource_type, id: row.resource_id },
-          createdAt:
-            typeof row.binding_created_at === "number"
-              ? new Date(row.binding_created_at)
-              : row.binding_created_at,
-          revokedAt:
-            row.revoked_at === null
-              ? null
-              : typeof row.revoked_at === "number"
-                ? new Date(row.revoked_at)
-                : row.revoked_at,
+          createdAt: toStoredDate(row.binding_created_at),
+          revokedAt: row.revoked_at === null ? null : toStoredDate(row.revoked_at),
         }),
       )
       const invalid = [...roles, ...bindings].find((value) => value instanceof Error)
@@ -218,4 +204,17 @@ export class SystemD1AuthorizationAdapter {
       roleKeys: Object.freeze(roles.map((role) => role.key).sort()),
     })
   }
+}
+
+/**
+ * 保存された日時（数値の epoch ミリ秒、または UTC の日時文字列）を Date へ戻す。
+ * 2 月 30 日のような存在しない暦日は Date が翌月へ繰り上げてしまうので、暦日が往復しない文字列は
+ * そのまま返し、Entity の検証で拒否させる。
+ */
+function toStoredDate(value: unknown): unknown {
+  if (typeof value === "number") return new Date(value)
+  if (typeof value !== "string") return value
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toISOString().slice(0, 10) === value.slice(0, 10) ? date : value
 }

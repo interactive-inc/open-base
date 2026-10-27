@@ -25,7 +25,7 @@ export type DeviceAuthorization = Readonly<{
   intervalMilliseconds: number
 }>
 
-/** デバイス認証を始める。返したURLをブラウザで開き、パスキーでサインインして承認してもらう。 */
+/** デバイス認証を始める。返したURLをブラウザで開き、サインインし直して承認してもらう。 */
 export async function startDeviceLogin(baseUrl: string): Promise<DeviceAuthorization> {
   const response = await fetch(apiUrl("/auth/device/code", baseUrl), {
     method: "POST",

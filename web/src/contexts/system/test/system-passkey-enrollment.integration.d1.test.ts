@@ -57,7 +57,7 @@ async function issue(context: { env: { DB: D1Database } }, at: Date, lifetime?: 
 describe("パスキー招待", () => {
   test("登録が済むまでサインインできず、招待を一度だけ使ってIdentityを有効にする", async () => {
     const { context, database } = await fixture()
-    expect(await readSystemAccountTokenVersion(context, accountId)).toBeNull()
+    expect(await readSystemAccountTokenVersion(context, accountId, "passkey")).toBeNull()
 
     const token = await issue(context, now)
     expect(await findSystemPasskeyEnrollment(context, { token, now })).toMatchObject({
@@ -68,7 +68,7 @@ describe("パスキー招待", () => {
       accountId,
     })
     expect(await completeSystemPasskeyEnrollment(context, { token, now: later(2) })).toBeNull()
-    expect(await readSystemAccountTokenVersion(context, accountId)).toBe(2)
+    expect(await readSystemAccountTokenVersion(context, accountId, "passkey")).toBe(3)
     expect(
       await database
         .prepare("SELECT activated_at FROM system_identity_bindings WHERE id = ?1")
@@ -99,7 +99,7 @@ describe("パスキー招待", () => {
     const token = await issue(context, later(3))
     await database
       .prepare(
-        "UPDATE system_accounts SET status = 'suspended', token_version = 3, updated_at = ?2 WHERE id = ?1",
+        "UPDATE system_accounts SET status = 'suspended', token_version = token_version + 1, updated_at = ?2 WHERE id = ?1",
       )
       .bind(accountId, later(4).getTime())
       .run()
@@ -117,7 +117,7 @@ describe("パスキー招待", () => {
       .bind(identityId, later(2).getTime())
       .run()
 
-    expect(await readSystemAccountTokenVersion(context, accountId)).toBeNull()
+    expect(await readSystemAccountTokenVersion(context, accountId, "passkey")).toBeNull()
   })
 
   test("復旧はbootstrap secretを持つ運用者だけが、メールアドレスの一致するAccountへ発行できる", async () => {
@@ -161,7 +161,7 @@ describe("パスキー招待", () => {
         .prepare(
           "SELECT reason, issued_by_account_id, expires_at - created_at AS lifetime FROM system_passkey_enrollments",
         )
-        .first(),
+        .first<{ reason: string; issued_by_account_id: string | null; lifetime: number }>(),
     ).toEqual({ reason: "recovery", issued_by_account_id: null, lifetime: 3_600_000 })
   })
 })

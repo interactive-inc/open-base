@@ -1,8 +1,7 @@
-import { AccessTokenService } from "@system/lib/auth/access-token-service"
-import { SYSTEM_ACCESS_TOKEN_PROFILE } from "@system/lib/auth/system-access-token-profile"
 import { execSql } from "@system/test/local-d1/exec-sql.test-support"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { SystemMachineCredentialRepository } from "@system/infrastructure/repositories/iam/system-machine-credential.repository"
+import { SystemAccessTokenIssuer } from "@system/lib/auth/system-access-token-issuer"
 import { SystemPrincipalSecretService } from "@system/lib/auth/system-principal-secret-service"
 import { systemFactory } from "@system/interface/request-environment/system-factory"
 import { POST } from "@system/interface/routes/system.machine-sessions"
@@ -35,7 +34,7 @@ async function createFixture(kind: "agent" | "service" | "connector" = "service"
     await fixture.database
       .prepare(`INSERT INTO system_connectors
          (id, key, name, direction, transport, status, revision, created_at, updated_at)
-         VALUES ('connector-1', 'inbound-test', 'Inbound', 'inbound', 'api', 'active', 1, ?1, ?1)`)
+         VALUES ('6f1c2a0e-5b7d-4c3a-9e21-8a4d0b6c7e15', 'inbound-test', 'Inbound', 'inbound', 'api', 'active', 1, ?1, ?1)`)
       .bind(createdAt)
       .run()
   }
@@ -43,7 +42,7 @@ async function createFixture(kind: "agent" | "service" | "connector" = "service"
     .prepare(`INSERT INTO system_principals
        (id, account_id, kind, name, connector_id, revision, created_at, updated_at)
        VALUES ('9a98bc39-03b1-4115-9d64-7bd9817b3a8d', '13943a8c-a101-4ba6-82d3-560dfa60c19b', ?1, 'Automation', ?2, 1, ?3, ?3)`)
-    .bind(kind, kind === "connector" ? "connector-1" : null, createdAt)
+    .bind(kind, kind === "connector" ? "6f1c2a0e-5b7d-4c3a-9e21-8a4d0b6c7e15" : null, createdAt)
     .run()
   await fixture.database
     .prepare(`INSERT INTO system_machine_credentials
@@ -171,7 +170,11 @@ describe("System machine access token", () => {
       const token = await issuedToken(await context.issue())
       expect((await context.read(token)).status).toBe(200)
       if (change === "suspend") {
-        await execSql(context.fixture.database, "UPDATE system_accounts SET status = 'suspended'")
+        // 状態の変更はtoken_versionを同時に進める。次の発行は新しい版でも状態で拒否される。
+        await execSql(
+          context.fixture.database,
+          "UPDATE system_accounts SET status = 'suspended', token_version = token_version + 1",
+        )
       } else if (change === "version") {
         await execSql(
           context.fixture.database,
@@ -192,16 +195,12 @@ describe("System machine access token", () => {
     const context = await createFixture()
     await issuedToken(await context.issue())
     for (const machineCredentialId of [undefined, "unknown-credential"]) {
-      // 発行元のないtokenは発行器では作れないので、署名だけを直接行う。
-      const token = await new AccessTokenService({ profile: SYSTEM_ACCESS_TOKEN_PROFILE }).create(
-        {
-          accountId: "13943a8c-a101-4ba6-82d3-560dfa60c19b",
-          tokenVersion: 0,
-          ...(machineCredentialId === undefined ? {} : { machineCredentialId }),
-        },
-        secret,
-        context.clock.at,
-      )
+      const token = await new SystemAccessTokenIssuer(secret).issue({
+        accountId: zAccountId.parse("13943a8c-a101-4ba6-82d3-560dfa60c19b"),
+        tokenVersion: 0,
+        machineCredentialId,
+        now: context.clock.at,
+      })
       expect(token).not.toBeInstanceOf(Error)
       if (token instanceof Error) throw token
       expect((await context.read(token)).status).toBe(401)
@@ -223,7 +222,7 @@ describe("System machine access token", () => {
       const database = context.fixture.database
       const changeSql =
         change === "suspend"
-          ? "UPDATE system_accounts SET status = 'suspended'"
+          ? "UPDATE system_accounts SET status = 'suspended', token_version = token_version + 1"
           : change === "version"
             ? "UPDATE system_accounts SET token_version = token_version + 1"
             : "UPDATE system_connectors SET status = 'disabled', revision = revision + 1"
@@ -250,7 +249,7 @@ describe("System machine access token", () => {
           database.prepare(
             `INSERT INTO system_audit_events
            (event_id, action, target_type, outcome, occurred_at)
-           VALUES ('must-not-commit', 'auth.machine_token.issued', 'credential', 'succeeded', 1)`,
+           VALUES ('0f6d1c2e-7a3b-4c4d-9e5f-a1b2c3d4e5f6', 'auth.machine_token.issued', 'credential', 'succeeded', 1)`,
           ),
         ],
       )
@@ -267,4 +266,89 @@ describe("System machine access token", () => {
       ).toEqual({ total: 0 })
     },
   )
+
+  test("先に始まった認証が、別の認証の記録した新しい利用時刻を読んでもtokenを発行する", async () => {
+    const { fixture, clock, issue } = await createFixture()
+    const startedAt = clock.at
+    clock.at = new Date(startedAt.getTime() + 10_000)
+    await issuedToken(await issue())
+
+    clock.at = startedAt
+    await issuedToken(await issue())
+
+    expect(
+      await fixture.database
+        .prepare(
+          "SELECT updated_at, last_used_at FROM system_machine_credentials WHERE id = 'ad6a0f96-902f-4999-84f6-2b9eb703c2ed'",
+        )
+        .first<Record<string, unknown>>(),
+    ).toEqual({
+      updated_at: startedAt.getTime() + 10_000,
+      last_used_at: startedAt.getTime() + 10_000,
+    })
+  })
+
+  /** 認証が credential を読んだ後、確定の batch の直前に別の更新を差し込む D1。 */
+  function interleavedDatabase(database: D1Database, interleave: () => Promise<unknown>) {
+    let interleaved = false
+    return new Proxy(database, {
+      get(target, property) {
+        if (property === "batch")
+          return async (statements: D1PreparedStatement[]) => {
+            if (!interleaved) {
+              interleaved = true
+              await interleave()
+            }
+            return target.batch(statements)
+          }
+        const value = Reflect.get(target, property)
+        return typeof value === "function" ? value.bind(target) : value
+      },
+    })
+  }
+
+  test("同じ利用時刻を読んだ2つの認証は、先に確定した認証があっても両方成功する", async () => {
+    const { fixture, clock, hash } = await createFixture()
+    const laterUse = clock.at.getTime() + 5_000
+    const database = interleavedDatabase(fixture.context.env.DB, () =>
+      fixture.database
+        .prepare(
+          "UPDATE system_machine_credentials SET updated_at = ?1, last_used_at = ?1 WHERE id = 'ad6a0f96-902f-4999-84f6-2b9eb703c2ed'",
+        )
+        .bind(laterUse)
+        .run(),
+    )
+
+    const result = await new SystemMachineCredentialRepository({
+      env: { DB: database },
+    }).authenticate("ad6a0f96-902f-4999-84f6-2b9eb703c2ed", hash, clock.at, () => [])
+
+    expect(result).toMatchObject({ kind: "authenticated" })
+    expect(
+      await fixture.database
+        .prepare(
+          "SELECT updated_at, last_used_at FROM system_machine_credentials WHERE id = 'ad6a0f96-902f-4999-84f6-2b9eb703c2ed'",
+        )
+        .first<Record<string, unknown>>(),
+    ).toEqual({ updated_at: laterUse, last_used_at: laterUse })
+  })
+
+  test("読み取りの後に失効したcredentialは、確定の時点で拒否する", async () => {
+    const { fixture, clock, hash } = await createFixture()
+    const revokedAt = clock.at.getTime() - 500
+    const database = interleavedDatabase(fixture.context.env.DB, () =>
+      fixture.database
+        .prepare(
+          "UPDATE system_machine_credentials SET status = 'revoked', revoked_at = ?1, updated_at = ?1 WHERE id = 'ad6a0f96-902f-4999-84f6-2b9eb703c2ed'",
+        )
+        .bind(revokedAt)
+        .run(),
+    )
+
+    const result = await new SystemMachineCredentialRepository({
+      env: { DB: database },
+    }).authenticate("ad6a0f96-902f-4999-84f6-2b9eb703c2ed", hash, clock.at, () => [])
+
+    expect(result).toEqual({ kind: "rejected" })
+  })
 })

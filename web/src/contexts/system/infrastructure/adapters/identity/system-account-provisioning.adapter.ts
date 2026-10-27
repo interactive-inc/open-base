@@ -45,27 +45,34 @@ export class SystemAccountProvisioningAdapter {
     )
   }
 
-  prepare(input: {
-    actorAccountId: AccountId | null
-    provider: IdentityProvider
-    /** パスキーではAccount IDを使うので渡さない。 */
-    subject?: string
-    email: string
-    roleId: IamRoleId
-    now: Date
-  }): PreparedSystemAccountProvisioning | Error {
+  prepare(
+    input: {
+      actorAccountId: AccountId | null
+      email: string
+      roleId: IamRoleId
+      now: Date
+    } & (
+      | Readonly<{ provider: "passkey"; subject?: never; passwordHash?: never }>
+      | Readonly<{
+          provider: Exclude<IdentityProvider, "passkey">
+          subject: string
+          passwordHash: string | null
+        }>
+    ),
+  ): PreparedSystemAccountProvisioning | Error {
     const accountId = zAccountId.safeParse(crypto.randomUUID())
     const identityId = zIdentityId.safeParse(crypto.randomUUID())
-    if (!accountId.success || !identityId.success) {
+    const subject = identitySubjectSchema.safeParse(
+      input.provider === "passkey" ? accountId.data : input.subject,
+    )
+    const passwordHash = input.provider === "passkey" ? null : input.passwordHash
+    if (!accountId.success || !identityId.success || !subject.success) {
       return new Error("invalid System provisioning identity")
     }
-    // パスキーのIdentityはBetter AuthのユーザーIDとなるAccount IDをsubjectにし、登録まで未登録にする。
-    const isPasskey = input.provider === "passkey"
-    const subject = identitySubjectSchema.safeParse(isPasskey ? accountId.data : input.subject)
-    if (!subject.success || (isPasskey && input.subject !== undefined)) {
-      return new Error("invalid System provisioning identity")
-    }
-    if (!Number.isSafeInteger(input.now.getTime())) {
+    if (
+      !Number.isSafeInteger(input.now.getTime()) ||
+      (input.provider === "password") !== (passwordHash !== null)
+    ) {
       return new Error("invalid System provisioning input")
     }
     const afterJson = StableSystemAuditJsonValue.create({
@@ -144,7 +151,7 @@ export class SystemAccountProvisioningAdapter {
           input.provider,
           subject.data,
           input.now.getTime(),
-          isPasskey ? null : input.now.getTime(),
+          input.provider === "passkey" ? null : input.now.getTime(),
         ),
       database
         .prepare(
@@ -153,6 +160,17 @@ export class SystemAccountProvisioningAdapter {
            VALUES (?1, ?2, 1, NULL, ?3)`,
         )
         .bind(identityId.data, input.email, input.now.getTime()),
+      ...(passwordHash === null
+        ? []
+        : [
+            database
+              .prepare(
+                `INSERT INTO system_password_credentials
+                   (identity_id, password_hash, changed_at, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?3, ?3)`,
+              )
+              .bind(identityId.data, passwordHash, input.now.getTime()),
+          ]),
       database
         .prepare(
           `INSERT INTO system_role_bindings

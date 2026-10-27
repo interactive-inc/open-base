@@ -1,3 +1,4 @@
+import { readSignInMethod } from "@/api/http/auth/sign-in-method"
 import { createAppBase } from "@/api/app-base"
 import { readSignedInSession } from "@/api/http/auth/read-signed-in-session"
 import type { RouteMethod } from "@/api/http/lazy-route-handlers"
@@ -28,7 +29,7 @@ export function voidApiRoute(method: RouteMethod, path: string, exported: unknow
     const url = new URL(c.req.url)
     if (!url.pathname.startsWith(`${API_PREFIX}/`)) return c.notFound()
     url.pathname = url.pathname.slice(API_PREFIX.length)
-    const session = readSignedInSession(getSession())
+    const session = readSignedInSession(getSession(), readSignInMethod(c.env))
     const env =
       session === null ? c.env : new SystemSignedInSessionChannel({ env: c.env }).attach(session)
     return app.fetch(new Request(url.toString(), c.req.raw), env, executionContextOf(c))

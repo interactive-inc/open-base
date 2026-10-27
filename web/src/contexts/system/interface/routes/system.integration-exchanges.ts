@@ -15,6 +15,7 @@ import {
 } from "@system/interface/errors"
 import { authenticateSystemAccessToken } from "@system/interface/middlewares/authenticate-system-access-token"
 import { systemFactory } from "@system/interface/request-environment/system-factory"
+import { uuidSchema } from "@/lib/validation/uuid.schema"
 import { systemIntegrationExchangeResponse } from "@system/interface/responses/system-integration-exchange-response"
 import { zValidator } from "@hono/zod-validator"
 import { z } from "zod"
@@ -22,7 +23,7 @@ import { z } from "zod"
 // @authorization permission integration:read - Connector単位の外部交換履歴を読む
 export const GET = systemFactory.createHandlers(
   authenticateSystemAccessToken,
-  zValidator("query", z.object({ connector_id: z.string().regex(/^\S{1,255}$/) })),
+  zValidator("query", z.object({ connector_id: uuidSchema })),
   async (context) => {
     const connectorId = context.req.valid("query").connector_id
     if (
@@ -37,7 +38,7 @@ export const GET = systemFactory.createHandlers(
       env: { DB: context.env.DB },
     }).findMany(connectorId)
     if (exchanges instanceof Error) throw new SystemIntegrationUnavailableError(exchanges)
-    return context.json({ exchanges }, 200)
+    return context.json({ exchanges: exchanges.map(systemIntegrationExchangeResponse) }, 200)
   },
 )
 
@@ -47,8 +48,8 @@ export const POST = systemFactory.createHandlers(
   zValidator(
     "json",
     z.object({
-      id: z.string().regex(/^\S{1,255}$/),
-      connector_id: z.string().regex(/^\S{1,255}$/),
+      id: uuidSchema,
+      connector_id: uuidSchema,
       direction: z.enum(["inbound", "outbound"]),
       operation_key: z.string().regex(/^[a-z][a-z0-9_.:-]{0,199}$/),
       idempotency_key: z.string().regex(/^\S{1,255}$/),
@@ -105,14 +106,14 @@ export const POST = systemFactory.createHandlers(
     const repository = new SystemIntegrationExchangeRepository(systemContext)
     const auditStatements = new SystemAuditEventRepository(systemContext).prepareAppend(event)
     const result = await new CreateIntegrationExchange({
-      write: (value, expectedUpdatedAt) =>
-        repository.write(value, expectedUpdatedAt, auditStatements),
+      write: (value, expectedExchange) =>
+        repository.write(value, expectedExchange, auditStatements),
     }).execute(input)
     if (result instanceof Error) throw new SystemIntegrationInvalidError(result)
     if (result.kind === "conflict") throw new SystemIntegrationConflictError()
     if (result.kind === "unavailable") throw new SystemIntegrationUnavailableError(result.cause)
     return context.json(
-      { exchange: result.exchange, replayed: result.replayed },
+      { exchange: systemIntegrationExchangeResponse(result.exchange), replayed: result.replayed },
       result.replayed ? 200 : 201,
     )
   },

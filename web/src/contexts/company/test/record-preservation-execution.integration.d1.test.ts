@@ -1,4 +1,9 @@
-import type { ApplicationWorkflowStep } from "@/contexts/company/domain/definitions/company-procedure-workflow.definition"
+import { createProcedureCandidatesTestContext } from "@/contexts/company/test/procedure-candidates.test-support"
+import { UnresolvableWorkflowStepError } from "@/contexts/company/domain/errors"
+import type {
+  ApplicationWorkflowStep,
+  WorkflowApproverSelector,
+} from "@/contexts/company/domain/definitions/company-procedure-workflow.definition"
 import { SystemD1ProposalAdapter } from "@system/infrastructure/adapters/workflow/system-d1-proposal.adapter"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { testAccountId, testLiteralId } from "@system/test/system-test-id.test-support"
@@ -308,5 +313,174 @@ test.each(["approver", "service"])(
     expect(
       await c.database.batch([...resolved.guards]).catch((cause: unknown) => cause),
     ).toBeInstanceOf(Error)
+  },
+)
+
+test.each([
+  { mode: "any", minimum: undefined, reviewer: true, expected: 1, selector: "employee" },
+  { mode: "any", minimum: undefined, reviewer: true, expected: 1, selector: "responsibility" },
+  { mode: "any", minimum: undefined, reviewer: true, expected: 1, selector: "nonapplicant" },
+  { mode: "all", minimum: undefined, reviewer: true, expected: 1 },
+  { mode: "minimum", minimum: 1, reviewer: true, expected: 1 },
+  { mode: "minimum", minimum: 2, reviewer: true, expected: null },
+  { mode: "any", minimum: undefined, reviewer: false, expected: null },
+  { mode: "all", minimum: undefined, reviewer: false, expected: null },
+  { mode: "minimum", minimum: 1, reviewer: false, expected: null },
+])(
+  "normal record preservation excludes overlapping applicant before quorum: %j",
+  async (scenario) => {
+    const c = await createProcedureCandidatesTestContext()
+    const mode = scenario.mode
+    if (mode !== "any" && mode !== "all" && mode !== "minimum")
+      throw new Error("invalid approval mode")
+    const applicant: WorkflowApproverSelector = { type: "employee", employee_code: "APPLICANT" }
+    const reviewer: WorkflowApproverSelector = { type: "employee", employee_code: "REVIEWER_1" }
+    const selectors: Pick<ApplicationWorkflowStep, "approvers" | "escalation_approvers"> =
+      scenario.selector === "responsibility"
+        ? {
+            approvers: [
+              {
+                type: "responsibility",
+                responsibility_type: "APPROVE",
+                organization_unit_code: null,
+              },
+            ],
+            escalation_approvers: [applicant, reviewer],
+          }
+        : scenario.selector === "nonapplicant"
+          ? { approvers: [reviewer], escalation_approvers: [] }
+          : {
+              approvers: scenario.reviewer ? [applicant, reviewer] : [applicant],
+              escalation_approvers: [applicant, reviewer],
+            }
+    const step: ApplicationWorkflowStep = {
+      key: "review",
+      name: "Review",
+      ...selectors,
+      due_days: 1,
+      approval_mode: mode,
+      ...(scenario.minimum === undefined ? {} : { minimum_approvals: scenario.minimum }),
+      condition_mode: "all",
+      conditions: [],
+      rejection_behavior: "reject",
+      allow_delegation: true,
+    }
+    const policy = createCompanyProcedureDecisionPolicy({
+      approverRoles: [],
+      workflow: { version: 1, steps: [step] },
+    })
+    if (policy instanceof Error) throw policy
+    const definition = ProcedureDefinitionEntity.create({
+      key: "record-preservation",
+      revision: 1,
+      title: "Preserve records",
+      category: "system",
+      description: null,
+      inputSchema: { fields: [] },
+      decisionPolicy: policy,
+      completionOperationKey: "system.record.preserve",
+      createdByAccountId: c.creator.accountId,
+      createdAt: c.at,
+    })
+    if (definition instanceof Error) throw definition
+    const published = await new SystemD1ProcedureRepository(c.context).publish(definition, 0)
+    if (published !== true) throw published
+    const executorAccountId = c.creator.accountId
+    const proposal = await RecordPreservationProposalValue.restore({
+      version: 1,
+      operation: "system.record.preserve",
+      recordId: crypto.randomUUID(),
+      source: {
+        sourceNamespace: "sample-source",
+        ownerContext: "sample-records",
+        recordKind: "record",
+        recordId: "original-1",
+        formatId: "sample-record",
+        formatVersion: 1,
+        sourceRevision: null,
+        sourceRecordedAt: null,
+        capturedAt: c.at.toISOString(),
+        contentDigest: "a".repeat(64),
+      },
+      actorAccountId: executorAccountId,
+      reason: "Preserve original",
+      attachmentId: crypto.randomUUID(),
+      attachmentDigest: "b".repeat(64),
+      sourceAuthorizationRef: {
+        context: "sample-records",
+        kind: "export-grant",
+        id: "grant-1",
+        version: "1",
+      },
+      preservation: {
+        id: crypto.randomUUID(),
+        kind: "hold",
+        retainUntil: null,
+        reason: "Preserve original",
+      },
+      disclosure: {
+        id: crypto.randomUUID(),
+        revision: 1,
+        reason: "Restricted archive",
+        grants: [],
+      },
+    })
+    if (proposal instanceof Error) throw proposal
+
+    const prepared = await new PrepareCompanyRecordProcedureTaskAdapter(c.context).prepare({
+      procedureKey: definition.key,
+      proposal,
+      applicantAccountId: c.creator.accountId,
+      at: c.at,
+    })
+    if (scenario.expected === null) {
+      expect(prepared).toBeInstanceOf(UnresolvableWorkflowStepError)
+      return
+    }
+    if (prepared instanceof Error) throw prepared
+    expect(prepared.resolved.task.requiredApprovals).toBe(scenario.expected)
+    expect(prepared.resolved.task.candidates.map((candidate) => candidate.accountId)).toEqual([
+      c.reviewer.accountId,
+    ])
+    const writer = new SystemD1WorkflowAdapter({
+      ...c.context,
+      startGuards: prepared.resolved.guards,
+    })
+    const started = await new StartSystemProcedure({ writer }).run({
+      seriesId: crypto.randomUUID(),
+      version: 1,
+      procedureKey: definition.key,
+      procedureRevision: 1,
+      body: JSON.parse(proposal.props.canonical.toString()),
+      createdByAccountId: c.creator.accountId,
+      supersedesProposalId: null,
+      createdAt: c.at,
+      firstTask: prepared.resolved.task,
+      subject: {
+        context: "system",
+        kind: "record-preservation",
+        id: JSON.parse(proposal.props.canonical.toString()).recordId,
+        version: "1",
+      },
+    })
+    if (started instanceof Error) throw started
+    const approve = (accountId: typeof c.creator.accountId) =>
+      new ApproveSystemTask(writer).execute({
+        caseId: started.workflowCase.id,
+        taskKey: step.key,
+        round: 1,
+        actorAccountId: accountId,
+        representedAccountId: accountId,
+        delegationId: null,
+        proposalDigest: started.proposal.digest,
+        comment: null,
+        decidedAt: c.at,
+        nextTask: null,
+      })
+    // 申請者の自己承認は拒否されたまま、残った承認者だけで手続が進む。
+    expect(await approve(c.creator.accountId)).toBeInstanceOf(Error)
+    const approved = await approve(c.reviewer.accountId)
+    if (approved instanceof Error) throw approved
+    expect(approved.caseStatus).toBe("approved")
   },
 )

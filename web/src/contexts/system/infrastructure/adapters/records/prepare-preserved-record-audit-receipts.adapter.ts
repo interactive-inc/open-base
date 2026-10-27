@@ -43,6 +43,7 @@ export class PreparePreservedRecordAuditReceiptsAdapter {
           occurredTo: null,
           limit: 100,
           offset: 0,
+          boundary: null,
         },
         disclosure,
         sql`event_id IN (SELECT value FROM json_each(${encoded}))`,

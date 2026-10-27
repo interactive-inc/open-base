@@ -1,9 +1,7 @@
 import { testAccountId } from "@system/test/system-test-id.test-support"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
-import {
-  createSystemSessionApplications,
-  systemTestSignedInSession,
-} from "@system/test/create-system-session-applications.test-support"
+import { createSystemSessionApplications } from "@system/test/create-system-session-applications.test-support"
+import { requireIssuedSystemSession } from "@system/test/require-issued-system-session.test-support"
 import { SystemSessionTestContext } from "@system/test/system-session-test-context.test-support"
 import { seedSystemStepUpGrant } from "@system/test/seed-system-step-up-grant.test-support"
 import { systemFactory } from "@system/interface/request-environment/system-factory"
@@ -15,7 +13,7 @@ import {
   GET as GET_MANY,
   POST,
 } from "@system/interface/routes/system.accounts.$accountId.identities"
-import { completeSystemPasskeyEnrollment } from "@system/interface/operations/complete-system-passkey-enrollment"
+import { PATCH as RESET_PASSWORD } from "@system/interface/routes/system.accounts.$accountId.password-credentials"
 import { describe, expect, setDefaultTimeout, test } from "bun:test"
 import { hc } from "hono/client"
 
@@ -27,7 +25,7 @@ const rootAccountId = zAccountId.parse(testAccountId("system-identity-root"))
 const targetAccountId = zAccountId.parse(testAccountId("f8d6fd4f-d8aa-47c6-9c19-d77346485329"))
 
 describe("System Identity HTTP", () => {
-  test("外部・パスキーIdentityの作成・参照・失効とlast-activeをSystemだけで完結する", async () => {
+  test("外部・password Identityの作成・参照・失効とlast-activeをSystemだけで完結する", async () => {
     const fixture = await SystemSessionTestContext.create()
     await fixture.database
       .prepare(`INSERT INTO system_accounts
@@ -39,7 +37,7 @@ describe("System Identity HTTP", () => {
     await fixture.database
       .prepare(`INSERT INTO system_identity_bindings
            (id, account_id, provider, subject, created_at, activated_at, revoked_at)
-         VALUES ('ac7f571e-ae97-4159-85e1-ba9cf4928de8', ?1, 'passkey', ?1, ?2, ?2, NULL)`)
+         VALUES ('ac7f571e-ae97-4159-85e1-ba9cf4928de8', ?1, 'password', 'root@example.com', ?2, ?2, NULL)`)
       .bind(rootAccountId, now.getTime())
       .run()
     await fixture.database
@@ -63,22 +61,22 @@ describe("System Identity HTTP", () => {
 
     const applications = createSystemSessionApplications({
       context: fixture.context,
+      jwtSecret: "system-session-test-jwt-secret",
       sessionTtlMilliseconds: 604_800_000,
     })
     expect(applications).not.toBeInstanceOf(Error)
     if (applications instanceof Error) return
-    const issuance = await applications.issue.execute({
-      accountId: rootAccountId,
-      tokenVersion: 0,
-      now: new Date(),
-      auditContext: { authorizationJson: null, metadataJson: null },
-    })
-    expect(issuance).not.toBeInstanceOf(Error)
-    if (issuance instanceof Error || issuance.kind === "rejected") return
+    const issuance = requireIssuedSystemSession(
+      await applications.issue.execute({
+        accountId: rootAccountId,
+        tokenVersion: 0,
+        now: new Date(),
+        auditContext: { authorizationJson: null, metadataJson: null },
+      }),
+    )
 
     const app = systemFactory
       .createApp()
-      .use("*", systemTestSignedInSession)
       .use("*", async (context, next) => {
         context.set("now", () => now)
         await next()
@@ -87,6 +85,7 @@ describe("System Identity HTTP", () => {
       .post("/system/accounts/:accountId/identities", ...POST)
       .get("/system/accounts/:accountId/identities/:identityId", ...GET_ONE)
       .delete("/system/accounts/:accountId/identities/:identityId", ...DELETE)
+      .patch("/system/accounts/:accountId/password-credentials", ...RESET_PASSWORD)
     const request = (
       input: Parameters<typeof app.request>[0],
       init?: Parameters<typeof app.request>[1],
@@ -94,6 +93,7 @@ describe("System Identity HTTP", () => {
       app.request(input, init, {
         DB: fixture.context.env.DB,
         JWT_SECRET: "system-session-test-jwt-secret",
+        PEPPER_SECRET: "system-identity-test-pepper",
       })
     const client = hc<typeof app>("http://system.test", {
       fetch: request,
@@ -117,33 +117,40 @@ describe("System Identity HTTP", () => {
     expect("id" in externalBody).toBe(true)
     if (!("id" in externalBody)) return
 
-    const passkey = await client.system.accounts[":accountId"].identities.$post({
+    const password = await client.system.accounts[":accountId"].identities.$post({
       param: { accountId: targetAccountId },
-      json: { provider: "passkey", email: "target@example.com" },
+      json: {
+        provider: "password",
+        email: "target@example.com",
+        password: "correct horse battery staple",
+      },
     })
-    expect(passkey.status).toBe(201)
-    const passkeyBody = await passkey.json()
-    expect("id" in passkeyBody).toBe(true)
-    if (!("id" in passkeyBody) || passkeyBody.passkey_enrollment === null) return
-    // パスキーのIdentityはAccount IDをsubjectにし、招待でパスキーを登録するまで未登録にする。
-    expect(passkeyBody).toMatchObject({
-      provider: "passkey",
-      subject: targetAccountId,
-      activated_at: null,
-    })
+    expect(password.status).toBe(201)
+    const passwordBody = await password.json()
+    expect("id" in passwordBody).toBe(true)
+    if (!("id" in passwordBody)) return
     expect(
-      await completeSystemPasskeyEnrollment(fixture.context, {
-        token: passkeyBody.passkey_enrollment.token,
-        now,
-      }),
-    ).toMatchObject({ accountId: targetAccountId, email: "target@example.com" })
-    // 同じ招待は二度使えない。
+      await fixture.database
+        .prepare("SELECT count(*) AS total FROM system_password_credentials")
+        .first<Record<string, unknown>>(),
+    ).toEqual({ total: 1 })
+    const passwordHashBefore = await fixture.database
+      .prepare("SELECT password_hash FROM system_password_credentials WHERE identity_id = ?1")
+      .bind(passwordBody.id)
+      .first<Record<string, unknown>>()
+    const passwordReset = await client.system.accounts[":accountId"]["password-credentials"].$patch(
+      {
+        param: { accountId: targetAccountId },
+        json: { password: "another correct horse battery staple" },
+      },
+    )
+    expect(passwordReset.status).toBe(204)
     expect(
-      await completeSystemPasskeyEnrollment(fixture.context, {
-        token: passkeyBody.passkey_enrollment.token,
-        now,
-      }),
-    ).toBeNull()
+      await fixture.database
+        .prepare("SELECT password_hash FROM system_password_credentials WHERE identity_id = ?1")
+        .bind(passwordBody.id)
+        .first<Record<string, unknown>>(),
+    ).not.toEqual(passwordHashBefore)
 
     const listed = await client.system.accounts[":accountId"].identities.$get({
       param: { accountId: targetAccountId },
@@ -155,10 +162,10 @@ describe("System Identity HTTP", () => {
     expect(listedBody.total).toBe(2)
 
     const detailed = await client.system.accounts[":accountId"].identities[":identityId"].$get({
-      param: { accountId: targetAccountId, identityId: passkeyBody.id },
+      param: { accountId: targetAccountId, identityId: passwordBody.id },
     })
     expect(detailed.status).toBe(200)
-    expect(await detailed.json()).toMatchObject({ provider: "passkey", state: "active" })
+    expect(await detailed.json()).toMatchObject({ provider: "password", state: "active" })
 
     const revoked = await client.system.accounts[":accountId"].identities[":identityId"].$delete({
       param: { accountId: targetAccountId, identityId: externalBody.id },
@@ -167,7 +174,7 @@ describe("System Identity HTTP", () => {
 
     const lastActive = await client.system.accounts[":accountId"].identities[":identityId"].$delete(
       {
-        param: { accountId: targetAccountId, identityId: passkeyBody.id },
+        param: { accountId: targetAccountId, identityId: passwordBody.id },
       },
     )
     expect(Number(lastActive.status)).toBe(409)
@@ -176,7 +183,7 @@ describe("System Identity HTTP", () => {
         .prepare("SELECT token_version FROM system_accounts WHERE id = ?1")
         .bind(targetAccountId)
         .first<Record<string, unknown>>(),
-    ).toEqual({ token_version: 3 })
+    ).toEqual({ token_version: 4 })
     expect(
       await fixture.database
         .prepare(`SELECT count(*) AS total
@@ -186,13 +193,10 @@ describe("System Identity HTTP", () => {
     ).toEqual({ total: 3 })
     expect(
       await fixture.database
-        .prepare(`SELECT action FROM system_audit_events
-           WHERE action LIKE 'auth.passkey_enrollment.%' ORDER BY action`)
-        .all<Record<string, unknown>>()
-        .then((rows) => rows.results),
-    ).toEqual([
-      { action: "auth.passkey_enrollment.completed" },
-      { action: "auth.passkey_enrollment.issued" },
-    ])
+        .prepare(`SELECT count(*) AS total
+           FROM system_audit_events
+           WHERE action = 'system.password_credential.reset'`)
+        .first<Record<string, unknown>>(),
+    ).toEqual({ total: 1 })
   })
 })

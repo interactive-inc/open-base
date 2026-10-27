@@ -14,6 +14,10 @@ import { COMPANY_DEFAULT_ORGANIZATION_ID } from "@/contexts/company/domain/defin
 // ローカルD1のtemplate作成とDBごとの往復を含むため、既定の5秒を超えることがある。
 setDefaultTimeout(30_000)
 
+const correctionEvidence = [
+  { context: "company", kind: "confirmed-test-history", id: "assignment-correction", version: "1" },
+]
+
 describe("公開Assignmentと業務の所属期間", () => {
   test("上長本人の退職APIは部下の関係を終了し、再送・訂正・再入社で旧上長を復活させない", async () => {
     const f = await createCompanyAssignmentResourceTestContext()
@@ -1749,6 +1753,282 @@ describe("公開Assignmentと業務の所属期間", () => {
     })
   })
 
+  test("発効日を前倒しする訂正の後は、訂正元の発効日以降も訂正後の役職を返す", async () => {
+    const f = await createCompanyAssignmentResourceTestContext()
+    const former = {
+      ...f.assignment,
+      revision: 2,
+      effectiveFrom: "2030-05-01",
+      attributes: { ...f.assignment.attributes, positionTitle: "Former title" },
+    }
+    const corrected = {
+      ...f.assignment,
+      revision: 3,
+      effectiveFrom: "2030-04-01",
+      attributes: { ...f.assignment.attributes, positionTitle: "Corrected title" },
+    }
+    const correction = {
+      evidenceReferences: correctionEvidence,
+      corrections: [
+        { type: "assignment" as const, id: f.assignment.id, revision: 3, correctsRevision: 2 },
+      ],
+    }
+    expect(Number((await f.write([f.assignment], f.revision, "start")).status)).toBe(201)
+    expect(Number((await f.write([former], f.revision + 1, "former")).status)).toBe(201)
+    expect(
+      Number((await f.write([corrected], f.revision + 2, "corrected", correction)).status),
+    ).toBe(201)
+    for (const [date, title] of [
+      ["2030-02-01", "Coordinator"],
+      ["2030-04-15", "Corrected title"],
+      ["2030-05-01", "Corrected title"],
+      ["2030-06-01", "Corrected title"],
+    ] satisfies Array<[string, string]>)
+      expect(await f.positionTitles(date)).toEqual({
+        published: [title],
+        directory: [title],
+        snapshot: [title],
+      })
+    expect(
+      (
+        await f.database
+          .prepare(`SELECT period.starts_on, period.ends_on, period.position_title
+          FROM company_organization_assignment_period_versions period
+          JOIN company_assignment_period_bindings binding ON binding.period_id = period.period_id
+            AND binding.period_revision = period.revision
+          WHERE binding.resource_id = ?1 AND period.is_void = 0 ORDER BY period.starts_on`)
+          .bind(f.assignment.id)
+          .all()
+      ).results,
+    ).toEqual([
+      { starts_on: "2030-01-01", ends_on: "2030-04-01", position_title: "Coordinator" },
+      { starts_on: "2030-04-01", ends_on: null, position_title: "Corrected title" },
+    ])
+
+    // 再送と、古い会社版での別の変更は、訂正後の期間を変えない。
+    const afterCorrection = await f.persisted()
+    expect(
+      Number((await f.write([corrected], f.revision + 2, "corrected", correction)).status),
+    ).toBe(200)
+    expect(
+      Number(
+        (
+          await f.write(
+            [
+              {
+                ...f.assignment,
+                revision: 4,
+                effectiveFrom: "2030-05-01",
+                attributes: { ...f.assignment.attributes, positionTitle: "Stale title" },
+              },
+            ],
+            f.revision + 2,
+            "stale",
+          )
+        ).status,
+      ),
+    ).toBe(409)
+    expect(await f.persisted()).toEqual(afterCorrection)
+
+    // 訂正の後の通常の更新と将来の予約でも、訂正された版は期間へ戻らない。
+    const renamed = {
+      ...f.assignment,
+      revision: 4,
+      attributes: { ...f.assignment.attributes, positionTitle: "Renamed start" },
+    }
+    const reserved = {
+      ...f.assignment,
+      revision: 5,
+      effectiveFrom: "2030-09-01",
+      attributes: { ...f.assignment.attributes, positionTitle: "Reserved title" },
+    }
+    expect(Number((await f.write([renamed], f.revision + 3, "renamed")).status)).toBe(201)
+    expect(Number((await f.write([reserved], f.revision + 4, "reserved")).status)).toBe(201)
+    for (const [date, title] of [
+      ["2030-02-01", "Renamed start"],
+      ["2030-04-15", "Corrected title"],
+      ["2030-06-01", "Corrected title"],
+      ["2030-08-31", "Corrected title"],
+      ["2030-09-01", "Reserved title"],
+    ] satisfies Array<[string, string]>)
+      expect(await f.positionTitles(date)).toEqual({
+        published: [title],
+        directory: [title],
+        snapshot: [title],
+      })
+
+    // 訂正された版と同じ発効日の新しい版は、訂正ではない通常の版として期間を作る。
+    const resumed = {
+      ...f.assignment,
+      revision: 6,
+      effectiveFrom: "2030-05-01",
+      attributes: { ...f.assignment.attributes, positionTitle: "Resumed title" },
+    }
+    expect(Number((await f.write([resumed], f.revision + 5, "resumed")).status)).toBe(201)
+    for (const [date, title] of [
+      ["2030-04-15", "Corrected title"],
+      ["2030-05-01", "Resumed title"],
+      ["2030-08-31", "Resumed title"],
+      ["2030-09-01", "Reserved title"],
+    ] satisfies Array<[string, string]>)
+      expect(await f.positionTitles(date)).toEqual({
+        published: [title],
+        directory: [title],
+        snapshot: [title],
+      })
+  })
+
+  test("発効日を後ろ倒しする訂正と訂正による取消でも、訂正された版の期間を残さない", async () => {
+    const f = await createCompanyAssignmentResourceTestContext()
+    const former = {
+      ...f.assignment,
+      revision: 2,
+      effectiveFrom: "2030-04-01",
+      attributes: { ...f.assignment.attributes, positionTitle: "Former title" },
+    }
+    const postponed = {
+      ...f.assignment,
+      revision: 3,
+      effectiveFrom: "2030-05-01",
+      attributes: { ...f.assignment.attributes, positionTitle: "Postponed title" },
+    }
+    expect(Number((await f.write([f.assignment], f.revision, "start")).status)).toBe(201)
+    expect(Number((await f.write([former], f.revision + 1, "former")).status)).toBe(201)
+    expect(
+      Number(
+        (
+          await f.write([postponed], f.revision + 2, "postponed", {
+            evidenceReferences: correctionEvidence,
+            corrections: [
+              { type: "assignment", id: f.assignment.id, revision: 3, correctsRevision: 2 },
+            ],
+          })
+        ).status,
+      ),
+    ).toBe(201)
+    for (const [date, title] of [
+      ["2030-02-01", "Coordinator"],
+      ["2030-04-15", "Coordinator"],
+      ["2030-05-01", "Postponed title"],
+      ["2030-06-01", "Postponed title"],
+    ] satisfies Array<[string, string]>)
+      expect(await f.positionTitles(date)).toEqual({
+        published: [title],
+        directory: [title],
+        snapshot: [title],
+      })
+
+    // 訂正のための取消は、取り消した版の発効日に空白を作らず、その前の版へ戻す。
+    expect(
+      Number(
+        (
+          await f.write(
+            [{ ...postponed, revision: 4, state: "void" }],
+            f.revision + 3,
+            "withdrawn",
+            {
+              evidenceReferences: correctionEvidence,
+              corrections: [
+                { type: "assignment", id: f.assignment.id, revision: 4, correctsRevision: 3 },
+              ],
+            },
+          )
+        ).status,
+      ),
+    ).toBe(201)
+    for (const date of ["2030-02-01", "2030-04-15", "2030-05-01", "2030-06-01"])
+      expect(await f.positionTitles(date)).toEqual({
+        published: ["Coordinator"],
+        directory: ["Coordinator"],
+        snapshot: ["Coordinator"],
+      })
+  })
+
+  test("訂正の後の人事発令でも、訂正された版の役職を期間へ戻さない", async () => {
+    const f = await createCompanyAssignmentResourceTestContext()
+    const source = await f.initializeAssignment()
+    const former = {
+      ...source,
+      revision: 2,
+      effectiveFrom: "2030-05-01",
+      attributes: { ...source.attributes, positionTitle: "Former title" },
+    }
+    const corrected = {
+      ...source,
+      revision: 3,
+      effectiveFrom: "2030-04-01",
+      attributes: { ...source.attributes, positionTitle: "Corrected title" },
+    }
+    expect(Number((await f.write([former], await f.companyRevision(), "former")).status)).toBe(201)
+    expect(
+      Number(
+        (
+          await f.write([corrected], await f.companyRevision(), "corrected", {
+            evidenceReferences: correctionEvidence,
+            corrections: [{ type: "assignment", id: source.id, revision: 3, correctsRevision: 2 }],
+          })
+        ).status,
+      ),
+    ).toBe(201)
+    expect(
+      await f.personnel(
+        {
+          kind: "position_changed",
+          employeeCode: "EMPLOYEE-001",
+          eventOn: restoreCalendarDate("2030-05-15"),
+          departmentCode: "TEAM",
+          assignmentType: "primary",
+          positionTitle: "Lead",
+          changeType: "promotion",
+        },
+        "personnel:after-correction",
+      ),
+    ).toMatchObject({ replayed: false })
+    for (const [date, title] of [
+      ["2030-02-01", "Coordinator"],
+      ["2030-04-15", "Corrected title"],
+      ["2030-05-01", "Corrected title"],
+      ["2030-05-15", "Lead"],
+      ["2030-06-01", "Lead"],
+    ] satisfies Array<[string, string]>)
+      expect(await f.positionTitles(date)).toEqual({
+        published: [title],
+        directory: [title],
+        snapshot: [title],
+      })
+  })
+
+  test("訂正を伴わない遡及の追加は、後の発効日の版をそのまま残す", async () => {
+    const f = await createCompanyAssignmentResourceTestContext()
+    const later = {
+      ...f.assignment,
+      revision: 2,
+      effectiveFrom: "2030-05-01",
+      attributes: { ...f.assignment.attributes, positionTitle: "Later title" },
+    }
+    const inserted = {
+      ...f.assignment,
+      revision: 3,
+      effectiveFrom: "2030-04-01",
+      attributes: { ...f.assignment.attributes, positionTitle: "Inserted title" },
+    }
+    for (const [index, resource] of [f.assignment, later, inserted].entries())
+      expect(Number((await f.write([resource], f.revision + index, `plain-${index}`)).status)).toBe(
+        201,
+      )
+    for (const [date, title] of [
+      ["2030-02-01", "Coordinator"],
+      ["2030-04-15", "Inserted title"],
+      ["2030-05-01", "Later title"],
+      ["2030-06-01", "Later title"],
+    ] satisfies Array<[string, string]>)
+      expect(await f.positionTitles(date)).toEqual({
+        published: [title],
+        directory: [title],
+        snapshot: [title],
+      })
+  })
+
   test("組織の作成と配属を一つの変更で保存し、主務の重複は全体を巻き戻す", async () => {
     const f = await createCompanyAssignmentResourceTestContext()
     const unit = {
@@ -1837,7 +2117,7 @@ describe("公開Assignmentと業務の所属期間", () => {
     }
     const historyRead = spyOn(
       CompanyAssignmentResourceHistoryAdapter.prototype,
-      "read",
+      "readRevisions",
     ).mockImplementationOnce(async (resource) => {
       historyRead.mockRestore()
       expect(
@@ -1856,7 +2136,7 @@ describe("公開Assignmentと業務の所属期間", () => {
           ).status,
         ),
       ).toBe(201)
-      return new CompanyAssignmentResourceHistoryAdapter(f.database).read(resource)
+      return new CompanyAssignmentResourceHistoryAdapter(f.database).readRevisions(resource)
     })
     try {
       expect(Number((await f.write([pending], f.revision + 1, "pending")).status)).toBe(409)
@@ -1880,7 +2160,7 @@ describe("公開Assignmentと業務の所属期間", () => {
     const before = await f.persisted()
     const unavailable = spyOn(
       CompanyAssignmentResourceHistoryAdapter.prototype,
-      "read",
+      "readRevisions",
     ).mockResolvedValue(new Error("history unavailable"))
     try {
       expect(Number((await f.write()).status)).toBe(503)

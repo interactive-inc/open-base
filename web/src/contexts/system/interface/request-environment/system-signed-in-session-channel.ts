@@ -6,9 +6,11 @@ export type SystemSignedInSession = Readonly<{
   accountId: string
   sessionId: string
   /** セッションを作った認証の時刻。再認証の新しさを判定する。 */
-  authenticatedAt: Date
+  authenticatedAt: Date | null
+  /** セッションの発行時刻。外部の認証時刻を証明するものではない。 */
+  createdAt: Date
   expiresAt: Date
-  method: "passkey" | "device"
+  method: "password" | "passkey" | "oidc" | "device"
   /** セッション作成時のAccountのtoken版。現在の値と違えば失効扱いにする。 */
   accountTokenVersion: number
 }>

@@ -1,4 +1,6 @@
+import type { SignInMethod } from "./sign-in-method"
 import type { SystemSignedInSession } from "@system/interface/request-environment/system-signed-in-session-channel"
+import { readSessionAuthenticatedAt } from "@/api/http/auth/auth-session-method"
 
 type BetterAuthState = Readonly<{
   session: Readonly<{
@@ -8,6 +10,7 @@ type BetterAuthState = Readonly<{
     expiresAt: Date
     accountTokenVersion?: unknown
     authenticationMethod?: unknown
+    authenticatedAt?: unknown
   }>
 }>
 
@@ -15,19 +18,30 @@ type BetterAuthState = Readonly<{
  * Better Authが検証したセッションを、Systemへ渡す形へ変える。
  * 作成時に記録した認証方式とtoken版が無いセッションは、認証に使わない。
  */
-export function readSignedInSession(state: BetterAuthState | null): SystemSignedInSession | null {
+export function readSignedInSession(
+  state: BetterAuthState | null,
+  selectedMethod?: SignInMethod | null,
+): SystemSignedInSession | null {
   if (state === null) return null
   const session = state.session
   const method = session.authenticationMethod
+  if (
+    selectedMethod === null ||
+    (selectedMethod !== undefined && method !== "device" && method !== selectedMethod)
+  )
+    return null
   const tokenVersion = session.accountTokenVersion
-  if (method !== "passkey" && method !== "device") return null
+  if (method !== "password" && method !== "passkey" && method !== "oidc" && method !== "device")
+    return null
   if (typeof tokenVersion !== "number" || !Number.isSafeInteger(tokenVersion) || tokenVersion < 0) {
     return null
   }
-  const authenticatedAt = new Date(session.createdAt)
+  const authenticatedAt = readSessionAuthenticatedAt(session)
   const expiresAt = new Date(session.expiresAt)
+  const createdAt = new Date(session.createdAt)
   if (
-    !Number.isSafeInteger(authenticatedAt.getTime()) ||
+    (authenticatedAt !== null && !Number.isSafeInteger(authenticatedAt.getTime())) ||
+    !Number.isSafeInteger(createdAt.getTime()) ||
     !Number.isSafeInteger(expiresAt.getTime())
   ) {
     return null
@@ -36,6 +50,7 @@ export function readSignedInSession(state: BetterAuthState | null): SystemSigned
     accountId: session.userId,
     sessionId: session.id,
     authenticatedAt,
+    createdAt,
     expiresAt,
     method,
     accountTokenVersion: tokenVersion,

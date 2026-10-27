@@ -9,6 +9,7 @@ type Context = Readonly<{
   requiredPermissionKey: string
   managerPermissionKey: string
   now: Date
+  expectedBindings: ReadonlyArray<Readonly<{ id: string; roleId: string }>>
   auditStatements: ReadonlyArray<D1PreparedStatement>
 }>
 
@@ -23,10 +24,21 @@ export class ReplaceSystemScopedRoleBindingAdapter {
   > {
     const { c } = this
     const now = c.now.getTime()
+    const expectedBindings = JSON.stringify(c.expectedBindings)
     const statements = [
       c.database
         .prepare(
-          `SELECT CASE WHEN EXISTS (
+          `SELECT CASE WHEN (EXISTS (
+             SELECT 1 FROM system_accounts admin_actor
+             JOIN system_role_bindings admin_binding ON admin_binding.account_id = admin_actor.id
+             JOIN system_iam_role_permissions admin_permission
+               ON admin_permission.role_id = admin_binding.role_id
+             WHERE admin_actor.id = ?1 AND admin_actor.status = 'active'
+               AND admin_actor.closed_at IS NULL AND admin_binding.revoked_at IS NULL
+               AND admin_binding.resource_type IS NULL
+               AND admin_permission.permission_key = 'system:admin'
+           )
+           OR EXISTS (
            SELECT 1 FROM system_accounts actor
            JOIN system_role_bindings actor_binding ON actor_binding.account_id = actor.id
            JOIN system_iam_role_permissions actor_permission ON actor_permission.role_id = actor_binding.role_id
@@ -35,13 +47,23 @@ export class ReplaceSystemScopedRoleBindingAdapter {
              AND (actor_binding.resource_type IS NULL OR
                (actor_binding.resource_type = ?3 AND actor_binding.resource_id = ?4))
              AND actor_permission.permission_key = ?5
-         ) AND EXISTS (
+         )) AND EXISTS (
            SELECT 1 FROM system_accounts target
            WHERE target.id = ?2 AND target.status = 'active' AND target.closed_at IS NULL
          ) AND EXISTS (
            SELECT 1 FROM system_iam_roles role
            WHERE role.id = ?6 AND role.resource_type = ?3
-         ) AND NOT EXISTS (
+         ) AND (EXISTS (
+             SELECT 1 FROM system_accounts admin_actor
+             JOIN system_role_bindings admin_binding ON admin_binding.account_id = admin_actor.id
+             JOIN system_iam_role_permissions admin_permission
+               ON admin_permission.role_id = admin_binding.role_id
+             WHERE admin_actor.id = ?1 AND admin_actor.status = 'active'
+               AND admin_actor.closed_at IS NULL AND admin_binding.revoked_at IS NULL
+               AND admin_binding.resource_type IS NULL
+               AND admin_permission.permission_key = 'system:admin'
+           )
+           OR NOT EXISTS (
            SELECT 1 FROM system_iam_role_permissions required
            WHERE (required.role_id = ?6 OR required.role_id IN (
              SELECT old.role_id FROM system_role_bindings old
@@ -55,7 +77,7 @@ export class ReplaceSystemScopedRoleBindingAdapter {
                  (actor_role.resource_type = ?3 AND actor_role.resource_id = ?4))
                AND possessed.permission_key = required.permission_key
            )
-         ) THEN 1 ELSE json_extract('', '$') END AS ok`,
+         )) THEN 1 ELSE json_extract('', '$') END AS ok`,
         )
         .bind(
           c.actorAccountId,
@@ -67,11 +89,43 @@ export class ReplaceSystemScopedRoleBindingAdapter {
         ),
       c.database
         .prepare(
+          `WITH expected AS (
+             SELECT json_extract(value, '$.id') AS id,
+                    json_extract(value, '$.roleId') AS role_id
+             FROM json_each(?4)
+           ), current AS (
+             SELECT id, role_id FROM system_role_bindings
+             WHERE account_id = ?1 AND resource_type = ?2 AND resource_id = ?3
+               AND revoked_at IS NULL
+           )
+           SELECT CASE WHEN NOT EXISTS (
+             SELECT 1 FROM current
+             WHERE NOT EXISTS (
+               SELECT 1 FROM expected
+               WHERE expected.id = current.id AND expected.role_id = current.role_id
+             )
+           ) AND NOT EXISTS (
+             SELECT 1 FROM expected
+             WHERE NOT EXISTS (
+               SELECT 1 FROM current
+               WHERE current.id = expected.id AND current.role_id = expected.role_id
+             )
+           ) THEN 1 ELSE json_extract('{}', 'system_scoped_role_binding_conflict') END AS ok`,
+        )
+        .bind(c.targetAccountId, c.resourceType, c.resourceId, expectedBindings),
+      c.database
+        .prepare(
           `UPDATE system_role_bindings SET revoked_at = ?4
          WHERE account_id = ?1 AND resource_type = ?2 AND resource_id = ?3
-           AND revoked_at IS NULL AND created_at <= ?4`,
+           AND revoked_at IS NULL AND created_at <= ?4
+           AND id IN (SELECT json_extract(value, '$.id') FROM json_each(?5))`,
         )
-        .bind(c.targetAccountId, c.resourceType, c.resourceId, now),
+        .bind(c.targetAccountId, c.resourceType, c.resourceId, now, expectedBindings),
+      c.database
+        .prepare(
+          "SELECT CASE WHEN changes() = ?1 THEN 1 ELSE json_extract('{}', 'system_scoped_role_binding_conflict') END AS ok",
+        )
+        .bind(c.expectedBindings.length),
       c.database
         .prepare(
           `SELECT CASE WHEN NOT EXISTS (
@@ -124,6 +178,8 @@ export class ReplaceSystemScopedRoleBindingAdapter {
         ? "replaced"
         : new Error("System scoped role replacement batch did not succeed")
     } catch (caught) {
+      if (caught instanceof Error && caught.message.includes("system_scoped_role_binding_conflict"))
+        return "conflict"
       if (caught instanceof Error && caught.message.includes("integer overflow"))
         return "last_manager"
       if (caught instanceof Error && caught.message.toLowerCase().includes("unique"))

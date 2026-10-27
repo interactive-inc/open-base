@@ -4,10 +4,7 @@ import { createSystemIdentityTestKey } from "@system/test/create-system-identity
 import { describe, expect, setDefaultTimeout, test } from "bun:test"
 import { drizzle } from "drizzle-orm/d1"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
-import {
-  createSystemSessionApplications,
-  systemTestSignedInSession,
-} from "@system/test/create-system-session-applications.test-support"
+import { createSystemSessionApplications } from "@system/test/create-system-session-applications.test-support"
 import { systemFactory } from "@system/interface/request-environment/system-factory"
 import { GET } from "@system/interface/routes/system.attachments.$attachmentId"
 import { POST } from "@system/interface/routes/system.attachments"
@@ -33,6 +30,8 @@ type Fixture = Readonly<{
   request: (path: string, init?: RequestInit) => Promise<Response>
   bucket: SystemAttachmentTestBucket
   tokenOf: (accountId: string) => Promise<string>
+  sessionOf: (accountId: string) => Promise<Readonly<{ accessToken: string; rawToken: string }>>
+  logout: (rawToken: string) => Promise<void>
   auditActions: (targetId: string) => Promise<ReadonlyArray<string>>
 }>
 
@@ -61,7 +60,7 @@ async function createFixture(
       await db
         .prepare(`INSERT INTO system_connectors
         (id, key, name, direction, transport, status, revision, created_at, updated_at)
-        VALUES ('test-connector', 'test-connector', 'Test connector', 'bidirectional', 'api', 'active', 1, ?1, ?1)`)
+        VALUES ('6f1c2a0e-5b7d-4c3a-9e21-8a4d0b6c7e15', 'test-connector', 'Test connector', 'bidirectional', 'api', 'active', 1, ?1, ?1)`)
         .bind(clock.current.getTime())
         .run()
     }
@@ -71,7 +70,7 @@ async function createFixture(
       VALUES ('f198534a-16c4-4f9b-8359-9a8b4b474f09', '4f810255-55d5-43c8-b43f-2df5e7bf5a3c', ?1, 'Test machine', ?2, 1, ?3, ?3)`)
       .bind(
         machineKind,
-        machineKind === "connector" ? "test-connector" : null,
+        machineKind === "connector" ? "6f1c2a0e-5b7d-4c3a-9e21-8a4d0b6c7e15" : null,
         clock.current.getTime(),
       )
       .run()
@@ -102,7 +101,6 @@ async function createFixture(
 
   const app = systemFactory
     .createApp()
-    .use("*", systemTestSignedInSession)
     .use("*", async (context, next) => {
       context.set("now", () => clock.current)
       context.set(
@@ -116,11 +114,27 @@ async function createFixture(
 
   const applications = createSystemSessionApplications({
     context: { env: { DB: db } },
-
+    jwtSecret,
     sessionTtlMilliseconds: 604_800_000,
   })
 
   if (applications instanceof Error) throw applications
+
+  const sessionOf = async (accountId: string) => {
+    // access token の検証は実時計で行われるため、発行も実時刻にそろえる
+    const issuance = await applications.issue.execute({
+      accountId: zAccountId.parse(accountId),
+      tokenVersion: 0,
+      now: new Date(),
+      auditContext: { authorizationJson: null, metadataJson: null },
+    })
+
+    if (issuance instanceof Error || issuance.kind === "rejected") {
+      throw new Error("テスト用トークンを発行できません")
+    }
+
+    return { accessToken: issuance.accessToken, rawToken: issuance.rawToken }
+  }
 
   return {
     db,
@@ -181,19 +195,18 @@ async function createFixture(
         if (token instanceof Error) throw token
         return token
       }
-      // access token の検証は実時計で行われるため、発行も実時刻にそろえる
-      const issuance = await applications.issue.execute({
-        accountId: zAccountId.parse(accountId),
-        tokenVersion: 0,
+      return (await sessionOf(accountId)).accessToken
+    },
+    sessionOf,
+    logout: async (rawToken) => {
+      // Session は実時刻で発行しているため、失効も実時刻で記録する
+      const revocation = await applications.revoke.execute({
+        rawToken,
         now: new Date(),
         auditContext: { authorizationJson: null, metadataJson: null },
       })
 
-      if (issuance instanceof Error || issuance.kind === "rejected") {
-        throw new Error("テスト用トークンを発行できません")
-      }
-
-      return issuance.accessToken
+      if (revocation instanceof Error) throw revocation
     },
   }
 }
@@ -367,7 +380,7 @@ describe("GET /attachments/:attachmentId", () => {
           await execSql(
             fixture.db,
             `UPDATE system_connectors SET status = 'disabled', revision = revision + 1
-          WHERE id = 'test-connector'`,
+          WHERE id = '6f1c2a0e-5b7d-4c3a-9e21-8a4d0b6c7e15'`,
           )
         }
       })
@@ -530,6 +543,78 @@ describe("GET /attachments/:attachmentId", () => {
         )
         .first<number>("token_version"),
     ).toBe(0)
+  })
+
+  test("本体取得中に同じSessionがログアウトしたら開示しない", async () => {
+    const fixture = await createFixture()
+    const session = await fixture.sessionOf("4f810255-55d5-43c8-b43f-2df5e7bf5a3c")
+    const headers = { authorization: `Bearer ${session.accessToken}` }
+    const created = await fixture.request("/attachments", {
+      method: "POST",
+      headers,
+      body: receiptForm(),
+    })
+    expect(created.status).toBe(201)
+    const body = await createdBody(created)
+    fixture.afterObjectRead(async () => {
+      await fixture.logout(session.rawToken)
+    })
+
+    const response = await fixture.request(`/attachments/${body.id}`, { headers })
+
+    expect(response.status).toBe(401)
+    expect(await response.text()).not.toContain("領収書")
+    expect(await fixture.auditActions(body.id)).toEqual([])
+    expect(
+      await fixture.db
+        .prepare(
+          "SELECT count(*) AS active FROM system_sessions WHERE account_id = '4f810255-55d5-43c8-b43f-2df5e7bf5a3c' AND revoked_at IS NULL",
+        )
+        .first<number>("active"),
+    ).toBe(0)
+  })
+
+  test("別のSessionがログアウトしても取得中の添付は開示する", async () => {
+    const fixture = await createFixture()
+    const session = await fixture.sessionOf("4f810255-55d5-43c8-b43f-2df5e7bf5a3c")
+    const other = await fixture.sessionOf("4f810255-55d5-43c8-b43f-2df5e7bf5a3c")
+    const headers = { authorization: `Bearer ${session.accessToken}` }
+    const created = await fixture.request("/attachments", {
+      method: "POST",
+      headers,
+      body: receiptForm(),
+    })
+    const body = await createdBody(created)
+    fixture.afterObjectRead(async () => {
+      await fixture.logout(other.rawToken)
+    })
+
+    const response = await fixture.request(`/attachments/${body.id}`, { headers })
+
+    expect(response.status).toBe(200)
+    expect(await response.text()).toContain("領収書")
+    expect(await fixture.auditActions(body.id)).toEqual(["attachment.read"])
+  })
+
+  test("ログアウトした後に始めた取得は入口で拒否する", async () => {
+    const fixture = await createFixture()
+    const session = await fixture.sessionOf("4f810255-55d5-43c8-b43f-2df5e7bf5a3c")
+    const headers = { authorization: `Bearer ${session.accessToken}` }
+    const created = await fixture.request("/attachments", {
+      method: "POST",
+      headers,
+      body: receiptForm(),
+    })
+    const body = await createdBody(created)
+    await fixture.logout(session.rawToken)
+    // 入口の検査は要求時刻より後の失効だけを数えるため、時計をログアウト後へ進める
+    fixture.advanceClock(Date.now() - now.getTime() + 1000)
+
+    const response = await fixture.request(`/attachments/${body.id}`, { headers })
+
+    expect(response.status).toBe(401)
+    expect(await response.text()).not.toContain("領収書")
+    expect(await fixture.auditActions(body.id)).toEqual([])
   })
 
   test("保存された容量が本体と異なる場合は開示しない", async () => {

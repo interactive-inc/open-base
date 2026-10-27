@@ -5,10 +5,6 @@ import { createSystemWorkTestFixture } from "@system/test/create-system-work-tes
 import { systemFactory } from "@system/interface/request-environment/system-factory"
 import { SystemHTTPException } from "@system/interface/errors"
 import { AccessTokenService } from "@system/lib/auth/access-token-service"
-import {
-  createSystemSessionApplications,
-  systemTestSignedInSession,
-} from "@system/test/create-system-session-applications.test-support"
 import { SYSTEM_ACCESS_TOKEN_PROFILE } from "@system/lib/auth/system-access-token-profile"
 import { POST as CREATE, GET as LIST } from "@system/interface/routes/system.work-items"
 import { GET as DETAIL } from "@system/interface/routes/system.work-items.$id"
@@ -41,7 +37,6 @@ async function fixture() {
   const secret = "system-work-api-test-secret"
   const app = systemFactory
     .createApp()
-    .use("*", systemTestSignedInSession)
     .use("*", async (c, next) => {
       c.set("now", () => f.clock.now)
       c.set("database", database)
@@ -74,19 +69,17 @@ async function fixture() {
     "28689052-c77f-42e5-8f85-1b461d9f5514",
     "282b84eb-787d-4655-a88b-c072960fc970",
   ]) {
-    // 機械主体は機械credentialのaccess token、人はサインイン済みセッションで呼ぶ。
-    const token =
-      account === "caf47224-b967-45fd-85b2-8d67e7bdd8c9"
-        ? await new AccessTokenService({ profile: SYSTEM_ACCESS_TOKEN_PROFILE }).create(
-            {
-              accountId: account,
-              tokenVersion: 0,
-              machineCredentialId: "087f472e-41a4-42b5-a66f-c625597754b0",
-            },
-            secret,
-            new Date(f.claims(account).issuedAtMs),
-          )
-        : await issueHumanSession(f.db, account, new Date(f.claims(account).issuedAtMs))
+    const token = await new AccessTokenService({ profile: SYSTEM_ACCESS_TOKEN_PROFILE }).create(
+      {
+        accountId: account,
+        tokenVersion: 0,
+        ...(account === "caf47224-b967-45fd-85b2-8d67e7bdd8c9"
+          ? { machineCredentialId: "087f472e-41a4-42b5-a66f-c625597754b0" }
+          : {}),
+      },
+      secret,
+      new Date(f.claims(account).issuedAtMs),
+    )
     if (token instanceof Error) throw token
     headers.set(account, {
       authorization: `Bearer ${token}`,
@@ -567,16 +560,3 @@ test("開示監査が保存されない場合と証拠が壊れている場合�
       .first<Record<string, unknown>>(),
   ).toEqual({ total: 0 })
 })
-
-/** 人のAccountのサインイン済みセッションを、指定した認証時刻で発行する。 */
-async function issueHumanSession(
-  database: D1Database,
-  accountId: string,
-  authenticatedAt: Date,
-): Promise<string> {
-  const issued = await createSystemSessionApplications({
-    context: { env: { DB: database } },
-  }).issue.execute({ accountId, tokenVersion: 0, now: authenticatedAt, authenticatedAt })
-  if (issued.kind !== "issued") throw new Error("test session was not issued")
-  return issued.accessToken
-}

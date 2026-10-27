@@ -24,6 +24,7 @@ generate_secret() {
 
 cat >"$TARGET" <<EOF
 JWT_SECRET="$(generate_secret)"
+PEPPER_SECRET="$(generate_secret)"
 AUDIT_HMAC_SECRET="$(generate_secret)"
 ATTACHMENT_KEKS='{"1": "$(generate_secret)"}'
 COMPANY_TIME_ZONE="Asia/Tokyo"

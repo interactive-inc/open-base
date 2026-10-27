@@ -1,18 +1,17 @@
+import { SystemSignedInSessionChannel } from "@system/interface/request-environment/system-signed-in-session-channel"
 import { ResolveBearerAccountAdapter } from "@system/infrastructure/adapters/auth/resolve-bearer-account.adapter"
 import { SystemInvalidSessionError, SystemSessionUnavailableError } from "@system/interface/errors"
 import { systemFactory } from "@system/interface/request-environment/system-factory"
 import { SystemD1AuthorizationAdapter } from "@system/infrastructure/adapters/iam/system-authorization.adapter"
 import { readBearerAuthorization } from "@system/interface/operations/bearer-authorization"
 import { SystemServiceBindingAccountChannel } from "@system/interface/request-environment/system-service-binding-account-channel"
-import { SystemSignedInSessionChannel } from "@system/interface/request-environment/system-signed-in-session-channel"
 
 /**
  * Service Binding RPCが検証済みの主体を渡したときは、Authorization headerを読まずにそれを使う。
- * 次にcompositionが検証したサインイン済みセッションを使い、無ければAuthorization headerの
- * Bearer（外部access tokenまたは機械credentialのaccess token）を読む。
+ * それ以外はAuthorization headerのBearerだけを読む。
  */
 async function authenticate(
-  env: ConstructorParameters<typeof ResolveBearerAccountAdapter>[0]["env"] & object,
+  env: ConstructorParameters<typeof ResolveBearerAccountAdapter>[0]["env"],
   header: string | undefined,
   now: Date,
 ): Promise<Awaited<ReturnType<ResolveBearerAccountAdapter["resolve"]>>> {
@@ -21,6 +20,7 @@ async function authenticate(
   if (serviceBindingAccount !== null) {
     return await adapter.resolveVerifiedExternal({ external: serviceBindingAccount, now })
   }
+
   const signedIn = new SystemSignedInSessionChannel({ env }).read()
   if (signedIn !== null) return await adapter.resolveSignedIn({ session: signedIn, now })
 
@@ -55,6 +55,7 @@ export const authenticateSystemAccessToken = systemFactory.createMiddleware(
     context.set("systemAccessToken", authentication.systemAccessToken)
     context.set("bearerReadAuthentication", authentication.readAuthentication)
     context.set("accountTokenVersion", authentication.tokenVersion)
+    context.set("accountSessionFamilyId", authentication.readAuthentication.sessionFamilyId)
     context.set("permissions", accountAuthorization.permissionKeys)
     context.set("scopedPermissions", accountAuthorization.scopedPermissionKeys)
     context.set("role", accountAuthorization.roleKeys[0] ?? "authenticated")

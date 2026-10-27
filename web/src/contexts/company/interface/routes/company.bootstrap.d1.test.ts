@@ -24,16 +24,10 @@ import { SystemHTTPException } from "@system/interface/errors"
 import { authenticateSystemAccessToken } from "@system/interface/middlewares/authenticate-system-access-token"
 import type { SystemHonoEnv } from "@system/interface/request-environment/system-factory"
 import { POST as systemBootstrapPOST } from "@system/interface/routes/system.bootstrap"
-import { completeSystemPasskeyEnrollment } from "@system/interface/operations/complete-system-passkey-enrollment"
-import {
-  createSystemSessionApplications,
-  systemTestSignedInSession,
-} from "@system/test/create-system-session-applications.test-support"
+import { POST as systemSessionPOST } from "@system/interface/routes/system.sessions"
 import { describe, expect, setDefaultTimeout, spyOn, test } from "bun:test"
 import { hc } from "hono/client"
 import { createFactory } from "hono/factory"
-import { readFileSync, readdirSync } from "node:fs"
-import { join } from "node:path"
 import { z } from "zod"
 import { drizzle } from "drizzle-orm/d1"
 import { DirectPersonnelActionAdapter } from "@/contexts/company/infrastructure/adapters/employee-lifecycle/direct-personnel-action.adapter"
@@ -50,13 +44,6 @@ setDefaultTimeout(30_000)
 /** 組織単位の作成要求の ID。 */
 const UNIT_REQUEST_ID = "6f0d3c2a-1b4e-4a7d-9c8e-5d2f1a0b3c41"
 
-// System側の認証の変更も含めた、現在のmigrationを使う。
-const migrationsDirectory = new URL("../../../../db/migrations", import.meta.url).pathname
-const schemaSql = readdirSync(migrationsDirectory)
-  .filter((file) => file.endsWith(".sql"))
-  .sort()
-  .map((file) => readFileSync(join(migrationsDirectory, file), "utf8"))
-  .join("\n")
 type BootstrapTestEnvironment = {
   Bindings: SystemHonoEnv["Bindings"] & CompanyHttpEnvironment["Bindings"]
   Variables: SystemHonoEnv["Variables"] & CompanyHttpEnvironment["Variables"]
@@ -94,7 +81,7 @@ const responseSchema = z.object({
 })
 
 async function fixture() {
-  const database = await createLocalD1Database({ schema: schemaSql })
+  const database = await createLocalD1Database()
   // 会社情報を事前設定する製品でも、確認済み入力と一致する場合だけ初期化する。
   await database
     .prepare(
@@ -134,7 +121,7 @@ async function fixture() {
       await next()
     })
     .post("/system/bootstrap", ...systemBootstrapPOST)
-    .use("/company/*", systemTestSignedInSession)
+    .post("/system/sessions", ...systemSessionPOST)
     .use("/company/*", authenticateSystemAccessToken)
     .use("/company/*", async (context, next) => {
       context.set(
@@ -169,24 +156,24 @@ async function fixture() {
     { preconnect: fetch.preconnect },
   )
   const client = hc<typeof app>("http://company.test", { fetch: request })
-  const bootstrap = await client.system.bootstrap.$post({
-    json: { token: environment.BOOTSTRAP_TOKEN, email: "root@example.com" },
+  expect(
+    Number(
+      (
+        await client.system.bootstrap.$post({
+          json: {
+            token: environment.BOOTSTRAP_TOKEN,
+            email: "root@example.com",
+            password: "correct horse battery staple",
+          },
+        })
+      ).status,
+    ),
+  ).toBe(201)
+  const session = await client.system.sessions.$post({
+    json: { subject: "root@example.com", password: "correct horse battery staple" },
   })
-  expect(Number(bootstrap.status)).toBe(201)
-  const bootstrapBody = z
-    .object({ account_id: z.string(), passkey_enrollment: z.object({ token: z.string() }) })
-    .parse(await bootstrap.json())
-  // 初期rootがパスキーを登録し、パスキーでサインインした状態にする。
-  const enrolled = await completeSystemPasskeyEnrollment(
-    { env: { DB: database } },
-    { token: bootstrapBody.passkey_enrollment.token, now: clock.now },
-  )
-  expect(enrolled).toMatchObject({ accountId: bootstrapBody.account_id })
-  const signedIn = await createSystemSessionApplications({
-    context: { env: { DB: database } },
-  }).issue.execute({ accountId: bootstrapBody.account_id, tokenVersion: 0, now: clock.now })
-  if (signedIn.kind !== "issued") throw new Error("test session was not issued")
-  const token = signedIn.accessToken
+  expect(Number(session.status)).toBe(201)
+  const token = z.object({ access_token: z.string() }).parse(await session.json()).access_token
   const headers = { authorization: `Bearer ${token}` }
   const post = (body = declaration, key = "company:first") =>
     client.company.bootstrap.$post({ header: { "idempotency-key": key }, json: body }, { headers })

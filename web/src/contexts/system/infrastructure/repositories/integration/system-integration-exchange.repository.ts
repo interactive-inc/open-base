@@ -54,13 +54,14 @@ export class SystemIntegrationExchangeRepository {
     }
   }
 
+  /** 更新では日時・状態・試行を同じsnapshotと照合し、同一時刻のretryでも再利用を拒否する。 */
   async write(
     exchange: IntegrationExchangeEntity,
-    expectedUpdatedAt: Date | null,
+    expectedExchange: IntegrationExchangeEntity | null,
     auditStatements: ReadonlyArray<D1PreparedStatement> = [],
   ): Promise<SystemIntegrationExchangeWriteResult> {
-    if (expectedUpdatedAt !== null) {
-      return this.update(exchange, expectedUpdatedAt, auditStatements)
+    if (expectedExchange !== null) {
+      return this.update(exchange, expectedExchange, auditStatements)
     }
     try {
       await this.insert(exchange, auditStatements)
@@ -92,7 +93,7 @@ export class SystemIntegrationExchangeRepository {
 
   private async update(
     exchange: IntegrationExchangeEntity,
-    expectedUpdatedAt: Date,
+    expectedExchange: IntegrationExchangeEntity,
     auditStatements: ReadonlyArray<D1PreparedStatement>,
   ): Promise<SystemIntegrationExchangeWriteResult> {
     try {
@@ -101,7 +102,7 @@ export class SystemIntegrationExchangeRepository {
           `UPDATE system_integration_exchanges
            SET status = ?1, attempt = ?2, external_reference = ?3, last_error_code = ?4,
                updated_at = ?5, completed_at = ?6
-           WHERE id = ?7 AND updated_at = ?8`,
+           WHERE id = ?7 AND updated_at = ?8 AND status = ?9 AND attempt = ?10`,
         ).bind(
           exchange.status,
           exchange.attempt,
@@ -110,7 +111,9 @@ export class SystemIntegrationExchangeRepository {
           exchange.updatedAt.getTime(),
           exchange.completedAt?.getTime() ?? null,
           exchange.id,
-          expectedUpdatedAt.getTime(),
+          expectedExchange.updatedAt.getTime(),
+          expectedExchange.status,
+          expectedExchange.attempt,
         ),
         this.c.env.DB.prepare(
           "SELECT CASE WHEN changes() = 1 THEN 1 ELSE abs(-9223372036854775808) END AS ok",
@@ -181,7 +184,7 @@ function exchangeValues(exchange: IntegrationExchangeEntity) {
     exchange.createdAt.getTime(),
     exchange.updatedAt.getTime(),
     exchange.completedAt?.getTime() ?? null,
-  ] as const
+  ]
 }
 
 function toExchange(row: ExchangeRow): IntegrationExchangeEntity | Error {

@@ -1,8 +1,11 @@
-import type { CompanyResourceEntity } from "@/contexts/company/domain/entities/company-resource.entity"
+import type { CompanyResourceProps } from "@/contexts/company/domain/entities/company-resource.entity"
 import type { OrgAssignmentPeriod } from "@/contexts/company/domain/definitions/workforce-schedule.definition"
-import type { CalendarDate } from "@/contexts/company/domain/definitions/calendar-date.definition"
 import { restoreWorkforceId } from "@/contexts/company/domain/definitions/restore-workforce-id.definition"
+import { CompanyResourceEffectiveHistoryValue } from "@/contexts/company/domain/values/company-resource-effective-history.value"
 import { CompanyResourceValidationError } from "@/contexts/company/domain/errors"
+
+/** 版の履歴の一件。訂正のために足した版は、訂正先の版の番号を持つ。 */
+type AssignmentRevision = CompanyResourceProps & Readonly<{ correctsRevision?: number | null }>
 
 type AssignmentSegment = Readonly<
   Pick<
@@ -39,31 +42,37 @@ export class CompanyAssignmentResourceTimelineValue {
     Object.freeze(this)
   }
 
+  /**
+   * 訂正された版と、訂正のための取消の版は、正本の時点参照と同じ規則で有効な履歴から外す。発効日を直す
+   * 訂正は訂正元と別の発効日を持つので、発効日ごとの最新の版だけで並べると訂正元の期間が残る。
+   */
   static create(
-    history: ReadonlyArray<CompanyResourceEntity>,
+    history: ReadonlyArray<AssignmentRevision>,
   ): CompanyAssignmentResourceTimelineValue | CompanyResourceValidationError {
     const ordered = history.toSorted((left, right) => left.revision - right.revision)
     const first = ordered[0]
     if (first === undefined) return new CompanyResourceValidationError("invalid_resource")
-    const latest = new Map<CalendarDate, CompanyResourceEntity>()
+    const owner = first.attributes["employeeId"]
     for (const [index, resource] of ordered.entries()) {
       if (
         resource.type !== "assignment" ||
         resource.id !== first.id ||
         resource.organizationId !== first.organizationId ||
-        resource.readText("employeeId") !== first.readText("employeeId")
+        typeof resource.attributes["employeeId"] !== "string" ||
+        resource.attributes["employeeId"] !== owner
       )
         return new CompanyResourceValidationError("invalid_resource")
       if (resource.revision !== index + 1)
         return new CompanyResourceValidationError("invalid_revision")
-      latest.set(resource.effectiveFrom, resource)
     }
-    const effective = [...latest.values()].toSorted((left, right) =>
+    const confirmed = CompanyResourceEffectiveHistoryValue.create(ordered)
+    if (confirmed instanceof Error) return confirmed
+    const effective = confirmed.resources.toSorted((left, right) =>
       left.effectiveFrom.localeCompare(right.effectiveFrom),
     )
     const segments: AssignmentSegment[] = []
     try {
-      const employeeId = restoreWorkforceId("employee", first.readText("employeeId") ?? "")
+      const employeeId = restoreWorkforceId("employee", typeof owner === "string" ? owner : "")
       for (const [index, resource] of effective.entries()) {
         if (resource.state === "void") continue
         const assignmentType = resource.readText("assignmentType")

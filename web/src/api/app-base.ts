@@ -1,3 +1,4 @@
+import { guardBootstrapSignInMethod } from "@/api/http/auth/guard-bootstrap-sign-in-method"
 import { authenticateSystemBearer } from "@/api/http/authenticate-system-bearer"
 import { HTTPException } from "hono/http-exception"
 import { handleApiError } from "@/api/error-response/handle-api-error"
@@ -163,6 +164,7 @@ export function createAppBase() {
       .use("*", systemContextMiddleware)
       .use("*", featureGate)
       .use("*", databaseMiddleware)
+      .use("/system/bootstrap", guardBootstrapSignInMethod)
       .use("/company/*", companyAuthenticationMiddleware)
       .onError(handleApiError)
   )

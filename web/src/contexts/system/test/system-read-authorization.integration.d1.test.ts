@@ -21,14 +21,14 @@ async function fixture(kind: "human" | "agent" | "service" | "connector" | "lega
   if (kind === "connector")
     await execSql(
       db,
-      "INSERT INTO system_connectors(id,key,name,direction,transport,status,revision,created_at,updated_at) VALUES ('connector','connector','Test connector','bidirectional','api','active',1,100,100)",
+      "INSERT INTO system_connectors(id,key,name,direction,transport,status,revision,created_at,updated_at) VALUES ('6f1c2a0e-5b7d-4c3a-9e21-8a4d0b6c7e15','connector','Test connector','bidirectional','api','active',1,100,100)",
     )
   if (kind !== "legacy")
     await db
       .prepare(
         "INSERT INTO system_principals(id,account_id,kind,name,connector_id,revision,created_at,updated_at) VALUES ('3aaf5fcf-c1c5-4546-810f-8597f0e1c24c','f43d89f4-ac52-411f-828b-78838556ce92',?1,'Reader',?2,1,100,100)",
       )
-      .bind(kind, kind === "connector" ? "connector" : null)
+      .bind(kind, kind === "connector" ? "6f1c2a0e-5b7d-4c3a-9e21-8a4d0b6c7e15" : null)
       .run()
   const machine = kind !== "human" && kind !== "legacy"
   if (machine)
@@ -45,6 +45,7 @@ async function fixture(kind: "human" | "agent" | "service" | "connector" | "lega
     expiresAtMs: at.getTime() + 60000,
     machineCredentialId: machine ? "191cfb61-8651-48e7-ba07-a1d05b732365" : null,
     identityBindingId: null,
+    sessionFamilyId: null,
   }
   const adapter = new PrepareSystemReadAuthorizationAdapter({ env: { DB: db } })
   const prepare = () => adapter.prepare(authentication, at)
@@ -123,7 +124,7 @@ test("connectorの停止と将来の権限失効を、時計を進めた開示�
     throw new Error("authorization missing", { cause: prepared })
   await execSql(
     f.db,
-    "UPDATE system_connectors SET status='disabled',revision=2,updated_at=101 WHERE id='connector'",
+    "UPDATE system_connectors SET status='disabled',revision=2,updated_at=101 WHERE id='6f1c2a0e-5b7d-4c3a-9e21-8a4d0b6c7e15'",
   )
   const assertions = prepared.assertions(at)
   if (assertions instanceof Error) throw assertions
@@ -141,6 +142,31 @@ test("connectorの停止と将来の権限失効を、時計を進めた開示�
   const later = active.assertions(new Date(at.getTime() + 1000))
   if (later instanceof Error) throw later
   expect(await human.db.batch([...later]).catch((error: unknown) => error)).toBeInstanceOf(Error)
+})
+
+test("Sessionから発行したtokenは準備後のfamily失効をtransactionで拒否する", async () => {
+  const f = await fixture()
+  await execSql(
+    f.db,
+    `INSERT INTO system_sessions(id,account_id,family_id,token_hash,token_version,created_at,expires_at)
+    VALUES ('0f6f2d8e-6b1a-4c3e-9d2a-5b7c8e9f0a1b','f43d89f4-ac52-411f-828b-78838556ce92','reader-family','${"b".repeat(64)}',0,100,${at.getTime() + 60000}),
+      ('5d1c2b3a-4e5f-4a6b-8c7d-9e0f1a2b3c4d','28689052-c77f-42e5-8f85-1b461d9f5514','other-family','${"c".repeat(64)}',0,100,${at.getTime() + 60000})`,
+  )
+  expect(
+    await f.adapter.prepare({ ...f.authentication, sessionFamilyId: "other-family" }, at),
+  ).toBeNull()
+  const authentication = { ...f.authentication, sessionFamilyId: "reader-family" }
+  const prepared = await f.adapter.prepare(authentication, at)
+  if (prepared === null || prepared instanceof Error)
+    throw new Error("authorization missing", { cause: prepared })
+  const active = prepared.assertions(at)
+  if (active instanceof Error) throw active
+  expect((await f.db.batch([...active])).every((row) => row.success)).toBe(true)
+  await execSql(f.db, "UPDATE system_sessions SET revoked_at=100 WHERE family_id='reader-family'")
+  const assertions = prepared.assertions(at)
+  if (assertions instanceof Error) throw assertions
+  expect(await f.db.batch([...assertions]).catch((error: unknown) => error)).toBeInstanceOf(Error)
+  expect(await f.adapter.prepare(authentication, at)).toBeNull()
 })
 
 test("外部認証は確認したidentityを固定し、別Accountのidentityと取消を拒否する", async () => {

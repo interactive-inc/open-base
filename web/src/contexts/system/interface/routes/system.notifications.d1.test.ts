@@ -1,8 +1,6 @@
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
-import {
-  createSystemSessionApplications,
-  systemTestSignedInSession,
-} from "@system/test/create-system-session-applications.test-support"
+import { createSystemSessionApplications } from "@system/test/create-system-session-applications.test-support"
+import { requireIssuedSystemSession } from "@system/test/require-issued-system-session.test-support"
 import { SystemSessionTestContext } from "@system/test/system-session-test-context.test-support"
 import {
   DELETE as DELETE_ONE,
@@ -55,22 +53,22 @@ describe("System Notification HTTP", () => {
 
     const applications = createSystemSessionApplications({
       context: fixture.context,
+      jwtSecret: "system-session-test-jwt-secret",
       sessionTtlMilliseconds: 604_800_000,
     })
     expect(applications).not.toBeInstanceOf(Error)
     if (applications instanceof Error) return
-    const issuance = await applications.issue.execute({
-      accountId,
-      tokenVersion: 0,
-      now: new Date(),
-      auditContext: { authorizationJson: null, metadataJson: null },
-    })
-    expect(issuance).not.toBeInstanceOf(Error)
-    if (issuance instanceof Error || issuance.kind === "rejected") return
+    const issuance = requireIssuedSystemSession(
+      await applications.issue.execute({
+        accountId,
+        tokenVersion: 0,
+        now: new Date(),
+        auditContext: { authorizationJson: null, metadataJson: null },
+      }),
+    )
 
     const app = systemFactory
       .createApp()
-      .use("*", systemTestSignedInSession)
       .use("*", async (context, next) => {
         context.set("now", () => now)
         await next()

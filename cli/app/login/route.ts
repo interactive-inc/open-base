@@ -6,12 +6,12 @@ import { SettingsFile } from "@/lib/config/settings-file"
 import { createClient } from "@/lib/http/hc-client"
 import { factory } from "@/factory"
 
-export const help = `base login — ブラウザのパスキーで承認してトークンを取得
+export const help = `base login — ブラウザでサインインし直して承認し、トークンを取得
 
 usage:
   base login [--base-url <url>] [--no-browser]
 
-表示されたURLをブラウザで開き、パスキーでサインインしてコードを承認します。
+表示されたURLをブラウザで開き、サインインし直してコードを承認します。
 接続先は --base-url ?? 環境変数 BASE_API ?? 既定。接続先ごとにトークンを保存する。`
 
 export default factory.createHandlers(

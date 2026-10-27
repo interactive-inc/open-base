@@ -5,6 +5,7 @@ import {
   systemIamRoles,
   systemIdentityBindings,
   systemIdentityProfiles,
+  systemPasswordCredentials,
   systemRoleBindings,
 } from "@system/infrastructure/schema/system-core"
 
@@ -21,6 +22,10 @@ export const systemIdentityBindingsRelations = relations(systemIdentityBindings,
   profile: helpers.one(systemIdentityProfiles, {
     fields: [systemIdentityBindings.id],
     references: [systemIdentityProfiles.identityId],
+  }),
+  passwordCredential: helpers.one(systemPasswordCredentials, {
+    fields: [systemIdentityBindings.id],
+    references: [systemPasswordCredentials.identityId],
   }),
 }))
 

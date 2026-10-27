@@ -66,8 +66,6 @@ export const invalidIamGraphReasons = Object.freeze([
 
 export type InvalidIamGraphReason = (typeof invalidIamGraphReasons)[number]
 
-export type InvalidOidcScopeReason = "invalid_scope" | "openid_scope_required" | "unsupported_scope"
-
 export const invalidIamRoleReasons = Object.freeze([
   "duplicate_permissions",
   "invalid_shape",
@@ -162,6 +160,13 @@ export type InvalidSystemPrincipalReason =
   | "invalid_transition"
   | "update_before_creation"
   | "update_before_last_update"
+
+export type InvalidSystemTotpCredentialReason =
+  | "invalid_shape"
+  | "invalid_transition"
+  | "update_before_creation"
+
+export type InvalidSystemTotpLoginChallengeReason = "invalid_shape" | "expiry_before_creation"
 
 export type InvalidSystemDeliveryReason =
   | "invalid_shape"
@@ -307,16 +312,6 @@ export class InvalidOidcIssuerError extends DomainError {
   }
 }
 
-export class InvalidOidcScopeError extends DomainError {
-  readonly code = "invalid_oidc_scope" as const
-
-  constructor(readonly reason: InvalidOidcScopeReason) {
-    super(reason)
-    this.name = "InvalidOidcScopeError"
-    Object.freeze(this)
-  }
-}
-
 export class InvalidRoleBindingError extends DomainError {
   readonly code = "invalid_role_binding" as const
 
@@ -439,6 +434,32 @@ export class InvalidSystemPrincipalError extends DomainError {
   ) {
     super("invalid_system_principal", { cause })
     this.name = "InvalidSystemPrincipalError"
+    Object.freeze(this)
+  }
+}
+
+export class InvalidSystemTotpCredentialError extends DomainError {
+  readonly code = "invalid_system_totp_credential" as const
+
+  constructor(
+    readonly reason: InvalidSystemTotpCredentialReason,
+    cause?: unknown,
+  ) {
+    super("invalid_system_totp_credential", { cause })
+    this.name = "InvalidSystemTotpCredentialError"
+    Object.freeze(this)
+  }
+}
+
+export class InvalidSystemTotpLoginChallengeError extends DomainError {
+  readonly code = "invalid_system_totp_login_challenge" as const
+
+  constructor(
+    readonly reason: InvalidSystemTotpLoginChallengeReason,
+    cause?: unknown,
+  ) {
+    super("invalid_system_totp_login_challenge", { cause })
+    this.name = "InvalidSystemTotpLoginChallengeError"
     Object.freeze(this)
   }
 }

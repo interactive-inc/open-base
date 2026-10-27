@@ -36,15 +36,6 @@ export type SystemApplicationFailure = Readonly<{
   body: Readonly<{ error: string; message: string } & Record<string, unknown>>
 }>
 
-export type OIDCHTTPExceptionCode =
-  | "invalid_grant"
-  | "invalid_request"
-  | "invalid_scope"
-  | "invalid_token"
-  | "method_not_allowed"
-  | "not_found"
-  | "temporarily_unavailable"
-
 /** SystemのHTTP境界で検出した失敗。JSONへの変換はAPIのonErrorだけが行う。 */
 export class SystemHTTPException extends HTTPException {
   readonly code: string
@@ -90,75 +81,6 @@ export class SystemWorkItemHttpError extends SystemHTTPException {
       detail: error.message,
       cause: error,
     })
-  }
-}
-
-export abstract class OIDCHTTPException extends SystemHTTPException {
-  readonly allow: string | null
-  readonly authenticate: string | null
-
-  constructor(props: {
-    code: OIDCHTTPExceptionCode
-    status?: 400 | 401 | 404 | 405 | 503
-    allow?: string
-    authenticate?: string
-    cause?: unknown
-  }) {
-    super({
-      status: props.status ?? 400,
-      code: props.code,
-      detail: props.code,
-      ...(props.cause === undefined ? {} : { cause: props.cause }),
-    })
-    this.allow = props.allow ?? null
-    this.authenticate = props.authenticate ?? null
-  }
-}
-
-export class OIDCInvalidGrantError extends OIDCHTTPException {
-  constructor(cause?: unknown) {
-    super({ code: "invalid_grant", cause })
-  }
-}
-
-export class OIDCInvalidRequestError extends OIDCHTTPException {
-  constructor(cause?: unknown) {
-    super({ code: "invalid_request", cause })
-  }
-}
-
-export class OIDCInvalidScopeError extends OIDCHTTPException {
-  constructor(cause?: unknown) {
-    super({ code: "invalid_scope", cause })
-  }
-}
-
-export class OIDCInvalidTokenError extends OIDCHTTPException {
-  constructor(cause?: unknown) {
-    super({
-      code: "invalid_token",
-      status: 401,
-      authenticate: 'Bearer error="invalid_token"',
-      cause,
-    })
-  }
-}
-
-export class OIDCMetadataNotFoundError extends OIDCHTTPException {
-  constructor(cause?: unknown) {
-    super({ code: "not_found", status: 404, cause })
-  }
-}
-
-export class OIDCMethodNotAllowedError extends OIDCHTTPException {
-  constructor() {
-    super({ code: "method_not_allowed", status: 405, allow: "GET, HEAD" })
-  }
-}
-
-export class OIDCTemporarilyUnavailableError extends OIDCHTTPException {
-  constructor(cause?: unknown) {
-    super({ code: "temporarily_unavailable", status: 503, cause })
   }
 }
 
@@ -354,6 +276,16 @@ export class SystemCLILoginUnavailableError extends SystemHTTPException {
 export class SystemCredentialsInvalidError extends SystemHTTPException {
   constructor() {
     super({ status: 401, code: "invalid_credentials", detail: "invalid credentials" })
+  }
+}
+
+export class SystemTotpCodeRequiredError extends SystemHTTPException {
+  constructor() {
+    super({
+      status: 401,
+      code: "totp_code_required",
+      detail: "two-factor authentication code is required",
+    })
   }
 }
 

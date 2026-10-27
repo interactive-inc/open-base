@@ -5,6 +5,8 @@ export type ApiRouteModuleRegistration = Readonly<{
   tier: ApiRouteModuleTier
   routesDirectory: string
   routeImportPrefix: string
+  /** この製品で公開しない受け口。共有実装の保存先に相対するファイル名。 */
+  excludedRouteFiles?: ReadonlyArray<string>
 }>
 
 const contextNamePattern = /^[a-z][a-z0-9-]*$/

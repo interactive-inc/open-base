@@ -17,6 +17,7 @@ import type { AccountId } from "@system/domain/schemas/iam/account-id.schema"
 export type Bindings = {
   DB: D1Database
   JWT_SECRET: string
+  PEPPER_SECRET?: string
   EMAIL?: SystemEmailSender
   EMAIL_SENDER_NAME?: string
   INVITE_EMAIL_FROM?: string
@@ -57,9 +58,15 @@ export type Bindings = {
   // ログイン以外の全エンドポイントの IP 単位グローバルレート制限（Workers Rate Limiting binding）。
   // wrangler.jsonc の ratelimits で設定する。未設定（ローカル開発・テスト）ではスキップする。
   API_RATE_LIMITER?: RateLimit
+  // 人のサインインの方式。"password"、"passkey"（未設定時）、"oidc"。それ以外の値ではサインインを受け付けない。
+  SIGN_IN_METHOD?: string
+  // OIDCでサインインするときのclient ID。発行者はIDENTITY_ISSUER。ID tokenのaudはこの値を含む。
+  OIDC_CLIENT_ID?: string
+  // OIDCのclient secret。public client（PKCEだけ）なら設定しない。
+  OIDC_CLIENT_SECRET?: string
   // ローカル・テスト用の公開JWKS。未設定の本番ではIDENTITY_ISSUERのJWKS endpointを使う。
   IDENTITY_JWKS?: string
-  // 外部 access token の既定の iss（発行者）。IDENTITY_ACCESS_TOKEN_ISSUER が無いときに使う。
+  // OIDCのサインインの発行者で、外部 access token の既定の iss（発行者）。IDENTITY_ACCESS_TOKEN_ISSUER が無いときに使う。
   IDENTITY_ISSUER?: string
   // 外部 access token が含んではならない aud。人向けのtokenをAPI Bearerとして受け付けないために使う。
   IDENTITY_AUDIENCE?: string
@@ -71,7 +78,7 @@ export type Bindings = {
   IDENTITY_ACCESS_TOKEN_AUDIENCE?: string
   // 同じCloudflare accountのWorkerからService Binding RPCで照会されるときだけ受理するaccess tokenのaud。
   // 発行者と検証鍵はIDENTITY_ACCESS_TOKEN_ISSUERとIDENTITY_JWKSを共有する。HTTP APIはこのaudのtokenを拒否する。
-  // 外部IdPのログインと再認証もこのaudを含むtokenを拒否する。
+  // OIDCのサインインもこのaudを含むID tokenを拒否する。
   // 未設定、空、IDENTITY_ACCESS_TOKEN_AUDIENCEかIDENTITY_AUDIENCEと同じ値なら、RPC入口は全ての呼び出しを拒否する（fail closed）。
   SERVICE_BINDING_ACCESS_TOKEN_AUDIENCE?: string
   // 初期 ROOT 作成用。`wrangler secret put BOOTSTRAP_TOKEN` で登録し、初期化完了後は削除を推奨。

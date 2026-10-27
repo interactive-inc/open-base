@@ -1,8 +1,4 @@
 import { execSql } from "@system/test/local-d1/exec-sql.test-support"
-import {
-  createSystemSessionApplications,
-  systemTestSignedInSession,
-} from "@system/test/create-system-session-applications.test-support"
 import { testAccountId, testDerivedId } from "@system/test/system-test-id.test-support"
 import { z } from "zod"
 import { CaptureLinkedAttachmentRecordAdapter } from "@system/infrastructure/adapters/records/capture-linked-attachment-record.adapter"
@@ -619,6 +615,7 @@ test("encrypted original is verified before atomic finalization and failed sourc
         expiresAtMs: now.getTime() + 3600000,
         machineCredentialId: null,
         identityBindingId: null,
+        sessionFamilyId: null,
       },
       at: now,
     })
@@ -742,14 +739,14 @@ test("encrypted original is verified before atomic finalization and failed sourc
         "INSERT INTO system_accounts (id,status,token_version,created_at,updated_at) VALUES ('eb2aaac2-352f-4196-8e01-adea61c54466','active',0,100,100); INSERT INTO system_principals(id,account_id,kind,name,revision,created_at,updated_at) VALUES ('61c03c32-b3c6-41c8-861f-f84868b70c5c','eb2aaac2-352f-4196-8e01-adea61c54466','human','Viewer',1,100,100); INSERT INTO system_iam_roles(id,key,kind,name,created_at,updated_at) VALUES ('6d947d9f-a028-4025-8113-1d4d9d300ea2','record:reader','custom','Reader',100,100); INSERT INTO system_iam_role_permissions (role_id, permission_key) VALUES ('6d947d9f-a028-4025-8113-1d4d9d300ea2','system:record:read'); INSERT INTO system_role_bindings(id,account_id,role_id,created_at) VALUES ('dfd5bbdb-f9ff-47b9-8287-6e97e4e2486a','eb2aaac2-352f-4196-8e01-adea61c54466','6d947d9f-a028-4025-8113-1d4d9d300ea2',100)",
       )
       const secret = "record-http-test-secret-only"
-      const token = await issueHumanSession(
-        context.env.DB,
-        "eb2aaac2-352f-4196-8e01-adea61c54466",
+      const token = await new SystemAccessTokenIssuer(secret).issue({
+        accountId: zAccountId.parse("eb2aaac2-352f-4196-8e01-adea61c54466"),
+        tokenVersion: 0,
         now,
-      )
+      })
+      if (token instanceof Error) throw token
       const http = systemFactory
         .createApp()
-        .use("*", systemTestSignedInSession)
         .use("*", async (c, next) => {
           c.set("now", () => clock.at)
           c.set("database", context.var.database)
@@ -838,7 +835,7 @@ test("encrypted original is verified before atomic finalization and failed sourc
         if (kind === "connector")
           await execSql(
             context.env.DB,
-            "INSERT INTO system_connectors(id,key,name,direction,transport,status,revision,created_at,updated_at) VALUES ('record-connector','record-connector','Record connector','bidirectional','api','active',1,100,100)",
+            "INSERT INTO system_connectors(id,key,name,direction,transport,status,revision,created_at,updated_at) VALUES ('6f1c2a0e-5b7d-4c3a-9e21-8a4d0b6c7e15','record-connector','Record connector','bidirectional','api','active',1,100,100)",
           )
         await context.env.DB.prepare(
           "INSERT INTO system_accounts(id,status,token_version,created_at,updated_at) VALUES (?1,'active',0,100,100)",
@@ -848,7 +845,11 @@ test("encrypted original is verified before atomic finalization and failed sourc
         await context.env.DB.prepare(
           "INSERT INTO system_principals(id,account_id,kind,name,connector_id,revision,created_at,updated_at) VALUES (?1,?1,?2,'Reader',?3,1,100,100)",
         )
-          .bind(accountId, kind, kind === "connector" ? "record-connector" : null)
+          .bind(
+            accountId,
+            kind,
+            kind === "connector" ? "6f1c2a0e-5b7d-4c3a-9e21-8a4d0b6c7e15" : null,
+          )
           .run()
         await context.env.DB.prepare(
           "INSERT INTO system_machine_credentials(id,principal_id,name,secret_hash,status,created_at,updated_at,last_used_at,expires_at) VALUES (?1,?2,'Reader credential',?3,'active',100,?4,?4,?5)",
@@ -899,11 +900,12 @@ test("encrypted original is verified before atomic finalization and failed sourc
         context.env.DB,
         "INSERT INTO system_accounts(id,status,token_version,created_at,updated_at) VALUES ('8c7435a1-1641-435b-90f2-a437ade56f20','active',0,100,100); INSERT INTO system_principals(id,account_id,kind,name,revision,created_at,updated_at) VALUES ('88abcca4-7319-49cd-bcf3-468b4f6a5838','8c7435a1-1641-435b-90f2-a437ade56f20','human','Exporter',1,100,100); INSERT INTO system_iam_roles(id,key,kind,name,created_at,updated_at) VALUES ('a13faa42-3cc9-47ac-8400-e3d87f81a68d','record:exporter','custom','Exporter',100,100); INSERT INTO system_iam_role_permissions (role_id, permission_key) VALUES ('a13faa42-3cc9-47ac-8400-e3d87f81a68d','system:record:export'); INSERT INTO system_role_bindings(id,account_id,role_id,created_at) VALUES ('6367ff23-452a-4ff1-80db-73892719479a','8c7435a1-1641-435b-90f2-a437ade56f20','a13faa42-3cc9-47ac-8400-e3d87f81a68d',100)",
       )
-      const exportToken = await issueHumanSession(
-        context.env.DB,
-        "8c7435a1-1641-435b-90f2-a437ade56f20",
+      const exportToken = await new SystemAccessTokenIssuer(secret).issue({
+        accountId: zAccountId.parse("8c7435a1-1641-435b-90f2-a437ade56f20"),
+        tokenVersion: 0,
         now,
-      )
+      })
+      if (exportToken instanceof Error) throw exportToken
       const exportResponse = await http.request(
         `/system/preserved-records/${record.snapshot.id}/content?action=export&purpose=archive&format=package`,
         { headers: { authorization: `Bearer ${exportToken}` } },
@@ -1154,16 +1156,3 @@ test("添付の名前と実体を一緒に保全候補へ固定し、取得後�
   expect(renamed.source.props.contentDigest).not.toBe(captured.source.props.contentDigest)
   expect(original.metadata.fileName).toBe("original.pdf")
 })
-
-/** 人のAccountのサインイン済みセッションを発行する。 */
-async function issueHumanSession(
-  database: D1Database,
-  accountId: string,
-  now: Date,
-): Promise<string> {
-  const issued = await createSystemSessionApplications({
-    context: { env: { DB: database } },
-  }).issue.execute({ accountId, tokenVersion: 0, now })
-  if (issued.kind !== "issued") throw new Error("test session was not issued")
-  return issued.accessToken
-}

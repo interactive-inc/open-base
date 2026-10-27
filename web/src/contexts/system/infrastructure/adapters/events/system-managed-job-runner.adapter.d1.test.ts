@@ -50,7 +50,9 @@ async function fixture(maxAttempts = 2) {
   const queued = SystemDeliveryEntity.create(jobInput)
   if (queued instanceof Error) throw queued
   const repository = new SystemDeliveryRepository({ env: { DB: database } })
-  expect(await repository.create(queued, workerAccountId, null, [])).toBe("created")
+  expect(await repository.create(queued, workerAccountId, null, [])).toMatchObject({
+    status: "created",
+  })
   const run = (
     prepare: (
       job: SystemDeliveryEntity,
@@ -182,7 +184,9 @@ test("別の登録処理・未登録job・将来のjobは実行しない", async
       availableAt: new Date(2000),
     })
     if (job instanceof Error) throw job
-    expect(await c.repository.create(job, c.workerAccountId, null, [])).toBe("created")
+    expect(await c.repository.create(job, c.workerAccountId, null, [])).toMatchObject({
+      status: "created",
+    })
   }
   expect(await c.run()).toEqual([
     { id: "01900054-0000-7000-8000-000000000001", status: "succeeded" },

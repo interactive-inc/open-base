@@ -167,8 +167,12 @@ export async function collectRegistrations(
       files.push(file)
     }
     files.sort()
+    for (const excluded of routeModule.excludedRouteFiles ?? []) {
+      if (!files.includes(excluded)) throw new Error(`excluded route does not exist: ${excluded}`)
+    }
 
     for (const file of files) {
+      if (routeModule.excludedRouteFiles?.includes(file)) continue
       const source = readFileSync(`${routesRoot}/${file}`, "utf8")
       const methods = exportedMethods(source)
       // HTTP メソッドを export しない同居ヘルパ（to-*.ts、can-read-*.ts 等）はここで落ちる。

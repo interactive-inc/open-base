@@ -11,16 +11,21 @@ const catalogPath = "domain/catalogs/audit/system-audit-action.catalog.ts"
 const securityTables = Object.freeze({
   system_accounts: "systemAccounts",
   system_bootstrap_state: "systemBootstrapState",
+  system_browser_login_codes: "systemBrowserLoginCodes",
   system_iam_role_permissions: "systemIamRolePermissions",
   system_iam_roles: "systemIamRoles",
   system_identity_bindings: "systemIdentityBindings",
   system_machine_credentials: "systemMachineCredentials",
-  system_passkey_enrollments: "systemPasskeyEnrollments",
+  system_password_credentials: "systemPasswordCredentials",
+  system_password_reset_challenges: "systemPasswordResetChallenges",
   system_role_bindings: "systemRoleBindings",
+  system_sessions: "systemSessions",
 })
 
 /** 文を実行せず返すだけの公開builder。呼び出し側が同じbatchへ監査を加える。 */
-const callerAuditedStatementBuilders: ReadonlyArray<string> = Object.freeze([])
+const callerAuditedStatementBuilders = Object.freeze([
+  "interface/operations/prepare-system-password-account-registration.ts",
+])
 
 function productionSources(): ReadonlyArray<Readonly<{ path: string; source: string }>> {
   return [...new Glob("**/*.ts").scanSync(systemRoot)]

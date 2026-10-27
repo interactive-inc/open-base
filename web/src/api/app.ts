@@ -82,6 +82,7 @@ import * as systemAccountsAccountIdRoute from "@system/interface/routes/system.a
 import * as systemAccountsAccountIdIdentitiesRoute from "@system/interface/routes/system.accounts.$accountId.identities"
 import * as systemAccountsAccountIdIdentitiesIdentityIdRoute from "@system/interface/routes/system.accounts.$accountId.identities.$identityId"
 import * as systemAccountsAccountIdPasskeyEnrollmentsRoute from "@system/interface/routes/system.accounts.$accountId.passkey-enrollments"
+import * as systemAccountsAccountIdPasswordCredentialsRoute from "@system/interface/routes/system.accounts.$accountId.password-credentials"
 import * as systemAccountsAccountIdRoleBindingsRoute from "@system/interface/routes/system.accounts.$accountId.role-bindings"
 import * as systemAccountsAccountIdRoleBindingsBindingIdRoute from "@system/interface/routes/system.accounts.$accountId.role-bindings.$bindingId"
 import * as systemAttachmentsRoute from "@system/interface/routes/system.attachments"
@@ -92,6 +93,7 @@ import * as systemAttachmentsPurgeUnlinkedRoute from "@system/interface/routes/s
 import * as systemAuditDisclosurePoliciesRoute from "@system/interface/routes/system.audit-disclosure-policies"
 import * as systemAuditEventsRoute from "@system/interface/routes/system.audit-events"
 import * as systemAuditEventsEventIdRoute from "@system/interface/routes/system.audit-events.$eventId"
+import * as systemAuthPasswordResetRoute from "@system/interface/routes/system.auth.password.reset"
 import * as systemBatchJobsRoute from "@system/interface/routes/system.batch-jobs"
 import * as systemBootstrapRoute from "@system/interface/routes/system.bootstrap"
 import * as systemConnectorsRoute from "@system/interface/routes/system.connectors"
@@ -385,6 +387,10 @@ const routePart28 = createRouteApp()
     "/system/accounts/:accountId/passkey-enrollments",
     ...systemAccountsAccountIdPasskeyEnrollmentsRoute.POST,
   )
+  .patch(
+    "/system/accounts/:accountId/password-credentials",
+    ...systemAccountsAccountIdPasswordCredentialsRoute.PATCH,
+  )
   .get("/system/accounts/:accountId/role-bindings", ...systemAccountsAccountIdRoleBindingsRoute.GET)
   .post(
     "/system/accounts/:accountId/role-bindings",
@@ -413,6 +419,8 @@ const routePart28 = createRouteApp()
   .post("/system/audit-disclosure-policies", ...systemAuditDisclosurePoliciesRoute.POST)
   .get("/system/audit-events", ...systemAuditEventsRoute.GET)
   .get("/system/audit-events/:eventId", ...systemAuditEventsEventIdRoute.GET)
+  .post("/system/auth/password/reset", ...systemAuthPasswordResetRoute.POST)
+  .patch("/system/auth/password/reset", ...systemAuthPasswordResetRoute.PATCH)
   .get("/system/batch-jobs", ...systemBatchJobsRoute.GET)
   .post("/system/bootstrap", ...systemBootstrapRoute.POST)
   .get("/system/connectors", ...systemConnectorsRoute.GET)
@@ -429,6 +437,8 @@ const routePart28 = createRouteApp()
   .get("/system/health", ...systemHealthRoute.GET)
   .patch("/system/inbox-messages/:messageId", ...systemInboxMessagesMessageIdRoute.PATCH)
   .get("/system/integration-exchanges", ...systemIntegrationExchangesRoute.GET)
+
+const routePart29 = createRouteApp()
   .post("/system/integration-exchanges", ...systemIntegrationExchangesRoute.POST)
   .get(
     "/system/integration-exchanges/:exchangeId",
@@ -438,8 +448,6 @@ const routePart28 = createRouteApp()
     "/system/integration-exchanges/:exchangeId",
     ...systemIntegrationExchangesExchangeIdRoute.PATCH,
   )
-
-const routePart29 = createRouteApp()
   .get(
     "/system/integration-exchanges/:exchangeId/reconciliations",
     ...systemIntegrationExchangesExchangeIdReconciliationsRoute.GET,

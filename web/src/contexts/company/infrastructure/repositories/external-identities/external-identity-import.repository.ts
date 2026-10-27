@@ -23,6 +23,7 @@ import { SystemProvisionedIdentityAdapter } from "@system/infrastructure/adapter
 import { SystemAccountRepository } from "@system/infrastructure/repositories/auth/system-account.repository"
 import { SystemPrincipalRepository } from "@system/infrastructure/repositories/iam/system-principal.repository"
 import { SystemRoleCatalogRepository } from "@system/infrastructure/repositories/iam/system-role-catalog.repository"
+import { SystemActorAccountCoverageAdapter } from "@system/infrastructure/adapters/iam/system-actor-account-coverage.adapter"
 import { SystemAuditEventEntity } from "@system/domain/entities/system-audit-event.entity"
 import { SystemAuditEventRepository } from "@system/infrastructure/repositories/audit/system-audit-event.repository"
 import { CanonicalSystemJsonValue } from "@system/domain/values/audit/canonical-system-json.value"
@@ -58,6 +59,7 @@ type Context = Readonly<{ env: Readonly<{ DB: D1Database; COMPANY_TIME_ZONE?: st
 type PreparedItem = Readonly<{
   kind: "prepared"
   outcome: "created" | "updated" | "skipped"
+  newAccountEmail?: string
   resources: ReadonlyArray<CompanyResourceProps>
   before: ReadonlyArray<D1PreparedStatement>
   after: ReadonlyArray<D1PreparedStatement>
@@ -118,6 +120,16 @@ export class ExternalIdentityImportRepository {
             : item
         prepared.push(item)
       }
+      const newAccountEmails = prepared.flatMap((item) =>
+        item.newAccountEmail === undefined ? [] : [item.newAccountEmail],
+      )
+      if (command.validateNewAccountEmails(newAccountEmails) instanceof Error)
+        return (
+          (await this.replay(command.props.commandId, fingerprint)) ?? {
+            kind: "conflict",
+            reason: "explicit_account_link_required",
+          }
+        )
       const resources = prepared.flatMap((item) => item.resources)
       const summary = { created: 0, updated: 0, skipped: 0 }
       for (const item of prepared) summary[item.outcome] += 1
@@ -268,6 +280,14 @@ export class ExternalIdentityImportRepository {
     const principal = await new SystemPrincipalRepository(this.c).find({ accountId })
     if (principal instanceof Error) return { kind: "unavailable", cause: principal }
     if (principal !== null && principal.kind !== "human") return { kind: "forbidden" }
+    // 足したログイン方法で対象の権限を得られるので、実行者が覆えない権限を持つAccountには足させない。
+    // 新しいAccountへ付けるroleを実行者の権限内に限る規則と対称にし、保存のbatchでも確かめ直す。
+    const coverage = new SystemActorAccountCoverageAdapter({ database: this.c.env.DB })
+    if (current === null) {
+      const covered = await coverage.check(context.actor.accountId, accountId)
+      if (covered instanceof Error) return { kind: "unavailable", cause: covered }
+      if (!covered) return { kind: "forbidden" }
+    }
     const links = await new CompanyAccountEmployeeLinksReadAdapter({
       env: { ...this.c.env, NOW: context.now.toISOString() },
     }).findMany({ accountIds: [accountId] })
@@ -319,6 +339,7 @@ export class ExternalIdentityImportRepository {
     }
     const before: D1PreparedStatement[] = [
       identityAdapter.prepareTargetGuard(accountId, account.tokenVersion),
+      ...(current === null ? [coverage.prepare(context.actor.accountId, accountId)] : []),
     ]
     const attachment =
       current === null
@@ -404,6 +425,7 @@ export class ExternalIdentityImportRepository {
       provider: "oidc",
       subject: input.subject,
       email: input.email,
+      passwordHash: null,
       roleId: role.id,
       now: context.now,
     })
@@ -464,6 +486,7 @@ export class ExternalIdentityImportRepository {
       kind: "prepared",
       outcome: "created",
       resources,
+      newAccountEmail: input.email,
       before: [account.accountStatement, ...account.identityStatements],
       after: [
         this.c.env.DB.prepare(`INSERT INTO company_account_profiles

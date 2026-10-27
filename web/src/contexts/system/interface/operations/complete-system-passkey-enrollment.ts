@@ -3,9 +3,9 @@ import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit
 import { SystemAuditEventEntity } from "@system/domain/entities/system-audit-event.entity"
 import { SystemAuditEventRepository } from "@system/infrastructure/repositories/audit/system-audit-event.repository"
 import {
-  SystemPasskeyEnrollmentRepository,
+  SystemPasskeyEnrollmentAdapter,
   type SystemPasskeyEnrollmentTarget,
-} from "@system/infrastructure/repositories/auth/system-passkey-enrollment.repository"
+} from "@system/infrastructure/adapters/auth/system-passkey-enrollment.adapter"
 import { hashSystemPasskeyEnrollmentToken } from "@system/lib/auth/hash-system-passkey-enrollment-token"
 
 /**
@@ -18,7 +18,7 @@ export async function completeSystemPasskeyEnrollment(
 ): Promise<SystemPasskeyEnrollmentTarget | null | Error> {
   const tokenHash = await hashSystemPasskeyEnrollmentToken(input.token)
   if (tokenHash === null || tokenHash instanceof Error) return tokenHash
-  const repository = new SystemPasskeyEnrollmentRepository(context)
+  const repository = new SystemPasskeyEnrollmentAdapter(context)
   const target = await repository.findUsable(tokenHash, input.now)
   if (target === null || target instanceof Error) return target
   const event = SystemAuditEventEntity.create({

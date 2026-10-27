@@ -63,7 +63,7 @@ export const systemIdentityBindings = sqliteTable(
     check("system_identity_bindings_id_length", sql`length(${table.id}) BETWEEN 1 AND 255`),
     check(
       "system_identity_bindings_provider",
-      sql`${table.provider} IN ('passkey', 'google', 'github', 'oidc')`,
+      sql`${table.provider} IN ('password', 'passkey', 'google', 'github', 'oidc')`,
     ),
     check(
       "system_identity_bindings_subject_length",
@@ -109,6 +109,70 @@ export const systemIdentityProfiles = sqliteTable(
 
 export type SystemIdentityProfileRow = InferSelectModel<typeof systemIdentityProfiles>
 
+/** password provider固有のsecret projection。encoded hashだけを保存する。 */
+export const systemPasswordCredentials = sqliteTable(
+  "system_password_credentials",
+  {
+    identityId: text("identity_id")
+      .primaryKey()
+      .references(() => systemIdentityBindings.id, { onDelete: "cascade" }),
+    passwordHash: text("password_hash").notNull(),
+    changedAt: integer("changed_at", { mode: "timestamp_ms" }).notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    check(
+      "system_password_credentials_hash_length",
+      sql`length(${table.passwordHash}) BETWEEN 20 AND 4096`,
+    ),
+    check(
+      "system_password_credentials_chronology",
+      sql`${table.changedAt} >= ${table.createdAt} AND ${table.updatedAt} >= ${table.changedAt}`,
+    ),
+  ],
+)
+
+export type SystemPasswordCredentialRow = InferSelectModel<typeof systemPasswordCredentials>
+
+/** raw tokenを保存しない、単回利用のpassword reset challenge。 */
+export const systemPasswordResetChallenges = sqliteTable(
+  "system_password_reset_challenges",
+  {
+    id: text("id").primaryKey(),
+    tokenHash: text("token_hash").notNull(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => systemAccounts.id, { onDelete: "restrict" }),
+    identityId: text("identity_id")
+      .notNull()
+      .references(() => systemIdentityBindings.id, { onDelete: "restrict" }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    usedAt: integer("used_at", { mode: "timestamp_ms" }),
+  },
+  (table) => [
+    uniqueIndex("system_password_reset_challenges_token_hash_uniq").on(table.tokenHash),
+    index("system_password_reset_challenges_account_idx").on(table.accountId, table.createdAt),
+    index("system_password_reset_challenges_expires_idx").on(table.expiresAt),
+    check("system_password_reset_challenges_id_length", sql`length(${table.id}) BETWEEN 1 AND 255`),
+    check(
+      "system_password_reset_challenges_hash",
+      sql`length(${table.tokenHash}) = 64 AND ${table.tokenHash} NOT GLOB '*[^0-9a-f]*'`,
+    ),
+    check(
+      "system_password_reset_challenges_expiration",
+      sql`${table.expiresAt} > ${table.createdAt}`,
+    ),
+    check(
+      "system_password_reset_challenges_use_chronology",
+      sql`${table.usedAt} IS NULL OR ${table.usedAt} >= ${table.createdAt}`,
+    ),
+  ],
+)
+
+export type SystemPasswordResetChallengeRow = InferSelectModel<typeof systemPasswordResetChallenges>
+
 /** 全isolateが共有する認証試行。認証前の資源なのでAccountEntityへのFKを持たない。 */
 export const systemAuthenticationAttempts = sqliteTable(
   "system_authentication_attempts",
@@ -138,44 +202,266 @@ export const systemAuthenticationAttempts = sqliteTable(
 
 export type SystemAuthenticationAttemptRow = InferSelectModel<typeof systemAuthenticationAttempts>
 
-/** パスキー招待。raw tokenは持たず、hashと有効期間だけを保存する。 */
-export const systemPasskeyEnrollments = sqliteTable(
-  "system_passkey_enrollments",
+/** raw tokenを持たず、rotation/reuse detectionに必要なhashとfamilyだけを保持する。 */
+export const systemSessions = sqliteTable(
+  "system_sessions",
   {
     id: text("id").primaryKey(),
     accountId: text("account_id")
       .notNull()
       .references(() => systemAccounts.id, { onDelete: "restrict" }),
-    identityId: text("identity_id")
-      .notNull()
-      .references(() => systemIdentityBindings.id, { onDelete: "restrict" }),
-    tokenHash: text("token_hash").notNull().unique(),
-    reason: text("reason", {
-      enum: ["bootstrap", "provisioning", "reissue", "recovery"],
-    }).notNull(),
-    issuedByAccountId: text("issued_by_account_id").references(() => systemAccounts.id, {
-      onDelete: "restrict",
-    }),
+    familyId: text("family_id").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    tokenVersion: integer("token_version").notNull(),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
     expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
-    consumedAt: integer("consumed_at", { mode: "timestamp_ms" }),
+    rotatedAt: integer("rotated_at", { mode: "timestamp_ms" }),
     revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
+    authenticatedAt: integer("authenticated_at", { mode: "timestamp_ms" }),
   },
   (table) => [
-    index("system_passkey_enrollments_account_idx").on(table.accountId, table.expiresAt),
+    uniqueIndex("system_sessions_token_hash_uniq").on(table.tokenHash),
+    index("system_sessions_account_idx").on(table.accountId, table.createdAt),
+    index("system_sessions_active_family_idx")
+      .on(table.familyId)
+      .where(sql`${table.revokedAt} IS NULL`),
+    check("system_sessions_id_length", sql`length(${table.id}) BETWEEN 1 AND 255`),
+    check("system_sessions_family_id_length", sql`length(${table.familyId}) BETWEEN 1 AND 255`),
+    check("system_sessions_hash_length", sql`length(${table.tokenHash}) BETWEEN 32 AND 512`),
+    check("system_sessions_token_version", sql`${table.tokenVersion} >= 0`),
+    check("system_sessions_expiration", sql`${table.expiresAt} > ${table.createdAt}`),
     check(
-      "system_passkey_enrollments_hash",
-      sql`length(${table.tokenHash}) = 64 AND ${table.tokenHash} NOT GLOB '*[^0-9a-f]*'`,
+      "system_sessions_rotation_chronology",
+      sql`${table.rotatedAt} IS NULL OR (
+        ${table.rotatedAt} >= ${table.createdAt} AND ${table.rotatedAt} < ${table.expiresAt}
+      )`,
     ),
-    check("system_passkey_enrollments_expiration", sql`${table.expiresAt} > ${table.createdAt}`),
     check(
-      "system_passkey_enrollments_single_outcome",
-      sql`${table.consumedAt} IS NULL OR ${table.revokedAt} IS NULL`,
+      "system_sessions_revocation_chronology",
+      sql`${table.revokedAt} IS NULL OR (
+        ${table.revokedAt} >= ${table.createdAt}
+        AND (${table.rotatedAt} IS NULL OR ${table.revokedAt} >= ${table.rotatedAt})
+      )`,
+    ),
+    check(
+      "system_sessions_authentication_chronology",
+      sql`${table.authenticatedAt} IS NULL OR ${table.authenticatedAt} <= ${table.createdAt}`,
     ),
   ],
 )
 
-export type SystemPasskeyEnrollmentRow = InferSelectModel<typeof systemPasskeyEnrollments>
+export type SystemSessionRow = InferSelectModel<typeof systemSessions>
+
+/** 外部Identity tokenとMCP grantのsingle-use jti。replay検知に必要な最小情報だけを保持する。 */
+export const systemIdentityLoginTokens = sqliteTable(
+  "system_identity_login_tokens",
+  {
+    jti: text("jti").primaryKey(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    usedAt: integer("used_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    index("system_identity_login_tokens_expires_idx").on(table.expiresAt),
+    check("system_identity_login_tokens_jti_length", sql`length(${table.jti}) BETWEEN 1 AND 512`),
+    check("system_identity_login_tokens_expiration", sql`${table.expiresAt} > ${table.usedAt}`),
+  ],
+)
+
+export type SystemIdentityLoginTokenRow = InferSelectModel<typeof systemIdentityLoginTokens>
+
+/** CLI login開始時のsingle-use state。brokerへCLI callback情報を直接露出しない。 */
+export const systemCliLoginStates = sqliteTable(
+  "system_cli_login_states",
+  {
+    state: text("state").primaryKey(),
+    port: integer("port").notNull(),
+    cliState: text("cli_state").notNull(),
+    codeVerifier: text("code_verifier").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    index("system_cli_login_states_expires_idx").on(table.expiresAt),
+    check("system_cli_login_states_state_length", sql`length(${table.state}) BETWEEN 16 AND 512`),
+    check("system_cli_login_states_port", sql`${table.port} BETWEEN 1 AND 65535`),
+    check(
+      "system_cli_login_states_cli_state_length",
+      sql`length(${table.cliState}) BETWEEN 1 AND 512`,
+    ),
+    check(
+      "system_cli_login_states_verifier_length",
+      sql`length(${table.codeVerifier}) BETWEEN 43 AND 128`,
+    ),
+    check("system_cli_login_states_expiration", sql`${table.expiresAt} > ${table.createdAt}`),
+  ],
+)
+
+export type SystemCliLoginStateRow = InferSelectModel<typeof systemCliLoginStates>
+
+/** CLI callbackからtoken交換へAccountと発行時のtoken versionを渡すhashed single-use code。 */
+export const systemCliLoginCodes = sqliteTable(
+  "system_cli_login_codes",
+  {
+    codeHash: text("code_hash").primaryKey(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => systemAccounts.id, { onDelete: "cascade" }),
+    tokenVersion: integer("token_version").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    index("system_cli_login_codes_expires_idx").on(table.expiresAt),
+    check("system_cli_login_codes_hash_length", sql`length(${table.codeHash}) BETWEEN 32 AND 512`),
+    check("system_cli_login_codes_expiration", sql`${table.expiresAt} > ${table.createdAt}`),
+    check("system_cli_login_codes_token_version", sql`${table.tokenVersion} >= 0`),
+  ],
+)
+
+export type SystemCliLoginCodeRow = InferSelectModel<typeof systemCliLoginCodes>
+
+/** 発行元credentialのtoken versionとSession familyへ束縛し、Web browserのtoken交換へ渡すhashed single-use code。 */
+export const systemBrowserLoginCodes = sqliteTable(
+  "system_browser_login_codes",
+  {
+    codeHash: text("code_hash").primaryKey(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => systemAccounts.id, { onDelete: "cascade" }),
+    tokenVersion: integer("token_version").notNull(),
+    sessionFamilyId: text("session_family_id"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    index("system_browser_login_codes_expires_idx").on(table.expiresAt),
+    check(
+      "system_browser_login_codes_hash_length",
+      sql`length(${table.codeHash}) BETWEEN 32 AND 512`,
+    ),
+    check("system_browser_login_codes_expiration", sql`${table.expiresAt} > ${table.createdAt}`),
+    check("system_browser_login_codes_token_version", sql`${table.tokenVersion} >= 0`),
+    check(
+      "system_browser_login_codes_session_family_id_length",
+      sql`${table.sessionFamilyId} IS NULL OR length(${table.sessionFamilyId}) BETWEEN 1 AND 255`,
+    ),
+  ],
+)
+
+export type SystemBrowserLoginCodeRow = InferSelectModel<typeof systemBrowserLoginCodes>
+
+/** 認証アプリのワンタイムコードの秘密鍵（暗号化済み）と復旧コードのhash。Accountごとに1行。 */
+export const systemTotpCredentials = sqliteTable(
+  "system_totp_credentials",
+  {
+    accountId: text("account_id")
+      .$type<AccountId>()
+      .primaryKey()
+      .references(() => systemAccounts.id, { onDelete: "cascade" }),
+    secretCiphertext: text("secret_ciphertext").notNull(),
+    status: text("status").$type<"pending" | "active">().notNull(),
+    lastUsedStep: integer("last_used_step"),
+    recoveryCodeHashes: text("recovery_code_hashes").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+    enabledAt: integer("enabled_at", { mode: "timestamp_ms" }),
+  },
+  (table) => [
+    check(
+      "system_totp_credentials_secret_length",
+      sql`length(${table.secretCiphertext}) BETWEEN 16 AND 512`,
+    ),
+    check(
+      "system_totp_credentials_status",
+      sql`(${table.status} = 'pending' AND ${table.enabledAt} IS NULL) OR (${table.status} = 'active' AND ${table.enabledAt} IS NOT NULL AND ${table.enabledAt} >= ${table.createdAt})`,
+    ),
+  ],
+)
+
+export type SystemTotpCredentialRow = InferSelectModel<typeof systemTotpCredentials>
+
+/** パスワードを確かめた後、ワンタイムコードを待つ間だけ有効なhashed challenge。 */
+export const systemTotpLoginChallenges = sqliteTable(
+  "system_totp_login_challenges",
+  {
+    challengeHash: text("challenge_hash").primaryKey(),
+    accountId: text("account_id")
+      .$type<AccountId>()
+      .notNull()
+      .references(() => systemAccounts.id, { onDelete: "cascade" }),
+    tokenVersion: integer("token_version").notNull(),
+    failedAttempts: integer("failed_attempts").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    index("system_totp_login_challenges_expires_idx").on(table.expiresAt),
+    index("system_totp_login_challenges_account_idx").on(table.accountId),
+    check("system_totp_login_challenges_expiration", sql`${table.expiresAt} > ${table.createdAt}`),
+  ],
+)
+
+export type SystemTotpLoginChallengeRow = InferSelectModel<typeof systemTotpLoginChallenges>
+
+/** raw codeを保存せず、PKCE条件で一度だけ消費するOIDC authorization code。 */
+export const systemOidcAuthorizationCodes = sqliteTable(
+  "system_oidc_authorization_codes",
+  {
+    codeHash: text("code_hash").primaryKey(),
+    issuer: text("issuer").notNull(),
+    clientId: text("client_id").notNull(),
+    redirectUri: text("redirect_uri").notNull(),
+    accountId: text("account_id")
+      .notNull()
+      .$type<AccountId>()
+      .references(() => systemAccounts.id, { onDelete: "cascade" }),
+    codeChallenge: text("code_challenge").notNull(),
+    nonce: text("nonce").notNull(),
+    scope: text("scope").notNull(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    index("system_oidc_authorization_codes_expires_idx").on(table.expiresAt),
+    check(
+      "system_oidc_authorization_codes_hash_length",
+      sql`length(${table.codeHash}) = 64 AND ${table.codeHash} NOT GLOB '*[^0-9a-f]*'`,
+    ),
+    check(
+      "system_oidc_authorization_codes_expiration",
+      sql`${table.expiresAt} > ${table.createdAt}`,
+    ),
+  ],
+)
+
+export type SystemOidcAuthorizationCodeRow = InferSelectModel<typeof systemOidcAuthorizationCodes>
+
+/** raw tokenを保存しない、短命なOIDC UserInfo access token。 */
+export const systemOidcAccessTokens = sqliteTable(
+  "system_oidc_access_tokens",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    issuer: text("issuer").notNull(),
+    clientId: text("client_id").notNull(),
+    accountId: text("account_id")
+      .notNull()
+      .$type<AccountId>()
+      .references(() => systemAccounts.id, { onDelete: "cascade" }),
+    scope: text("scope").notNull(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    index("system_oidc_access_tokens_expires_idx").on(table.expiresAt),
+    check(
+      "system_oidc_access_tokens_hash_length",
+      sql`length(${table.tokenHash}) = 64 AND ${table.tokenHash} NOT GLOB '*[^0-9a-f]*'`,
+    ),
+    check("system_oidc_access_tokens_expiration", sql`${table.expiresAt} > ${table.createdAt}`),
+  ],
+)
+
+export type SystemOidcAccessTokenRow = InferSelectModel<typeof systemOidcAccessTokens>
 
 /** namespaced permissionを束ねるSystem Role。permission vocabulary自体は各contextが所有する。 */
 export const systemIamRoles = sqliteTable(
@@ -607,12 +893,62 @@ export const systemAuditDisclosurePolicyRevisions = sqliteTable(
   ],
 )
 
+/** パスキー招待。raw tokenは持たず、hashと有効期間だけを保存する。 */
+export const systemPasskeyEnrollments = sqliteTable(
+  "system_passkey_enrollments",
+  {
+    id: text("id").primaryKey(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => systemAccounts.id, { onDelete: "restrict" }),
+    identityId: text("identity_id")
+      .notNull()
+      .references(() => systemIdentityBindings.id, { onDelete: "restrict" }),
+    tokenHash: text("token_hash").notNull().unique(),
+    reason: text("reason", {
+      enum: ["bootstrap", "provisioning", "reissue", "recovery"],
+    }).notNull(),
+    issuedByAccountId: text("issued_by_account_id").references(() => systemAccounts.id, {
+      onDelete: "restrict",
+    }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    consumedAt: integer("consumed_at", { mode: "timestamp_ms" }),
+    revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
+  },
+  (table) => [
+    index("system_passkey_enrollments_account_idx").on(table.accountId, table.expiresAt),
+    check(
+      "system_passkey_enrollments_hash",
+      sql`length(${table.tokenHash}) = 64 AND ${table.tokenHash} NOT GLOB '*[^0-9a-f]*'`,
+    ),
+    check("system_passkey_enrollments_expiration", sql`${table.expiresAt} > ${table.createdAt}`),
+    check(
+      "system_passkey_enrollments_single_outcome",
+      sql`${table.consumedAt} IS NULL OR ${table.revokedAt} IS NULL`,
+    ),
+  ],
+)
+
+export type SystemPasskeyEnrollmentRow = InferSelectModel<typeof systemPasskeyEnrollments>
+
 export const systemCoreSchema = {
+  systemPasskeyEnrollments,
   systemAccounts,
   systemIdentityBindings,
   systemIdentityProfiles,
+  systemPasswordCredentials,
+  systemPasswordResetChallenges,
   systemAuthenticationAttempts,
-  systemPasskeyEnrollments,
+  systemSessions,
+  systemIdentityLoginTokens,
+  systemCliLoginStates,
+  systemCliLoginCodes,
+  systemBrowserLoginCodes,
+  systemTotpCredentials,
+  systemTotpLoginChallenges,
+  systemOidcAuthorizationCodes,
+  systemOidcAccessTokens,
   systemIamRoles,
   systemIamRolePermissions,
   systemRoleBindings,

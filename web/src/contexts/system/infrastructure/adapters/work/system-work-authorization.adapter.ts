@@ -57,11 +57,13 @@ WHERE (SELECT at FROM evaluation)<?8 AND account.id=?1 AND account.status='activ
     AND identity.created_at<=(SELECT at FROM evaluation) AND identity.activated_at IS NOT NULL
     AND identity.activated_at<=(SELECT at FROM evaluation)))
   AND (?6 IS NULL OR (principal.kind='human' AND step_up.id IS NOT NULL))
+  AND (?10 IS NULL OR EXISTS (SELECT 1 FROM system_sessions session
+    WHERE session.family_id=?10 AND session.account_id=account.id AND session.revoked_at IS NULL))
   AND (EXISTS (SELECT 1 FROM grants WHERE permission_key='system:admin')
     OR (EXISTS (SELECT 1 FROM grants WHERE permission_key='system:work:read')
       AND EXISTS (SELECT 1 FROM grants WHERE permission_key=?7)))`
 
-/** 現在の主体・操作権限・再認証を固定し、保存と開示の直前にも再検査する。 */
+/** 現在の主体・操作権限・再認証・Session familyの未失効を固定し、保存と開示の直前にも再検査する。 */
 export class SystemWorkAuthorizationAdapter {
   constructor(private readonly c: Context) {
     Object.freeze(this)
@@ -87,6 +89,7 @@ export class SystemWorkAuthorizationAdapter {
       input.permission,
       this.c.authentication.expiresAtMs,
       this.c.authentication.identityBindingId,
+      this.c.authentication.sessionFamilyId,
     ]
     const validTime = () => {
       const now = this.c.var.now().getTime()
@@ -123,8 +126,8 @@ export class SystemWorkAuthorizationAdapter {
           if (!validTime()) return new SystemWorkItemError("forbidden")
           return [
             this.c.env.DB.prepare(`SELECT CASE WHEN EXISTS (SELECT 1 FROM (${authorized}) current
-            WHERE current.principal_id=?10 AND current.kind=?11 AND current.step_up_id IS ?12
-              AND current.is_admin=?13 AND current.proof=?14)
+            WHERE current.principal_id=?11 AND current.kind=?12 AND current.step_up_id IS ?13
+              AND current.is_admin=?14 AND current.proof=?15)
             THEN 1 ELSE json_extract('{}','work_item_authorization_changed') END AS ok`).bind(
               ...parameters(this.c.var.now()),
               snapshot.principal_id,

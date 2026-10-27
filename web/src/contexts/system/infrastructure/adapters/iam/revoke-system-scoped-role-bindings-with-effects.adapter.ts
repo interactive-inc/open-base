@@ -32,7 +32,17 @@ export class RevokeSystemScopedRoleBindingsWithEffectsAdapter {
     const statements: D1PreparedStatement[] = [
       c.database
         .prepare(
-          `SELECT CASE WHEN EXISTS (
+          `SELECT CASE WHEN (EXISTS (
+             SELECT 1 FROM system_accounts admin_actor
+             JOIN system_role_bindings admin_binding ON admin_binding.account_id = admin_actor.id
+             JOIN system_iam_role_permissions admin_permission
+               ON admin_permission.role_id = admin_binding.role_id
+             WHERE admin_actor.id = ?1 AND admin_actor.status = 'active'
+               AND admin_actor.closed_at IS NULL AND admin_binding.revoked_at IS NULL
+               AND admin_binding.resource_type IS NULL
+               AND admin_permission.permission_key = 'system:admin'
+           )
+           OR EXISTS (
            SELECT 1 FROM system_accounts actor
            JOIN system_role_bindings actor_binding ON actor_binding.account_id = actor.id
            JOIN system_iam_role_permissions actor_permission ON actor_permission.role_id = actor_binding.role_id
@@ -41,7 +51,7 @@ export class RevokeSystemScopedRoleBindingsWithEffectsAdapter {
              AND (actor_binding.resource_type IS NULL OR
                (actor_binding.resource_type = ?3 AND actor_binding.resource_id = ?4))
              AND actor_permission.permission_key = ?5
-         ) AND NOT EXISTS (
+         )) AND NOT EXISTS (
            SELECT 1 FROM system_role_bindings current
            WHERE current.account_id = ?2 AND current.resource_type = ?3 AND current.resource_id = ?4
              AND current.revoked_at IS NULL
@@ -54,7 +64,17 @@ export class RevokeSystemScopedRoleBindingsWithEffectsAdapter {
                AND current.resource_type = ?3 AND current.resource_id = ?4
                AND current.revoked_at IS NULL
            )
-         ) AND NOT EXISTS (
+         ) AND (EXISTS (
+             SELECT 1 FROM system_accounts admin_actor
+             JOIN system_role_bindings admin_binding ON admin_binding.account_id = admin_actor.id
+             JOIN system_iam_role_permissions admin_permission
+               ON admin_permission.role_id = admin_binding.role_id
+             WHERE admin_actor.id = ?1 AND admin_actor.status = 'active'
+               AND admin_actor.closed_at IS NULL AND admin_binding.revoked_at IS NULL
+               AND admin_binding.resource_type IS NULL
+               AND admin_permission.permission_key = 'system:admin'
+           )
+           OR NOT EXISTS (
            SELECT 1 FROM system_role_bindings current
            JOIN system_iam_role_permissions target_permission ON target_permission.role_id = current.role_id
            WHERE current.id IN (SELECT value FROM json_each(?6))
@@ -66,7 +86,7 @@ export class RevokeSystemScopedRoleBindingsWithEffectsAdapter {
                    (actor_role.resource_type = ?3 AND actor_role.resource_id = ?4))
                  AND possessed.permission_key = target_permission.permission_key
              )
-         ) AND (?1 <> ?2 OR json_array_length(?6) = 0)
+         )) AND (?1 <> ?2 OR json_array_length(?6) = 0)
          THEN 1 ELSE json_extract('', '$') END AS ok`,
         )
         .bind(
@@ -88,7 +108,16 @@ export class RevokeSystemScopedRoleBindingsWithEffectsAdapter {
                    AND invitation.related_resource_id IN (SELECT value FROM json_each(?3))
                    AND invitation.accepted_by_account_id IS NULL AND invitation.revoked_at IS NULL
                    AND invitation.expires_at > ?4 AND invitation.created_at <= ?4
-                   AND (invitation.id NOT IN (SELECT value FROM json_each(?5)) OR EXISTS (
+                   AND (invitation.id NOT IN (SELECT value FROM json_each(?5)) OR (NOT EXISTS (
+                     SELECT 1 FROM system_accounts admin_actor
+                     JOIN system_role_bindings admin_binding ON admin_binding.account_id = admin_actor.id
+                     JOIN system_iam_role_permissions admin_permission
+                       ON admin_permission.role_id = admin_binding.role_id
+                     WHERE admin_actor.id = ?6 AND admin_actor.status = 'active'
+                       AND admin_actor.closed_at IS NULL AND admin_binding.revoked_at IS NULL
+                       AND admin_binding.resource_type IS NULL
+                       AND admin_permission.permission_key = 'system:admin'
+                   ) AND EXISTS (
                      SELECT 1 FROM system_iam_role_permissions target_permission
                      WHERE target_permission.role_id = invitation.role_id AND NOT EXISTS (
                        SELECT 1 FROM system_role_bindings actor_role
@@ -99,7 +128,7 @@ export class RevokeSystemScopedRoleBindingsWithEffectsAdapter {
                            (actor_role.resource_type = ?1 AND actor_role.resource_id = ?2))
                          AND actor_permission.permission_key = target_permission.permission_key
                      )
-                   ))
+                   )))
                ) AND NOT EXISTS (
                  SELECT 1 FROM json_each(?5) expected
                  WHERE NOT EXISTS (

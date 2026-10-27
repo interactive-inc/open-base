@@ -1,3 +1,4 @@
+import { SystemLastRootGuardAdapter } from "@system/infrastructure/adapters/iam/system-last-root-guard.adapter"
 import type { AccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { IamRoleEntity } from "@system/domain/entities/iam-role.entity"
 import type { IamRoleId } from "@system/domain/schemas/iam/iam-role.schema"
@@ -134,10 +135,13 @@ export class SystemRoleCatalogRepository {
 
     try {
       const statements = [
-        // 付与と剥奪の両方を、actorが持つpermissionの範囲に限る。
-        this.prepareActorRoleGuard(actorAccountId, [
-          ...new Set([...previous.permissionKeys, ...next.permissionKeys]),
-        ]),
+        // 付与と剥奪の両方を、actorが持つpermissionの範囲に限る。読取時の旧permissionに加え、
+        // 保存の時点で格納されているpermissionも照合する。
+        this.prepareActorRoleGuard(
+          actorAccountId,
+          [...new Set([...previous.permissionKeys, ...next.permissionKeys])],
+          previous.id,
+        ),
         this.c.env.DB.prepare(
           `UPDATE system_iam_roles
            SET name = ?2, description = ?3, updated_at = ?4
@@ -202,7 +206,7 @@ export class SystemRoleCatalogRepository {
 
     try {
       const statements = [
-        this.prepareActorRoleGuard(actorAccountId, role.permissionKeys),
+        this.prepareActorRoleGuard(actorAccountId, role.permissionKeys, role.id),
         this.c.env.DB.prepare(
           `SELECT CASE WHEN EXISTS (
              SELECT 1 FROM system_role_bindings
@@ -238,9 +242,15 @@ export class SystemRoleCatalogRepository {
     }
   }
 
+  /**
+   * 操作者がsystem:adminか、iam:writeに加えて対象の全権限をglobalで持つかを保存batchで確かめる。
+   * storedRoleIdを渡すと、事前に読んだ配列に加えて保存時点でそのロールが持つ権限も求める。
+   * 削除のように既存ロールを扱う操作は、読取後に足された権限も操作者が持っていなければ通さない。
+   */
   private prepareActorRoleGuard(
     actorAccountId: AccountId,
     permissionKeys: ReadonlyArray<string>,
+    storedRoleId: IamRoleId | null = null,
   ): D1PreparedStatement {
     return this.c.env.DB.prepare(
       `WITH actor_permissions AS (
@@ -258,15 +268,19 @@ export class SystemRoleCatalogRepository {
          OR (
            EXISTS (SELECT 1 FROM actor_permissions WHERE key = 'iam:write')
            AND NOT EXISTS (
-             SELECT 1 FROM json_each(?2) required_permission
+             SELECT 1 FROM (
+               SELECT CAST(value AS TEXT) AS key FROM json_each(?2)
+               UNION
+               SELECT permission_key AS key FROM system_iam_role_permissions WHERE role_id = ?3
+             ) required_permission
              WHERE NOT EXISTS (
                SELECT 1 FROM actor_permissions actor
-               WHERE actor.key = CAST(required_permission.value AS TEXT)
+               WHERE actor.key = required_permission.key
              )
            )
          )
        THEN 1 ELSE abs(-9223372036854775808) END AS ok`,
-    ).bind(actorAccountId, JSON.stringify(permissionKeys))
+    ).bind(actorAccountId, JSON.stringify(permissionKeys), storedRoleId)
   }
 
   private prepareAssignedAccountTokenGuard(roleId: IamRoleId): D1PreparedStatement {
@@ -283,21 +297,9 @@ export class SystemRoleCatalogRepository {
   }
 
   private prepareLastRootGuard(): D1PreparedStatement {
-    return this.c.env.DB.prepare(
-      `SELECT CASE WHEN EXISTS (
-         SELECT 1
-         FROM system_accounts account
-         INNER JOIN system_identity_bindings identity ON identity.account_id = account.id
-         INNER JOIN system_role_bindings binding ON binding.account_id = account.id
-         INNER JOIN system_iam_role_permissions permission ON permission.role_id = binding.role_id
-         WHERE account.status = 'active'
-           AND identity.activated_at IS NOT NULL
-           AND identity.revoked_at IS NULL
-           AND binding.resource_type IS NULL
-           AND binding.revoked_at IS NULL
-           AND permission.permission_key = 'system:admin'
-       ) THEN 1 ELSE json_extract('', '$') END AS ok`,
-    )
+    return new SystemLastRootGuardAdapter({
+      database: this.c.env.DB,
+    }).prepare()
   }
 
   private toRoles(rows: ReadonlyArray<RoleRow>): ReadonlyArray<IamRoleEntity> | Error {

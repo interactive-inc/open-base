@@ -40,7 +40,7 @@ describe("canonical System core schema", () => {
       comment.includes("DDL-only test harnesses skip compound triggers"),
     )
 
-    expect(triggerMarkers).toHaveLength(18)
+    expect(triggerMarkers).toHaveLength(23)
     expect(comments.filter((comment) => comment.includes(";"))).toEqual([])
   })
 
@@ -85,15 +85,26 @@ describe("canonical System core schema", () => {
       "system_authentication_attempts",
       "system_batch_jobs",
       "system_bootstrap_state",
+      "system_browser_login_codes",
+      "system_cli_login_codes",
+      "system_cli_login_states",
       "system_iam_role_permissions",
       "system_iam_roles",
       "system_identity_bindings",
+      "system_identity_login_tokens",
       "system_identity_profiles",
       "system_notification_deliveries",
       "system_notification_messages",
       "system_notification_resource_scopes",
+      "system_oidc_access_tokens",
+      "system_oidc_authorization_codes",
       "system_passkey_enrollments",
+      "system_password_credentials",
+      "system_password_reset_challenges",
       "system_role_bindings",
+      "system_sessions",
+      "system_totp_credentials",
+      "system_totp_login_challenges",
     ])
 
     for (const table of declaredTables) {
@@ -128,10 +139,23 @@ describe("canonical System core schema", () => {
 
     expect(missingIndexes).toEqual([])
 
+    const passwordColumns = database
+      .query<{ name: string }, []>("PRAGMA table_info(system_password_credentials)")
+      .all()
+      .map((column) => column.name)
+    const sessionColumns = database
+      .query<{ name: string }, []>("PRAGMA table_info(system_sessions)")
+      .all()
+      .map((column) => column.name)
+
+    expect(passwordColumns).toContain("password_hash")
+    expect(passwordColumns).not.toContain("password")
+    expect(sessionColumns).toContain("token_hash")
+    expect(sessionColumns).not.toContain("token")
     database.close()
   })
 
-  test("AccountEntity・Identity・パスキー招待の型、一意性、時系列をfail closedにする", () => {
+  test("AccountEntity・Identity・credential・Sessionの型、一意性、時系列をfail closedにする", () => {
     const database = createDatabase()
 
     expect(() =>
@@ -161,20 +185,13 @@ describe("canonical System core schema", () => {
     database.run(
       `INSERT INTO system_identity_bindings
          (id, account_id, provider, subject, created_at, activated_at)
-       VALUES ('166ce80b-9a6c-4cdc-b3ad-c4cfb962de1f', 'd5858208-e680-4db8-a05d-8bf4f900c24e', 'passkey', 'd5858208-e680-4db8-a05d-8bf4f900c24e', 100, 100)`,
+       VALUES ('166ce80b-9a6c-4cdc-b3ad-c4cfb962de1f', 'd5858208-e680-4db8-a05d-8bf4f900c24e', 'password', 'User@Example.test', 100, 100)`,
     )
     expect(() =>
       database.run(
         `INSERT INTO system_identity_bindings
            (id, account_id, provider, subject, created_at, activated_at)
-         VALUES ('b3460b5f-1fe4-477a-b6fd-c16052906424', 'd5858208-e680-4db8-a05d-8bf4f900c24e', 'passkey', 'd5858208-e680-4db8-a05d-8bf4f900c24e', 100, 100)`,
-      ),
-    ).toThrow()
-    expect(() =>
-      database.run(
-        `INSERT INTO system_identity_bindings
-           (id, account_id, provider, subject, created_at, activated_at)
-         VALUES ('0c1a7f76-6b4e-4d0c-9d6e-6f5d2b8a1c34', 'd5858208-e680-4db8-a05d-8bf4f900c24e', 'password', 'User@Example.test', 100, 100)`,
+         VALUES ('b3460b5f-1fe4-477a-b6fd-c16052906424', 'd5858208-e680-4db8-a05d-8bf4f900c24e', 'password', 'User@Example.test', 100, 100)`,
       ),
     ).toThrow()
     database.run(
@@ -184,39 +201,71 @@ describe("canonical System core schema", () => {
     )
     expect(() =>
       database.run(
+        `INSERT INTO system_password_credentials
+           (identity_id, password_hash, changed_at, created_at, updated_at)
+         VALUES ('67150a57-caa3-49c8-90f0-df6f7a384a07', ?, 100, 100, 100)`,
+        ["h".repeat(64)],
+      ),
+    ).toThrow()
+    database.run(
+      `INSERT INTO system_password_credentials
+         (identity_id, password_hash, changed_at, created_at, updated_at)
+       VALUES ('166ce80b-9a6c-4cdc-b3ad-c4cfb962de1f', ?, 100, 100, 100)`,
+      ["h".repeat(64)],
+    )
+    expect(() =>
+      database.run(
+        `UPDATE system_password_credentials
+         SET changed_at = 99, updated_at = 101
+         WHERE identity_id = '166ce80b-9a6c-4cdc-b3ad-c4cfb962de1f'`,
+      ),
+    ).toThrow()
+    expect(() =>
+      database.run(
         `UPDATE system_identity_bindings
          SET activated_at = 101
          WHERE id = '166ce80b-9a6c-4cdc-b3ad-c4cfb962de1f'`,
       ),
     ).toThrow()
 
-    const enrollment = (id: string, tokenHash: string, extra = "") =>
-      database.run(
-        `INSERT INTO system_passkey_enrollments
-           (id, account_id, identity_id, token_hash, reason, issued_by_account_id,
-            created_at, expires_at${extra === "" ? "" : ", consumed_at, revoked_at"})
-         VALUES (?1, 'd5858208-e680-4db8-a05d-8bf4f900c24e', '166ce80b-9a6c-4cdc-b3ad-c4cfb962de1f',
-                 ?2, 'bootstrap', NULL, 100, 200${extra})`,
-        [id, tokenHash],
-      )
-    // 有効期間が逆、tokenがhashでない、使用済みかつ失効済みの招待は保存できない。
-    expect(() => enrollment("1d3f1e4a-77a5-4c8b-9b6a-0f3c1d2e4b5a", "x".repeat(64))).toThrow()
-    expect(() =>
-      enrollment("2d3f1e4a-77a5-4c8b-9b6a-0f3c1d2e4b5a", "b".repeat(64), ", 150, 150"),
-    ).toThrow()
-    // bootstrapの招待は発行者を持たない。
     expect(() =>
       database.run(
-        `INSERT INTO system_passkey_enrollments
-           (id, account_id, identity_id, token_hash, reason, issued_by_account_id, created_at, expires_at)
-         VALUES ('3d3f1e4a-77a5-4c8b-9b6a-0f3c1d2e4b5a', 'd5858208-e680-4db8-a05d-8bf4f900c24e',
-                 '166ce80b-9a6c-4cdc-b3ad-c4cfb962de1f', ?1, 'bootstrap',
-                 'd5858208-e680-4db8-a05d-8bf4f900c24e', 100, 200)`,
-        ["c".repeat(64)],
+        `INSERT INTO system_sessions
+           (id, account_id, family_id, token_hash, token_version, created_at, expires_at)
+         VALUES ('cd2a6c1c-867a-4626-98c7-12a10baa156f', 'd5858208-e680-4db8-a05d-8bf4f900c24e', 'family-1', ?, 0, 100, 100)`,
+        ["a".repeat(64)],
       ),
     ).toThrow()
-    enrollment("4d3f1e4a-77a5-4c8b-9b6a-0f3c1d2e4b5a", "a".repeat(64))
-    expect(() => enrollment("5d3f1e4a-77a5-4c8b-9b6a-0f3c1d2e4b5a", "a".repeat(64))).toThrow()
+    database.run(
+      `INSERT INTO system_sessions
+         (id, account_id, family_id, token_hash, token_version, created_at, expires_at)
+       VALUES ('525b9676-68a4-4575-8f18-694f41810014', 'd5858208-e680-4db8-a05d-8bf4f900c24e', 'family-1', ?, 0, 100, 200)`,
+      ["a".repeat(64)],
+    )
+    database.run(
+      "UPDATE system_sessions SET rotated_at = 150 WHERE id = '525b9676-68a4-4575-8f18-694f41810014'",
+    )
+    expect(() =>
+      database.run(
+        "UPDATE system_sessions SET rotated_at = 160 WHERE id = '525b9676-68a4-4575-8f18-694f41810014'",
+      ),
+    ).toThrow()
+    database.run(
+      "UPDATE system_sessions SET revoked_at = 170 WHERE id = '525b9676-68a4-4575-8f18-694f41810014'",
+    )
+    expect(() =>
+      database.run(
+        "UPDATE system_sessions SET revoked_at = 180 WHERE id = '525b9676-68a4-4575-8f18-694f41810014'",
+      ),
+    ).toThrow()
+    expect(() =>
+      database.run(
+        `INSERT INTO system_sessions
+           (id, account_id, family_id, token_hash, token_version, created_at, expires_at)
+         VALUES ('261c5041-b688-4a45-92af-92ea330c73dc', 'd5858208-e680-4db8-a05d-8bf4f900c24e', 'family-1', ?, 0, 100, 200)`,
+        ["a".repeat(64)],
+      ),
+    ).toThrow()
 
     database.close()
   })

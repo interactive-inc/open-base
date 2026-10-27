@@ -1,4 +1,4 @@
-import { testAccountId } from "@system/test/system-test-id.test-support"
+import { testAccountId, testDerivedId } from "@system/test/system-test-id.test-support"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { IamRoleEntity } from "@system/domain/entities/iam-role.entity"
 import { RoleBindingEntity } from "@system/domain/entities/role-binding.entity"
@@ -85,7 +85,7 @@ async function insertRoot(
          (id, account_id, provider, subject, created_at, activated_at, revoked_at)
        VALUES (?1, ?2, 'password', ?3, ?4, ?5, NULL)`)
     .bind(
-      `identity-${suffix}`,
+      testDerivedId("identity", suffix),
       accountId,
       `${suffix}@example.com`,
       now.getTime(),
@@ -268,7 +268,18 @@ describe("System account last-root guard", () => {
     await insertRoot(fixture, actorAccountId, "actor", { activatedIdentity: false })
 
     const repository = new SystemAccountCatalogRepository(fixture.context)
-    const update = await repository.setStatus(actorAccountId, rootAccountId, "suspended", now, [])
+    const expected = await repository.find(rootAccountId)
+    expect(expected).not.toBeNull()
+    expect(expected).not.toBeInstanceOf(Error)
+    if (expected === null || expected instanceof Error) return
+
+    const update = await repository.setStatus({
+      actorAccountId,
+      expected,
+      status: "suspended",
+      now,
+      auditStatements: [],
+    })
 
     expect(update).toBe("last_root")
     expect(
@@ -285,13 +296,18 @@ describe("System account last-root guard", () => {
     await insertRoot(fixture, secondRootAccountId, "root2")
 
     const repository = new SystemAccountCatalogRepository(fixture.context)
-    const update = await repository.setStatus(
-      secondRootAccountId,
-      rootAccountId,
-      "suspended",
+    const expected = await repository.find(rootAccountId)
+    expect(expected).not.toBeNull()
+    expect(expected).not.toBeInstanceOf(Error)
+    if (expected === null || expected instanceof Error) return
+
+    const update = await repository.setStatus({
+      actorAccountId: secondRootAccountId,
+      expected,
+      status: "suspended",
       now,
-      [],
-    )
+      auditStatements: [],
+    })
 
     expect(update).toBe("updated")
     expect(
@@ -308,7 +324,18 @@ describe("System account last-root guard", () => {
     await insertRoot(fixture, secondRootAccountId, "root2")
 
     const repository = new SystemAccountCatalogRepository(fixture.context)
-    const update = await repository.setStatus(rootAccountId, rootAccountId, "suspended", now, [])
+    const expected = await repository.find(rootAccountId)
+    expect(expected).not.toBeNull()
+    expect(expected).not.toBeInstanceOf(Error)
+    if (expected === null || expected instanceof Error) return
+
+    const update = await repository.setStatus({
+      actorAccountId: rootAccountId,
+      expected,
+      status: "suspended",
+      now,
+      auditStatements: [],
+    })
 
     expect(update).toBe("forbidden")
     expect(
@@ -317,5 +344,80 @@ describe("System account last-root guard", () => {
         .bind(rootAccountId)
         .first<Record<string, unknown>>(),
     ).toEqual({ status: "active" })
+  })
+})
+
+describe("System role binding actor guard", () => {
+  test("読取後にロールへ足された権限を操作者が持たなければ、古いRoleEntityでの付与は通らない", async () => {
+    const fixture = await createFixture()
+    const operatorAccountId = zAccountId.parse(testAccountId("system-guard-operator"))
+    const targetAccountId = zAccountId.parse(testAccountId("system-guard-target"))
+    await fixture.database
+      .prepare(`INSERT INTO system_accounts (id, status, token_version, created_at, updated_at)
+         VALUES (?1, 'active', 0, ?3, ?3), (?2, 'active', 0, ?3, ?3)`)
+      .bind(operatorAccountId, targetAccountId, now.getTime())
+      .run()
+    await fixture.database
+      .prepare(`INSERT INTO system_iam_roles
+           (id, key, kind, name, description, created_at, updated_at)
+         VALUES ('6f1c2a3b-4d5e-4f60-8a7b-1c2d3e4f5a60', 'test:iam-operator', 'custom', 'IAM operator', NULL, ?1, ?1),
+                ('04635707-bd54-47ea-81d4-38426e3ce8a2', 'system:reader', 'custom', 'Reader', NULL, ?1, ?1)`)
+      .bind(now.getTime())
+      .run()
+    await fixture.database
+      .prepare(`INSERT INTO system_iam_role_permissions (role_id, permission_key)
+         VALUES ('6f1c2a3b-4d5e-4f60-8a7b-1c2d3e4f5a60', 'iam:read'),
+                ('6f1c2a3b-4d5e-4f60-8a7b-1c2d3e4f5a60', 'iam:write'),
+                ('04635707-bd54-47ea-81d4-38426e3ce8a2', 'iam:read')`)
+      .run()
+    await fixture.database
+      .prepare(`INSERT INTO system_role_bindings
+           (id, account_id, role_id, resource_type, resource_id, created_at, revoked_at)
+         VALUES ('7a2b3c4d-5e6f-4a70-8b8c-9d0e1f2a3b40', ?1, '6f1c2a3b-4d5e-4f60-8a7b-1c2d3e4f5a60', NULL, NULL, ?2, NULL)`)
+      .bind(operatorAccountId, now.getTime())
+      .run()
+    // 操作者が読んだ時点のRoleEntity。権限はiam:readだけ。
+    const staleRole = IamRoleEntity.create({
+      id: "04635707-bd54-47ea-81d4-38426e3ce8a2",
+      key: "system:reader",
+      kind: "custom",
+      name: "Reader",
+      description: null,
+      permissionKeys: ["iam:read"],
+      createdAt: now,
+      updatedAt: now,
+    })
+    const binding = RoleBindingEntity.create({
+      id: "8b3c4d5e-6f70-4a81-9c9d-0e1f2a3b4c50",
+      accountId: targetAccountId,
+      roleId: "04635707-bd54-47ea-81d4-38426e3ce8a2",
+      resource: null,
+      createdAt: now,
+      revokedAt: null,
+    })
+    if (staleRole instanceof Error || binding instanceof Error) {
+      throw new Error("fixture entity is invalid")
+    }
+    const repository = new SystemRoleBindingRepository(fixture.context)
+    const countBindings = async () =>
+      await fixture.database
+        .prepare("SELECT count(*) AS total FROM system_role_bindings WHERE account_id = ?1")
+        .bind(targetAccountId)
+        .first<Record<string, unknown>>()
+
+    // 読取後に、別のsystem:adminがロールへ操作者の持たない権限を足した。
+    await fixture.database
+      .prepare(`INSERT INTO system_iam_role_permissions (role_id, permission_key)
+         VALUES ('04635707-bd54-47ea-81d4-38426e3ce8a2', 'system:admin')`)
+      .run()
+    expect(await repository.create(operatorAccountId, staleRole, binding, [])).toBe("forbidden")
+    expect(await countBindings()).toEqual({ total: 0 })
+
+    await fixture.database
+      .prepare(`DELETE FROM system_iam_role_permissions
+         WHERE role_id = '04635707-bd54-47ea-81d4-38426e3ce8a2' AND permission_key = 'system:admin'`)
+      .run()
+    expect(await repository.create(operatorAccountId, staleRole, binding, [])).toBe("created")
+    expect(await countBindings()).toEqual({ total: 1 })
   })
 })

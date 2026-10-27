@@ -11,10 +11,8 @@ import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { proposalDigestSchema } from "@system/domain/schemas/workflow/system-case-reference.schema"
 import { systemFactory } from "@system/interface/request-environment/system-factory"
 import { SystemHTTPException } from "@system/interface/errors"
-import {
-  createSystemSessionApplications,
-  systemTestSignedInSession,
-} from "@system/test/create-system-session-applications.test-support"
+import { AccessTokenService } from "@system/lib/auth/access-token-service"
+import { SYSTEM_ACCESS_TOKEN_PROFILE } from "@system/lib/auth/system-access-token-profile"
 import { GET } from "@system/interface/routes/system.proposals.$number.versions.$version"
 
 // ローカルD1のtemplate作成とDBごとの往復を含むため、既定の5秒を超えることがある。
@@ -96,7 +94,6 @@ async function fixture() {
   const secret = "proposal-history-test-secret"
   const app = systemFactory
     .createApp()
-    .use("*", systemTestSignedInSession)
     .use("*", async (c, next) => {
       c.set("now", () => f.clock.now)
       c.set("database", drizzle(f.db))
@@ -115,7 +112,12 @@ async function fixture() {
     "86bb9cb9-9f16-4b64-865d-2e7954cf484d",
     "282b84eb-787d-4655-a88b-c072960fc970",
   ]) {
-    const token = await issueHumanSession(f.db, account, new Date(f.claims(account).issuedAtMs))
+    const token = await new AccessTokenService({ profile: SYSTEM_ACCESS_TOKEN_PROFILE }).create(
+      { accountId: account, tokenVersion: 0 },
+      secret,
+      new Date(f.claims(account).issuedAtMs),
+    )
+    if (token instanceof Error) throw token
     headers.set(account, { authorization: `Bearer ${token}` })
   }
   const request = (account: string, version = 1) =>
@@ -281,16 +283,3 @@ test("参照中の案件変更は開示を拒否し、再試行で新しい状�
   }
   expect((await f.request("45712a13-6a79-4dff-b2b0-d518052d6101", 2)).status).toBe(200)
 })
-
-/** 人のAccountのサインイン済みセッションを、指定した認証時刻で発行する。 */
-async function issueHumanSession(
-  database: D1Database,
-  accountId: string,
-  authenticatedAt: Date,
-): Promise<string> {
-  const issued = await createSystemSessionApplications({
-    context: { env: { DB: database } },
-  }).issue.execute({ accountId, tokenVersion: 0, now: authenticatedAt, authenticatedAt })
-  if (issued.kind !== "issued") throw new Error("test session was not issued")
-  return issued.accessToken
-}

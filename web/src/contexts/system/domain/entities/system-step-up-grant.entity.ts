@@ -7,7 +7,7 @@ const propsSchema = z
     id: z.string().regex(/^\S{1,255}$/),
     accountId: zAccountId,
     tokenHash: z.string().regex(/^[0-9a-f]{64}$/),
-    method: z.literal("passkey"),
+    method: z.enum(["password", "passkey", "external_identity"]),
     issuedAt: z.date(),
     expiresAt: z.date(),
   })

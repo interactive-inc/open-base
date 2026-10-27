@@ -27,6 +27,7 @@ describe("System Bootstrap HTTP", () => {
       app.request(input, init, {
         DB: fixture.context.env.DB,
         BOOTSTRAP_TOKEN: bootstrapToken,
+        PEPPER_SECRET: "system-bootstrap-test-pepper",
       })
     const client = hc<typeof app>("http://system.test", { fetch: request })
 
@@ -34,6 +35,7 @@ describe("System Bootstrap HTTP", () => {
       json: {
         token: "wrong-bootstrap-token",
         email: "root@example.com",
+        password: "correct horse battery staple",
       },
     })
     expect(Number(invalidCredential.status)).toBe(401)
@@ -42,6 +44,7 @@ describe("System Bootstrap HTTP", () => {
       json: {
         token: bootstrapToken,
         email: "ROOT@example.com",
+        password: "correct horse battery staple",
       },
     })
     expect(created.status).toBe(201)
@@ -49,24 +52,6 @@ describe("System Bootstrap HTTP", () => {
     expect("account_id" in createdBody).toBe(true)
     if (!("account_id" in createdBody)) return
     expect(createdBody.email).toBe("root@example.com")
-    // 初期rootはパスワードを持たず、返した招待でパスキーを登録する。
-    expect(createdBody.passkey_enrollment.token).toMatch(/^[0-9a-f]{64}$/)
-    expect(
-      await fixture.database
-        .prepare(`SELECT identity.provider, identity.subject, identity.activated_at,
-                         enrollment.reason, enrollment.consumed_at
-           FROM system_identity_bindings identity
-           INNER JOIN system_passkey_enrollments enrollment ON enrollment.identity_id = identity.id
-           WHERE identity.account_id = ?1`)
-        .bind(createdBody.account_id)
-        .first<Record<string, unknown>>(),
-    ).toEqual({
-      provider: "passkey",
-      subject: createdBody.account_id,
-      activated_at: null,
-      reason: "bootstrap",
-      consumed_at: null,
-    })
     expect(
       await fixture.database
         .prepare(`SELECT role.key
@@ -94,6 +79,7 @@ describe("System Bootstrap HTTP", () => {
       json: {
         token: bootstrapToken,
         email: "other@example.com",
+        password: "another correct horse battery staple",
       },
     })
     expect(Number(repeated.status)).toBe(409)
@@ -106,13 +92,9 @@ describe("System Bootstrap HTTP", () => {
     })
     expect(
       await fixture.database
-        .prepare("SELECT action FROM system_audit_events ORDER BY action")
-        .all<Record<string, unknown>>()
-        .then((rows) => rows.results),
-    ).toEqual([
-      { action: "auth.passkey_enrollment.issued" },
-      { action: "system.bootstrap.completed" },
-    ])
+        .prepare("SELECT count(*) AS total FROM system_audit_events")
+        .first<Record<string, unknown>>(),
+    ).toEqual({ total: 1 })
   })
 
   test("bootstrap credential未設定時はvalidatorより先に経路を隠す", async () => {
@@ -131,7 +113,7 @@ describe("System Bootstrap HTTP", () => {
         headers: { "content-type": "application/json" },
         body: "{}",
       },
-      { DB: fixture.context.env.DB },
+      { DB: fixture.context.env.DB, PEPPER_SECRET: "system-bootstrap-test-pepper" },
     )
 
     expect(response.status).toBe(404)

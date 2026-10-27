@@ -99,7 +99,7 @@ beforeAll(async () => {
   }
 
   const bootstrap = await http("POST", "/system/bootstrap", {
-    body: { token: env.BOOTSTRAP_TOKEN, email: "root@example.com" },
+    body: { method: "passkey", token: env.BOOTSTRAP_TOKEN, email: "root@example.com" },
   })
   expect(bootstrap.status).toBe(201)
   const root = z.object({ account_id: z.string() }).parse(bootstrap.body)

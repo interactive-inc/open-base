@@ -159,7 +159,9 @@ describe("氏名・雇用区分の時点参照", () => {
     )
     await execSql(
       database,
-      `INSERT INTO company_resource_revisions VALUES
+      `INSERT INTO company_resource_revisions
+        (organization_id, resource_type, resource_id, revision, state, effective_from, effective_to, attributes_json)
+      VALUES
       ('01900060-0000-7000-8000-e53d7d4223a9', 'employment', 'employment:1', 4, 'active', '2026-09-01', '2026-10-01', '{"employeeId":"employee:1","employmentType":"FULL_TIME"}');`,
     )
     expect((await employmentAttributes(database, "2026-09-01T00:00:00Z"))[0]?.type).toBe(

@@ -53,7 +53,7 @@ CREATE TABLE system_step_up_grants (
   token_hash TEXT NOT NULL UNIQUE CHECK (
     length(token_hash) = 64 AND token_hash NOT GLOB '*[^0-9a-f]*'
   ),
-  method TEXT NOT NULL CHECK (method IN ('passkey', 'password', 'external_identity')),
+  method TEXT NOT NULL CHECK (method IN ('password', 'passkey', 'external_identity')),
   issued_at INTEGER NOT NULL CHECK (issued_at >= 0),
   expires_at INTEGER NOT NULL CHECK (expires_at > issued_at),
   last_used_at INTEGER CHECK (

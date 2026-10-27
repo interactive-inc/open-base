@@ -15,5 +15,5 @@ Companyを共有する製品はこのdirectoryを全ファイル同一に保ち�
 ## 検証
 
 ```bash
-bun test src/contexts/company/lib/workforce
+bun test contexts/company/lib/workforce
 ```

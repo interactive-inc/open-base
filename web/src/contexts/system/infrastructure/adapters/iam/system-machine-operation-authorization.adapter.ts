@@ -41,6 +41,7 @@ export class SystemMachineOperationAuthorizationAdapter {
       tokenVersion: input.actor.tokenVersion,
       issuedAtMs: input.actor.issuedAtMs,
       machineCredentialId: input.actor.credentialId,
+      sessionFamilyId: null,
       at: input.now,
     })
     if (state instanceof Error) return state

@@ -2,10 +2,7 @@ import { describe, expect, setDefaultTimeout, spyOn, test } from "bun:test"
 import { drizzle } from "drizzle-orm/d1"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { StoreAttachment } from "@system/application/attachments/store-attachment"
-import {
-  createSystemSessionApplications,
-  systemTestSignedInSession,
-} from "@system/test/create-system-session-applications.test-support"
+import { createSystemSessionApplications } from "@system/test/create-system-session-applications.test-support"
 import { systemFactory } from "@system/interface/request-environment/system-factory"
 import { POST } from "@system/interface/routes/system.attachments.purge-unlinked"
 import { systemAttachmentSchema } from "@system/infrastructure/schema/system-attachment"
@@ -90,7 +87,6 @@ async function createFixture(options: { storageConfigured?: boolean } = {}): Pro
 
   const app = systemFactory
     .createApp()
-    .use("*", systemTestSignedInSession)
     .use("*", async (context, next) => {
       context.set("now", () => purgeAt)
       context.set("database", database)
@@ -100,7 +96,7 @@ async function createFixture(options: { storageConfigured?: boolean } = {}): Pro
 
   const applications = createSystemSessionApplications({
     context: { env: { DB: db } },
-
+    jwtSecret,
     sessionTtlMilliseconds: 604_800_000,
   })
 

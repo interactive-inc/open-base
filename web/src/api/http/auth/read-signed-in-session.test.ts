@@ -16,10 +16,30 @@ describe("readSignedInSession", () => {
       accountId: base.userId,
       sessionId: "session-1",
       authenticatedAt: base.createdAt,
+      createdAt: base.createdAt,
       expiresAt: base.expiresAt,
       method: "passkey",
       accountTokenVersion: 0,
     })
+  })
+
+  test("OIDCのセッションは、IdPでの認証時刻を認証の時刻にする", () => {
+    const authenticatedAt = new Date("2025-12-31T23:59:00Z")
+    expect(
+      readSignedInSession({
+        session: {
+          ...base,
+          authenticationMethod: "oidc",
+          authenticatedAt: authenticatedAt.getTime(),
+        },
+      }),
+    ).toMatchObject({ method: "oidc", authenticatedAt })
+  })
+
+  test("配備で選んでいない方式の既存セッションを受け付けない", () => {
+    expect(readSignedInSession({ session: base }, "password")).toBeNull()
+    expect(readSignedInSession({ session: base }, null)).toBeNull()
+    expect(readSignedInSession({ session: base }, "passkey")).not.toBeNull()
   })
 
   test("セッションが無ければnull", () => {

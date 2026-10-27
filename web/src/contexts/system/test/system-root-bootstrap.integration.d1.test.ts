@@ -1,11 +1,10 @@
 import { execSql } from "@system/test/local-d1/exec-sql.test-support"
 import {
   BootstrapSystemRoot,
-  type SystemRootEnrollmentIssuer,
+  type SystemPasswordHasher,
 } from "@system/application/iam/bootstrap-system-root"
 import { createLocalD1Database } from "@system/test/local-d1/create-local-d1-database.test-support"
 import { D1SystemRootBootstrapAdapter } from "@system/infrastructure/adapters/iam/d1-system-root-bootstrap.adapter"
-import { prepareSystemPasskeyEnrollment } from "@system/interface/operations/prepare-system-passkey-enrollment"
 import { describe, expect, setDefaultTimeout, test } from "bun:test"
 import { readFileSync } from "node:fs"
 
@@ -25,6 +24,7 @@ const principalSchema = readFileSync(
   "utf8",
 )
 const now = new Date("2026-08-19T00:00:00.000Z")
+const passwordHash = "pbkdf2$sha256$test-password-hash"
 async function createFixture(): Promise<{
   application: BootstrapSystemRoot
   database: D1Database
@@ -36,16 +36,12 @@ async function createFixture(): Promise<{
   const repository = new D1SystemRootBootstrapAdapter({
     env: { DB: database },
   })
-  const enrollmentIssuer: SystemRootEnrollmentIssuer = {
-    prepare: (input) =>
-      prepareSystemPasskeyEnrollment(
-        { env: { DB: database } },
-        { ...input, reason: "bootstrap", issuedByAccountId: null },
-      ),
+  const passwordHasher: SystemPasswordHasher = {
+    hash: async () => passwordHash,
   }
 
   return {
-    application: new BootstrapSystemRoot({ enrollmentIssuer, repository }),
+    application: new BootstrapSystemRoot({ passwordHasher, repository }),
     database,
     repository,
   }
@@ -59,11 +55,12 @@ async function count(database: D1Database, table: string): Promise<number> {
 }
 
 describe("System root bootstrap", () => {
-  test("Companyなしでcanonical System AccountとパスキーIdentityとglobal rootを原子的に作る", async () => {
+  test("Companyなしでcanonical System Accountとcredentialとglobal rootを原子的に作る", async () => {
     const { application, database } = await createFixture()
 
     const result = await application.execute({
       email: "  ROOT@Example.COM ",
+      password: "correct horse battery staple",
       now,
     })
 
@@ -75,28 +72,24 @@ describe("System root bootstrap", () => {
       await database
         .prepare(`SELECT account.status, account.token_version,
                   identity.provider, identity.subject,
-                  identity.activated_at, profile.email, profile.email_verified,
-                  enrollment.reason, enrollment.expires_at, enrollment.consumed_at
+                  profile.email, profile.email_verified,
+                  credential.password_hash
            FROM system_accounts account
            INNER JOIN system_identity_bindings identity ON identity.account_id = account.id
            INNER JOIN system_identity_profiles profile ON profile.identity_id = identity.id
-           INNER JOIN system_passkey_enrollments enrollment ON enrollment.identity_id = identity.id
+           INNER JOIN system_password_credentials credential ON credential.identity_id = identity.id
            WHERE account.id = ?1`)
         .bind(result.accountId)
         .first<Record<string, unknown>>(),
     ).toEqual({
       status: "active",
       token_version: 0,
-      provider: "passkey",
-      subject: result.accountId,
-      activated_at: null,
+      provider: "password",
+      subject: "root@example.com",
       email: "root@example.com",
       email_verified: 1,
-      reason: "bootstrap",
-      expires_at: result.enrollment.expiresAt.getTime(),
-      consumed_at: null,
+      password_hash: passwordHash,
     })
-    expect(result.enrollment.token).toMatch(/^[0-9a-f]{64}$/)
     expect(
       await database
         .prepare(`SELECT role.key, role.kind, binding.resource_type, binding.resource_id
@@ -139,7 +132,7 @@ describe("System root bootstrap", () => {
     expect(
       await database
         .prepare(`SELECT actor_account_id, action, target_type, target_id, outcome, occurred_at
-           FROM system_audit_events WHERE action = 'system.bootstrap.completed'`)
+           FROM system_audit_events`)
         .first<Record<string, unknown>>(),
     ).toEqual({
       actor_account_id: null,
@@ -161,6 +154,7 @@ describe("System root bootstrap", () => {
     const { application, database } = await createFixture()
     const command = {
       email: "root@example.com",
+      password: "correct horse battery staple",
       now,
     }
 
@@ -180,8 +174,7 @@ describe("System root bootstrap", () => {
     expect(await count(database, "system_identity_bindings")).toBe(1)
     expect(await count(database, "system_role_bindings")).toBe(1)
     expect(await count(database, "system_bootstrap_state")).toBe(1)
-    expect(await count(database, "system_audit_events")).toBe(2)
-    expect(await count(database, "system_passkey_enrollments")).toBe(1)
+    expect(await count(database, "system_audit_events")).toBe(1)
   })
 
   test("Accountが先に存在する不完全環境は上書きせずfail closedする", async () => {
@@ -195,6 +188,7 @@ describe("System root bootstrap", () => {
     expect(
       await application.execute({
         email: "root@example.com",
+        password: "correct horse battery staple",
         now,
       }),
     ).toEqual({
@@ -214,6 +208,7 @@ describe("System root bootstrap", () => {
     const { application, database } = await createFixture()
     const command = {
       email: "root@example.com",
+      password: "correct horse battery staple",
       now,
     }
 
@@ -232,8 +227,7 @@ describe("System root bootstrap", () => {
     ).toHaveLength(1)
     expect(await count(database, "system_identity_bindings")).toBe(1)
     expect(await count(database, "system_role_bindings")).toBe(1)
-    expect(await count(database, "system_audit_events")).toBe(2)
-    expect(await count(database, "system_passkey_enrollments")).toBe(1)
+    expect(await count(database, "system_audit_events")).toBe(1)
   })
 
   test("System監査が保存できなければbootstrap全体と新規root roleをrollbackする", async () => {
@@ -252,6 +246,7 @@ describe("System root bootstrap", () => {
     expect(
       await application.execute({
         email: "root@example.com",
+        password: "correct horse battery staple",
         now,
       }),
     ).toBeInstanceOf(Error)
@@ -260,7 +255,6 @@ describe("System root bootstrap", () => {
     expect(await count(database, "system_iam_roles")).toBe(0)
     expect(await count(database, "system_bootstrap_state")).toBe(0)
     expect(await count(database, "system_audit_events")).toBe(0)
-    expect(await count(database, "system_passkey_enrollments")).toBe(0)
   })
 
   test("既存managed System root roleを再利用し複数候補なら変更前に拒否する", async () => {
@@ -276,6 +270,7 @@ describe("System root bootstrap", () => {
     )
     const reused = await first.application.execute({
       email: "root@example.com",
+      password: "correct horse battery staple",
       now,
     })
     expect(reused).not.toBeInstanceOf(Error)
@@ -301,6 +296,7 @@ describe("System root bootstrap", () => {
     expect(
       await second.application.execute({
         email: "root@example.com",
+        password: "correct horse battery staple",
         now,
       }),
     ).toBeInstanceOf(Error)
@@ -308,13 +304,13 @@ describe("System root bootstrap", () => {
     expect(await count(second.database, "system_bootstrap_state")).toBe(0)
   })
 
-  test("不正な時刻とemailは招待とrepositoryへ到達させない", async () => {
-    let enrollmentCalls = 0
+  test("不正な時刻・email・passwordはhashとrepositoryへ到達させない", async () => {
+    let hashCalls = 0
     let repositoryCalls = 0
-    const enrollmentIssuer: SystemRootEnrollmentIssuer = {
-      prepare: async () => {
-        enrollmentCalls += 1
-        return new Error("must not be called")
+    const passwordHasher: SystemPasswordHasher = {
+      hash: async () => {
+        hashCalls += 1
+        return passwordHash
       },
     }
     const repository: Pick<D1SystemRootBootstrapAdapter, "bootstrap"> = {
@@ -323,16 +319,25 @@ describe("System root bootstrap", () => {
         return new Error("must not be called")
       },
     }
-    const application = new BootstrapSystemRoot({ enrollmentIssuer, repository })
+    const application = new BootstrapSystemRoot({ passwordHasher, repository })
 
     expect(
-      await application.execute({ email: "root@example.com", now: new Date(Number.NaN) }),
+      await application.execute({
+        email: "root@example.com",
+        password: "correct horse battery staple",
+        now: new Date(Number.NaN),
+      }),
     ).toEqual({ kind: "invalid_input", reason: "invalid_time" })
-    expect(await application.execute({ email: "not-an-email", now })).toEqual({
-      kind: "invalid_input",
-      reason: "invalid_email",
-    })
-    expect(enrollmentCalls).toBe(0)
+    expect(
+      await application.execute({ email: "not-an-email", password: "a".repeat(12), now }),
+    ).toEqual({ kind: "invalid_input", reason: "invalid_email" })
+    expect(
+      await application.execute({ email: "root@example.com", password: "a".repeat(11), now }),
+    ).toEqual({ kind: "invalid_input", reason: "password_too_short" })
+    expect(
+      await application.execute({ email: "root@example.com", password: "a".repeat(201), now }),
+    ).toEqual({ kind: "invalid_input", reason: "password_too_long" })
+    expect(hashCalls).toBe(0)
     expect(repositoryCalls).toBe(0)
   })
 })

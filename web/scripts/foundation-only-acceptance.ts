@@ -40,6 +40,7 @@ async function signIn(
   const tokenVersion = await readSystemAccountTokenVersion(
     { env: { DB: env.DB as D1Database } },
     accountId,
+    "passkey",
   )
   if (tokenVersion instanceof Error) throw tokenVersion
   if (tokenVersion === null) return null
@@ -51,6 +52,7 @@ async function signIn(
     authenticatedAt,
     expiresAt: new Date(authenticatedAt.getTime() + 7 * 24 * 60 * 60 * 1000),
     method: options.method ?? "passkey",
+    createdAt: new Date(),
     accountTokenVersion: tokenVersion,
   })
   return token
@@ -140,7 +142,7 @@ try {
     .parse(
       expectStatus(
         await call(env, "POST", "/system/bootstrap", {
-          body: { token: env.BOOTSTRAP_TOKEN, email: "root@example.com" },
+          body: { token: env.BOOTSTRAP_TOKEN, email: "root@example.com", method: "passkey" },
         }),
         201,
         "System初期化",
@@ -170,19 +172,23 @@ try {
   })
   assert.ok(staleRoot !== null)
   expectStatus(
-    await call(env, "POST", "/system/step-up-grants", { token: staleRoot }),
+    await call(env, "POST", "/system/step-up-grants", {
+      token: staleRoot,
+      body: { method: "session" },
+    }),
     401,
     "古いサインインの再認証",
   )
-  const stepUp = z
-    .object({ step_up_token: z.string() })
-    .parse(
-      expectStatus(
-        await call(env, "POST", "/system/step-up-grants", { token: root }),
-        201,
-        "パスキーの再認証",
-      ),
-    ).step_up_token
+  const stepUp = z.object({ step_up_token: z.string() }).parse(
+    expectStatus(
+      await call(env, "POST", "/system/step-up-grants", {
+        token: root,
+        body: { method: "session" },
+      }),
+      201,
+      "パスキーの再認証",
+    ),
+  ).step_up_token
   const elevated = { "x-system-step-up": stepUp }
   expectStatus(
     await call(env, "POST", "/system/accounts", { token: root }),
@@ -413,12 +419,18 @@ try {
   const memberDevice = await signIn(env, member.id, { method: "device" })
   assert.ok(memberDevice !== null)
   expectStatus(
-    await call(env, "POST", "/system/step-up-grants", { token: memberDevice }),
+    await call(env, "POST", "/system/step-up-grants", {
+      token: memberDevice,
+      body: { method: "session" },
+    }),
     401,
     "デバイス認証のセッションでの再認証",
   )
   expectStatus(
-    await call(env, "POST", "/system/step-up-grants", { token: memberSession.access_token }),
+    await call(env, "POST", "/system/step-up-grants", {
+      token: memberSession.access_token,
+      body: { method: "session" },
+    }),
     201,
     "パスキーの再認証",
   )

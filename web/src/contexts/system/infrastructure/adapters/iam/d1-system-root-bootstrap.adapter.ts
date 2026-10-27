@@ -1,6 +1,8 @@
+import { SystemPasskeyEnrollmentAdapter } from "@system/infrastructure/adapters/auth/system-passkey-enrollment.adapter"
 import type { SystemAuditEventEntity } from "@system/domain/entities/system-audit-event.entity"
 import { zAccountId, type AccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { zIdentityId, type IdentityId } from "@system/domain/schemas/identity/identity-id.schema"
+import type { IdentitySubject } from "@system/domain/schemas/identity/identity-subject.schema"
 import {
   roleBindingIdSchema,
   type RoleBindingId,
@@ -22,17 +24,19 @@ const SYSTEM_ROOT_PERMISSION_KEYS = ["iam:read", "iam:write", "system:admin"] as
 export type SystemRootBootstrapWrite = Readonly<{
   accountId: AccountId
   identityId: IdentityId
+  identitySubject: IdentitySubject
   email: string
+  passwordHash: string | null
+  identityProvider: "password" | "passkey" | "oidc"
   rootBindingId: RoleBindingId
   occurredAt: Date
   auditEvent: SystemAuditEventEntity<AccountId>
-  /** 初期rootのパスキー招待。Identityの作成より後に実行する。 */
-  enrollmentStatements: ReadonlyArray<D1PreparedStatement>
 }>
 
 export type SystemRootBootstrapAdapterResult =
   | Readonly<{
       kind: "created"
+      enrollment: Readonly<{ token: string; expiresAt: Date }> | null
       accountId: AccountId
       identityId: IdentityId
       rootBindingId: RoleBindingId
@@ -67,6 +71,17 @@ export class D1SystemRootBootstrapAdapter {
     const role = await this.resolveRootRole()
     if (role instanceof Error) return role
 
+    const enrollment =
+      write.identityProvider === "passkey"
+        ? await new SystemPasskeyEnrollmentAdapter(this.c).prepare({
+            accountId: write.accountId,
+            identityId: write.identityId,
+            reason: "bootstrap",
+            issuedByAccountId: null,
+            now: write.occurredAt,
+          })
+        : null
+    if (enrollment instanceof Error) return enrollment
     const database = this.c.env.DB
     const statements: D1PreparedStatement[] = []
     if (role.create) {
@@ -115,9 +130,16 @@ export class D1SystemRootBootstrapAdapter {
         .prepare(
           `INSERT INTO system_identity_bindings
              (id, account_id, provider, subject, created_at, activated_at, revoked_at)
-           VALUES (?1, ?2, 'passkey', ?2, ?3, NULL, NULL)`,
+           VALUES (?1, ?2, ?5, ?3, ?4, ?6, NULL)`,
         )
-        .bind(write.identityId, write.accountId, write.occurredAt.getTime()),
+        .bind(
+          write.identityId,
+          write.accountId,
+          write.identitySubject,
+          write.occurredAt.getTime(),
+          write.identityProvider,
+          write.identityProvider === "passkey" ? null : write.occurredAt.getTime(),
+        ),
       database
         .prepare(
           `INSERT INTO system_identity_profiles
@@ -125,6 +147,17 @@ export class D1SystemRootBootstrapAdapter {
            VALUES (?1, ?2, 1, NULL, ?3)`,
         )
         .bind(write.identityId, write.email, write.occurredAt.getTime()),
+      ...(write.passwordHash === null
+        ? []
+        : [
+            database
+              .prepare(
+                `INSERT INTO system_password_credentials
+             (identity_id, password_hash, changed_at, created_at, updated_at)
+           VALUES (?1, ?2, ?3, ?3, ?3)`,
+              )
+              .bind(write.identityId, write.passwordHash, write.occurredAt.getTime()),
+          ]),
       database
         .prepare(
           `INSERT INTO system_role_bindings
@@ -140,7 +173,7 @@ export class D1SystemRootBootstrapAdapter {
         )
         .bind(write.accountId, write.rootBindingId, write.occurredAt.getTime()),
       ...new SystemAuditEventRepository(this.c).prepareAppend(write.auditEvent),
-      ...write.enrollmentStatements,
+      ...(enrollment?.statements ?? []),
     )
 
     try {
@@ -162,6 +195,8 @@ export class D1SystemRootBootstrapAdapter {
 
     return Object.freeze({
       kind: "created" as const,
+      enrollment:
+        enrollment === null ? null : { token: enrollment.token, expiresAt: enrollment.expiresAt },
       accountId: write.accountId,
       identityId: write.identityId,
       rootBindingId: write.rootBindingId,
@@ -201,20 +236,17 @@ export class D1SystemRootBootstrapAdapter {
          FROM system_bootstrap_state state
          INNER JOIN system_identity_bindings identity
            ON identity.account_id = state.completed_by_account_id
-          AND identity.provider = 'passkey'
+          AND identity.provider IN ('password', 'passkey', 'oidc')
           AND identity.revoked_at IS NULL
          INNER JOIN system_identity_profiles profile
            ON profile.identity_id = identity.id
           AND profile.email IS NOT NULL
          WHERE state.singleton = 1
          ORDER BY identity.created_at, identity.id
-         LIMIT 2`,
+         LIMIT 1`,
       ).all<CompletedBootstrapRow>()
       if (!result.success) return new Error("failed to read System bootstrap state")
       if (result.results.length === 0) return null
-      if (result.results.length !== 1) {
-        return new Error("System bootstrap account has multiple active passkey identities")
-      }
 
       const row = result.results[0]!
       const accountId = zAccountId.safeParse(row.account_id)

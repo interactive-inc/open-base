@@ -8,7 +8,9 @@ import type {
   SystemEmailContext,
   SystemExternalIdentityContext,
   SystemJwtSecretContext,
+  SystemPasswordHashContext,
   SystemRequestAuditContext,
+  SystemSessionConfigurationContext,
 } from "@system/configuration/system-context"
 import { createFactory } from "hono/factory"
 
@@ -19,6 +21,8 @@ type SystemInterfaceContext = SystemDatabaseContext &
   SystemAuthorizationContext &
   SystemBootstrapContext &
   SystemJwtSecretContext &
+  SystemPasswordHashContext &
+  SystemSessionConfigurationContext &
   SystemRequestAuditContext &
   SystemEmailContext &
   SystemExternalIdentityContext

@@ -6,11 +6,12 @@ import { SYSTEM_ACCESS_TOKEN_PROFILE } from "@system/lib/auth/system-access-toke
 type Props = Readonly<{
   accountId: AccountId
   tokenVersion: number
-  machineCredentialId: string
+  sessionFamilyId?: string
+  machineCredentialId?: string
   now: Date
 }>
 
-/** 機械credentialのaccess tokenを、製品名を含まない固定profileで署名する。人のログインには使わない。 */
+/** 製品名を含まない固定profileでSystem access tokenを署名する。 */
 export class SystemAccessTokenIssuer {
   constructor(private readonly secret: string) {
     Object.freeze(this)
@@ -24,6 +25,7 @@ export class SystemAccessTokenIssuer {
       {
         accountId: String(input.accountId),
         tokenVersion: input.tokenVersion,
+        sessionFamilyId: input.sessionFamilyId,
         machineCredentialId: input.machineCredentialId,
       },
       accessTokenSecret.toString(),

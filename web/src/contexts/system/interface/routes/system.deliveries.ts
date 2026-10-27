@@ -142,8 +142,24 @@ export const POST = systemFactory.createHandlers(
       if (result instanceof Error) throw new SystemDeliveryUnavailableError(result)
       if (result === "conflict") throw new SystemDeliveryConflictError()
       return context.json(
-        { id: body.id, kind: body.kind, replayed: result === "replayed" },
-        result === "replayed" ? 200 : 201,
+        { id: result.message.id, kind: body.kind, replayed: result.status === "replayed" },
+        result.status === "replayed" ? 200 : 201,
+      )
+    }
+
+    const replay = await repository.replay({
+      kind: body.kind,
+      operationKey: body.kind === "job" ? body.operation_key : body.topic,
+      idempotencyKey: body.idempotency_key,
+      payloadDigest: body.payload_digest,
+      handlerKey: null,
+    })
+    if (replay instanceof Error) throw new SystemDeliveryUnavailableError(replay)
+    if (replay === "conflict") throw new SystemDeliveryConflictError()
+    if (replay !== null) {
+      return context.json(
+        { delivery: systemDeliveryResponse(replay.delivery), replayed: true },
+        200,
       )
     }
 
@@ -202,8 +218,8 @@ export const POST = systemFactory.createHandlers(
     if (result instanceof Error) throw new SystemDeliveryUnavailableError(result)
     if (result === "conflict") throw new SystemDeliveryConflictError()
     return context.json(
-      { delivery: systemDeliveryResponse(delivery), replayed: result === "replayed" },
-      result === "replayed" ? 200 : 201,
+      { delivery: systemDeliveryResponse(result.delivery), replayed: result.status === "replayed" },
+      result.status === "replayed" ? 200 : 201,
     )
   },
 )

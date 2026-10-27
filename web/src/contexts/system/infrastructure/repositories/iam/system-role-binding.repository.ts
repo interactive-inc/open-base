@@ -1,3 +1,4 @@
+import { SystemLastRootGuardAdapter } from "@system/infrastructure/adapters/iam/system-last-root-guard.adapter"
 import type { AccountId } from "@system/domain/schemas/iam/account-id.schema"
 import type { IamRoleEntity } from "@system/domain/entities/iam-role.entity"
 import { RoleBindingEntity } from "@system/domain/entities/role-binding.entity"
@@ -84,7 +85,7 @@ export class SystemRoleBindingRepository {
 
     try {
       const statements = [
-        this.prepareActorRoleGuard(actorAccountId, role.permissionKeys),
+        this.prepareActorRoleGuard(actorAccountId, role.id),
         this.c.env.DB.prepare(
           `INSERT INTO system_role_bindings
              (id, account_id, role_id, resource_type, resource_id, created_at, revoked_at)
@@ -148,7 +149,7 @@ export class SystemRoleBindingRepository {
 
     try {
       const statements = [
-        this.prepareActorRoleGuard(actorAccountId, role.permissionKeys),
+        this.prepareActorRoleGuard(actorAccountId, role.id),
         this.c.env.DB.prepare(
           `UPDATE system_role_bindings
            SET revoked_at = ?2
@@ -195,10 +196,11 @@ export class SystemRoleBindingRepository {
     }
   }
 
-  private prepareActorRoleGuard(
-    actorAccountId: AccountId,
-    permissionKeys: ReadonlyArray<string>,
-  ): D1PreparedStatement {
+  /**
+   * 付与・失効するロールの権限は、事前に読んだRoleEntityではなく保存時点の行で照合する。
+   * 読取後にsystem:adminがロールへ権限を足しても、操作者が持たない権限は渡せない。
+   */
+  private prepareActorRoleGuard(actorAccountId: AccountId, roleId: string): D1PreparedStatement {
     return this.c.env.DB.prepare(
       `WITH actor_permissions AS (
          SELECT DISTINCT permission.permission_key AS key
@@ -215,33 +217,22 @@ export class SystemRoleBindingRepository {
          OR (
            EXISTS (SELECT 1 FROM actor_permissions WHERE key = 'iam:write')
            AND NOT EXISTS (
-             SELECT 1 FROM json_each(?2) required_permission
-             WHERE NOT EXISTS (
-               SELECT 1 FROM actor_permissions actor
-               WHERE actor.key = CAST(required_permission.value AS TEXT)
-             )
+             SELECT 1 FROM system_iam_role_permissions required_permission
+             WHERE required_permission.role_id = ?2
+               AND NOT EXISTS (
+                 SELECT 1 FROM actor_permissions actor
+                 WHERE actor.key = required_permission.permission_key
+               )
            )
          )
        THEN 1 ELSE abs(-9223372036854775808) END AS ok`,
-    ).bind(actorAccountId, JSON.stringify(permissionKeys))
+    ).bind(actorAccountId, roleId)
   }
 
   private prepareLastRootGuard(): D1PreparedStatement {
-    return this.c.env.DB.prepare(
-      `SELECT CASE WHEN EXISTS (
-         SELECT 1
-         FROM system_accounts account
-         INNER JOIN system_identity_bindings identity ON identity.account_id = account.id
-         INNER JOIN system_role_bindings binding ON binding.account_id = account.id
-         INNER JOIN system_iam_role_permissions permission ON permission.role_id = binding.role_id
-         WHERE account.status = 'active'
-           AND identity.activated_at IS NOT NULL
-           AND identity.revoked_at IS NULL
-           AND binding.resource_type IS NULL
-           AND binding.revoked_at IS NULL
-           AND permission.permission_key = 'system:admin'
-       ) THEN 1 ELSE json_extract('', '$') END AS ok`,
-    )
+    return new SystemLastRootGuardAdapter({
+      database: this.c.env.DB,
+    }).prepare()
   }
 
   private toBinding(row: BindingRow): RoleBindingEntity | Error {

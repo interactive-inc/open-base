@@ -47,7 +47,6 @@ function toCriteria(props: {
   const indexes: number[] = []
 
   for (const [index, criterion] of props.criteria.entries()) {
-    if (criterion.kind === "technical_role") continue
     if (criterion.kind === "employee") {
       const employeeId = byCode.get(criterion.employeeCode)
       if (employeeId === undefined) {

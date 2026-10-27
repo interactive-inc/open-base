@@ -1,3 +1,6 @@
+import { readSignInMethod } from "@/api/http/auth/sign-in-method"
+import { hashSystemPassword } from "@system/interface/operations/hash-system-password"
+import { SystemPasswordValue } from "@system/domain/values/auth/system-password.value"
 import { prepareCompanyPersonnelActionPersistence } from "@/contexts/company/interface/operations/prepare-company-personnel-action-persistence"
 import { prepareCompanyPersonnelActionCompletion } from "@/contexts/company/interface/operations/prepare-company-personnel-action-completion"
 import { prepareCompanyInitialAccountProfileStatement } from "@/contexts/company/interface/operations/prepare-company-initial-account-profile-statement"
@@ -28,8 +31,8 @@ import { COMPANY_DEFAULT_ORGANIZATION_ID } from "@/contexts/company/domain/defin
 const BASELINE_REGISTRATION_ROLE_KEY = "member"
 
 /**
- * Company採用、System Account、パスキーIdentity、Role、両者のlink、パスキー招待を一つのD1 batchで作る。
- * パスワードは持たない。従業員は返した招待でパスキーを登録してからサインインする。
+ * Company採用、System Account、選択したIdentity、Role、両者のlinkを一つのD1 batchで作る。
+ * パスキー方式では登録用の招待も同時に作る。
  */
 export class RegisterEmployee {
   constructor(private readonly c: Context) {
@@ -40,6 +43,8 @@ export class RegisterEmployee {
     action: Extract<PersonnelActionInput, { kind: "hire" }>
     expectedCompanyRevision?: number
     email: string
+    password?: string
+    oidcSubject?: string
     roleKey: "member" | "manager" | "hr" | "root"
     idempotencyKey: string
     now: Date
@@ -76,6 +81,15 @@ export class RegisterEmployee {
     ) {
       return new ForbiddenError("このRoleを割り当てる権限がありません", "forbidden")
     }
+    const method = readSignInMethod(this.c.env)
+    if (method === null)
+      return new ValidationError("認証方式の設定が不正です", "invalid_sign_in_method")
+    if (method === "oidc" && !input.oidcSubject?.trim())
+      return new ValidationError("外部認証の主体が必要です", "identity_subject_required")
+    if (method !== "password" && input.password !== undefined)
+      return new ValidationError("この方式ではパスワードを使いません", "unexpected_password")
+    if (method !== "oidc" && input.oidcSubject !== undefined)
+      return new ValidationError("この方式では外部認証の主体を使いません", "unexpected_subject")
     const company = {
       env: {
         DB: this.c.env.DB,
@@ -106,6 +120,13 @@ export class RegisterEmployee {
       employeeName: input.action.employeeName,
       email: input.email,
       roleKey: input.roleKey,
+      provider: method,
+      subject:
+        method === "passkey"
+          ? null
+          : method === "password"
+            ? input.email.toLowerCase()
+            : input.oidcSubject!,
       departmentName: input.action.departmentCode ?? null,
       positionTitle: input.action.positionTitle ?? null,
     } as const
@@ -154,9 +175,27 @@ export class RegisterEmployee {
       return new UnexpectedError("入社発令を準備できません", { cause: prepared })
     }
     const systemContext = { env: { DB: this.c.env.DB } }
+    let passwordHash: string | null = null
+    if (method === "password") {
+      const password = SystemPasswordValue.create(input.password ?? "")
+      if (!(password instanceof SystemPasswordValue))
+        return new ValidationError("パスワードの形式が不正です", "invalid_password")
+      const pepper = this.c.env.PEPPER_SECRET
+      if (pepper === undefined || pepper.length < 16)
+        return new UnexpectedError("パスワード認証の設定がありません")
+      passwordHash = await hashSystemPassword(password.toString(), pepper)
+    }
+    const identity =
+      method === "passkey"
+        ? ({ provider: method } as const)
+        : {
+            provider: method,
+            subject: method === "password" ? input.email.toLowerCase() : input.oidcSubject!,
+            passwordHash,
+          }
     const system = openSystemAccountProvisioning(systemContext).prepare({
       actorAccountId: session.accountId,
-      provider: "passkey",
+      ...identity,
       email: input.email,
       roleId: role.id,
       now: input.now,
@@ -164,13 +203,16 @@ export class RegisterEmployee {
     if (system instanceof Error) {
       return new UnexpectedError("System Accountを準備できません", { cause: system })
     }
-    const enrollment = await prepareSystemPasskeyEnrollment(systemContext, {
-      accountId: system.accountId,
-      identityId: system.identityId,
-      reason: "provisioning",
-      issuedByAccountId: session.accountId,
-      now: input.now,
-    })
+    const enrollment =
+      method !== "passkey"
+        ? null
+        : await prepareSystemPasskeyEnrollment(systemContext, {
+            accountId: system.accountId,
+            identityId: system.identityId,
+            reason: "provisioning",
+            issuedByAccountId: session.accountId,
+            now: input.now,
+          })
     if (enrollment instanceof Error) {
       return new UnexpectedError("パスキー招待を準備できません", { cause: enrollment })
     }
@@ -199,7 +241,7 @@ export class RegisterEmployee {
           at: input.now.getTime(),
         }),
         ...system.identityStatements,
-        ...enrollment.statements,
+        ...(enrollment?.statements ?? []),
       ])
       if (executions.some((execution) => !execution.success)) {
         return new UnexpectedError("従業員登録transactionが完了しませんでした")
@@ -230,7 +272,8 @@ export class RegisterEmployee {
       email: input.email,
       role: input.roleKey,
       replayed: false,
-      passkeyEnrollment: { token: enrollment.token, expiresAt: enrollment.expiresAt },
+      passkeyEnrollment:
+        enrollment === null ? null : { token: enrollment.token, expiresAt: enrollment.expiresAt },
     }
   }
 
@@ -242,6 +285,8 @@ export class RegisterEmployee {
     employeeName: string
     email: string
     roleKey: "member" | "manager" | "hr" | "root"
+    provider: "password" | "passkey" | "oidc"
+    subject: string | null
     departmentName: string | null
     positionTitle: string | null
   }): Promise<
@@ -280,12 +325,13 @@ export class RegisterEmployee {
            FROM (SELECT 1) AS account
            LEFT JOIN system_identity_bindings AS identity
              ON identity.account_id = ?1
-            AND identity.provider = 'passkey'
+            AND identity.provider = ?3
+            AND (?4 IS NULL OR identity.subject = ?4)
             AND identity.revoked_at IS NULL
            LEFT JOIN system_identity_profiles AS identity_profile
              ON identity_profile.identity_id = identity.id`,
       )
-        .bind(registered.accountId, `company:${input.roleKey}`)
+        .bind(registered.accountId, `company:${input.roleKey}`, input.provider, input.subject)
         .first<{ email: string | null; has_expected_role: number }>()
       const row =
         credential === null

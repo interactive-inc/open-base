@@ -19,6 +19,7 @@ import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { restoreCalendarDate } from "@/contexts/company/domain/definitions/restore-calendar-date.definition"
 import { D1CompanyResourceRepository } from "@/contexts/company/infrastructure/repositories/core/d1-company-resource.repository"
 import * as assignmentAdoptions from "@/contexts/company/interface/routes/company.assignment-resource-adoptions"
+import { OrganizationWorkforceSnapshotAdapter } from "@/contexts/company/infrastructure/adapters/workforce/organization-workforce-snapshot.adapter"
 import { COMPANY_DEFAULT_ORGANIZATION_ID } from "@/contexts/company/domain/definitions/company-organization-identity.definition"
 export async function createCompanyAssignmentResourceTestContext(
   databaseOverride?: D1Database,
@@ -109,7 +110,8 @@ export async function createCompanyAssignmentResourceTestContext(
     )
     .first<number>("revision")
   if (revision === null) throw new Error("revision missing")
-  type Resource = Parameters<typeof client.changes.$post>[0]["json"]["resources"][number]
+  type Change = Parameters<typeof client.changes.$post>[0]["json"]
+  type Resource = Change["resources"][number]
   const assignment: Extract<Resource, { type: "assignment" }> = {
     organizationId: COMPANY_DEFAULT_ORGANIZATION_ID,
     type: "assignment",
@@ -130,6 +132,7 @@ export async function createCompanyAssignmentResourceTestContext(
     resources: Resource[] = [assignment],
     expectedRevision = revision,
     key = "assignment-write",
+    correction: Pick<Change, "corrections" | "evidenceReferences"> = {},
   ) =>
     client.changes.$post({
       header: {
@@ -137,7 +140,7 @@ export async function createCompanyAssignmentResourceTestContext(
         "if-match": String(expectedRevision),
         "x-company-organization-id": COMPANY_DEFAULT_ORGANIZATION_ID,
       },
-      json: { reason: "Confirm assignment", resources },
+      json: { reason: "Confirm assignment", ...correction, resources },
     })
   const read = (date: string) =>
     new CompanyEmployeeDirectoryReadAdapter({
@@ -233,6 +236,34 @@ export async function createCompanyAssignmentResourceTestContext(
     if (!snapshot.ok) throw snapshot.cause
     return snapshot.resources
   }
+  /** 基準日の主務の役職を、正本・従業員の一覧・人員のsnapshotからそれぞれ読む。 */
+  const positionTitles = async (date: string) => {
+    const employee = await read(date)
+    if (employee instanceof Error) throw employee
+    const snapshot = await new OrganizationWorkforceSnapshotAdapter(base.context).readAllSnapshot(
+      restoreCalendarDate(date),
+    )
+    if (!snapshot.ok) throw snapshot.cause
+    const periods =
+      snapshot.schedules
+        .find((schedule) => schedule.employee.id === employeeId)
+        ?.assignments.filter(
+          (period) =>
+            !period.isVoid &&
+            period.startsOn <= date &&
+            (period.endsOn === null || date < period.endsOn),
+        ) ?? []
+    return {
+      published: (await publicAssignments(date)).map(
+        (resource) => resource.readNullableText("positionTitle") ?? null,
+      ),
+      directory:
+        employee?.primaryAssignment === null || employee?.primaryAssignment === undefined
+          ? []
+          : [employee.primaryAssignment.positionTitle],
+      snapshot: periods.map((period) => period.positionTitle),
+    }
+  }
   const publicReporting = async (date: string) => {
     const snapshot = await new D1CompanyResourceRepository({ database: base.database }).findMany({
       organizationId: COMPANY_DEFAULT_ORGANIZATION_ID,
@@ -296,6 +327,7 @@ export async function createCompanyAssignmentResourceTestContext(
     assignEmployeeCode,
     companyRevision,
     publicAssignments,
+    positionTitles,
     publicReporting,
     initializeAssignment,
   }

@@ -124,6 +124,7 @@ export async function replaceSystemScopedRoleBinding(
     requiredPermissionKey: input.requiredPermissionKey,
     managerPermissionKey: input.managerPermissionKey,
     now: input.now,
+    expectedBindings: prior.map((binding) => ({ id: binding.id, roleId: binding.roleId })),
     auditStatements: new SystemAuditEventRepository(context).prepareAppend(audit),
   }).execute()
 }

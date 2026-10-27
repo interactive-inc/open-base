@@ -2,9 +2,9 @@ import type { SystemD1Context } from "@system/configuration/system-context"
 import type { AccountId } from "@system/domain/schemas/iam/account-id.schema"
 import type { IdentityId } from "@system/domain/schemas/identity/identity-id.schema"
 import {
-  SystemPasskeyEnrollmentRepository,
+  SystemPasskeyEnrollmentAdapter,
   type SystemPasskeyEnrollmentReason,
-} from "@system/infrastructure/repositories/auth/system-passkey-enrollment.repository"
+} from "@system/infrastructure/adapters/auth/system-passkey-enrollment.adapter"
 import {
   prepareSystemPasskeyEnrollment,
   type SystemPasskeyEnrollmentGrant,
@@ -24,7 +24,7 @@ export async function issueSystemPasskeyEnrollment(
     lifetimeMilliseconds?: number
   }>,
 ): Promise<(SystemPasskeyEnrollmentGrant & { identityId: IdentityId }) | "no_identity" | Error> {
-  const target = await new SystemPasskeyEnrollmentRepository(context).findTarget(input.accountId)
+  const target = await new SystemPasskeyEnrollmentAdapter(context).findTarget(input.accountId)
   if (target instanceof Error) return target
   if (target === null) return "no_identity"
   const prepared = await prepareSystemPasskeyEnrollment(context, {

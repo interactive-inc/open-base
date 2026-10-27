@@ -226,7 +226,10 @@ export const POST = factory.createHandlers(
     }
     const applicationContext = {
       actor,
-      repository: new D1CompanyResourceRepository({ database }),
+      repository: new D1CompanyResourceRepository({
+        database,
+        writeGuard: context.var.companyResourceWriteGuard,
+      }),
     }
     let operation: CreateEmployees | UpdateEmployees | DeleteEmployees | null = null
     if (

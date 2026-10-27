@@ -8,7 +8,6 @@ import type { AccountId } from "@system/domain/schemas/iam/account-id.schema"
  * 呼び出し側は自分の語彙をこの最小条件へ変換する。
  */
 export type OrganizationalAuthorityCriterion =
-  | Readonly<{ kind: "technical_role"; roleKey: string }>
   | Readonly<{ kind: "employee"; employeeCode: string }>
   | Readonly<{ kind: "direct_manager" }>
   | Readonly<{ kind: "department_manager" }>

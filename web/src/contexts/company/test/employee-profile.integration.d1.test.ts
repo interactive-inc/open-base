@@ -10,8 +10,12 @@ import { CompanyActorValue } from "@/contexts/company/domain/values/company-acto
 import { CompanyResourceChangeEntity } from "@/contexts/company/domain/entities/company-resource-change.entity"
 import { employeeProfileVersionSchema } from "@/contexts/company/domain/definitions/employee-profile-version.definition"
 import { restoreCalendarDate } from "@/contexts/company/domain/definitions/restore-calendar-date.definition"
+import { restoreWorkforceId } from "@/contexts/company/domain/definitions/restore-workforce-id.definition"
 import { D1CompanyResourceRepository } from "@/contexts/company/infrastructure/repositories/core/d1-company-resource.repository"
 import { ReadCompanyAccountDisplayNamesAdapter } from "@/contexts/company/infrastructure/adapters/account-profile/read-company-account-display-names.adapter"
+import { CompanyEmployeeDirectoryReadAdapter } from "@/contexts/company/infrastructure/adapters/employee/employee-directory-read.adapter"
+import { EmployeeProfileSnapshotAdapter } from "@/contexts/company/infrastructure/adapters/employee/employee-profile-snapshot.adapter"
+import { readCompanyEmployeeProfiles } from "@/contexts/company/interface/operations/read-company-employee-profiles"
 import {
   GET as GET_NAME,
   PUT as PUT_NAME,
@@ -810,5 +814,282 @@ describe("employee profile writes share the public Person history", () => {
         )
         .first<{ phone: string | null }>(),
     ).toEqual({ phone: null })
+  })
+})
+
+describe("人物の発効日を訂正した後の読み取りと保存", () => {
+  const accountId = "e419466c-18a7-4fec-a665-7bf591769bf4"
+  const detailSchema = z.object({ name: z.string(), email: z.string() })
+  type Fixture = Awaited<ReturnType<typeof fixture>>
+
+  /** 人物の版を一つ足す。訂正元を渡すと、原資料付きの訂正として保存する。 */
+  async function writePerson(
+    context: Fixture,
+    props: Readonly<{
+      revision: number
+      effectiveFrom: string
+      officialName: string
+      email: string
+      phone: string
+      correctsRevision?: number
+    }>,
+  ) {
+    const counts = await context.counts()
+    if (counts === null) throw new Error("missing company revision")
+    const change = CompanyResourceChangeEntity.create({
+      commandId: `person:${props.revision}`,
+      expectedRevision: counts.organization_revision,
+      actorAccountId: context.actor.accountId,
+      reason: "Record confirmed personal details",
+      recordedAt: context.clock.now.getTime(),
+      ...(props.correctsRevision === undefined
+        ? {}
+        : {
+            evidenceReferences: [
+              { context: "system", kind: "document", id: "person:original", version: "1" },
+            ],
+            corrections: [
+              {
+                type: "person",
+                id: "person:profile",
+                revision: props.revision,
+                correctsRevision: props.correctsRevision,
+              },
+            ],
+          }),
+      resources: [
+        {
+          organizationId: COMPANY_DEFAULT_ORGANIZATION_ID,
+          type: "person",
+          id: "person:profile",
+          revision: props.revision,
+          state: "active",
+          effectiveFrom: restoreCalendarDate(props.effectiveFrom),
+          effectiveTo: null,
+          attributes: {
+            officialName: props.officialName,
+            email: props.email,
+            phone: props.phone,
+          },
+        },
+      ],
+    })
+    if (change instanceof Error) throw change
+    expect(
+      await new D1CompanyResourceRepository({ database: context.database }).write(change),
+    ).toMatchObject({ kind: "applied" })
+  }
+
+  /** 会社営業日の人物を、正本と、氏名を表示する各読み取りから読む。 */
+  async function readPerson(context: Fixture) {
+    const now = context.clock.now.toISOString()
+    const canonical = await new D1CompanyResourceRepository({
+      database: context.database,
+    }).findMany({
+      organizationId: COMPANY_DEFAULT_ORGANIZATION_ID,
+      types: ["person"],
+      effectiveOn: restoreCalendarDate((await context.version()).effectiveOn),
+    })
+    if (!canonical.ok) throw new Error("failed to read canonical person")
+    const person = canonical.resources[0]
+    const myProfile = responseSchema.parse(await (await context.read()).json())
+    const detail = detailSchema.parse(
+      await (await context.read("/company/employee-directory/PROFILE-001")).json(),
+    )
+    const profiles = await readCompanyEmployeeProfiles({
+      database: context.database,
+      employeeIds: [employeeId],
+      now,
+      timeZone: "Asia/Tokyo",
+    })
+    if (profiles instanceof Error) throw profiles
+    const staffNames = await CompanyEmployeeDirectoryReadAdapter.findNames({
+      database: context.database,
+      now,
+      timeZone: "Asia/Tokyo",
+      employeeIds: [restoreWorkforceId("employee", employeeId)],
+    })
+    if (staffNames instanceof Error) throw staffNames
+    const accountNames = await new ReadCompanyAccountDisplayNamesAdapter({
+      database: context.database,
+      organizationIds: [COMPANY_DEFAULT_ORGANIZATION_ID],
+      accountIds: [accountId],
+      now,
+      timeZone: "Asia/Tokyo",
+    }).readCompanyAccountDisplayNames()
+    return {
+      canonical: {
+        name: person?.readText("officialName"),
+        email: person?.readNullableText("email"),
+        phone: person?.readNullableText("phone"),
+      },
+      myProfile: { name: myProfile.name, phone: myProfile.phone },
+      personRevision: myProfile.profile?.personRevision,
+      detail,
+      profileName: [...profiles.values()][0]?.officialName,
+      staffName: [...staffNames.values()][0],
+      accountName: accountNames.get(accountId),
+    }
+  }
+
+  /** 5 月 1 日に発効した誤った版を、4 月 1 日に発効する版で訂正する。 */
+  async function correctEffectiveDate(context: Fixture) {
+    await writePerson(context, {
+      revision: 2,
+      effectiveFrom: "2026-05-01",
+      officialName: "Mistaken Person",
+      email: "mistaken@example.com",
+      phone: "020-2000-2000",
+    })
+    await writePerson(context, {
+      revision: 3,
+      effectiveFrom: "2026-04-01",
+      officialName: "Corrected Person",
+      email: "corrected@example.com",
+      phone: "030-3000-3000",
+      correctsRevision: 2,
+    })
+  }
+
+  test("プロフィール・職員名・Accountの表示名が訂正後の値を返し、訂正前の会社版は元の値を返す", async () => {
+    const context = await fixture()
+    await correctEffectiveDate(context)
+
+    expect(await readPerson(context)).toEqual({
+      canonical: {
+        name: "Corrected Person",
+        email: "corrected@example.com",
+        phone: "030-3000-3000",
+      },
+      myProfile: { name: "Corrected Person", phone: "030-3000-3000" },
+      personRevision: 3,
+      detail: { name: "Corrected Person", email: "corrected@example.com" },
+      profileName: "Corrected Person",
+      staffName: "Corrected Person",
+      accountName: "Corrected Person",
+    })
+    // 訂正を保存する前の会社版を指定した読み取りは、その時点の値を返す。
+    const beforeCorrection = await new EmployeeProfileSnapshotAdapter(context.database).find({
+      employeeId,
+      effectiveOn: "2026-06-02",
+      organizationRevision: 2,
+    })
+    if (beforeCorrection === null || beforeCorrection instanceof Error)
+      throw new Error("missing profile before the correction")
+    expect({
+      name: beforeCorrection.person.readText("officialName"),
+      personRevision: beforeCorrection.version.personRevision,
+    }).toEqual({ name: "Mistaken Person", personRevision: 2 })
+  })
+
+  test("電話番号だけの保存で、訂正元の氏名とメールを新しい版へ戻さない", async () => {
+    const context = await fixture()
+    await correctEffectiveDate(context)
+
+    expect(
+      (await context.write({ phone: "040-4000-4000", profile: await context.version() })).status,
+    ).toBe(200)
+    expect(await readPerson(context)).toEqual({
+      canonical: {
+        name: "Corrected Person",
+        email: "corrected@example.com",
+        phone: "040-4000-4000",
+      },
+      myProfile: { name: "Corrected Person", phone: "040-4000-4000" },
+      personRevision: 4,
+      detail: { name: "Corrected Person", email: "corrected@example.com" },
+      profileName: "Corrected Person",
+      staffName: "Corrected Person",
+      accountName: "Corrected Person",
+    })
+    expect(await context.rows()).toEqual({
+      official_name: "Corrected Person",
+      email: "corrected@example.com",
+      phone: "040-4000-4000",
+    })
+  })
+
+  test("同じ発効日の旧い版は、その日の最新の版が訂正されても戻らない", async () => {
+    const context = await fixture()
+    await writePerson(context, {
+      revision: 2,
+      effectiveFrom: "2026-05-01",
+      officialName: "First Mistake",
+      email: "first@example.com",
+      phone: "020-2000-2000",
+    })
+    await writePerson(context, {
+      revision: 3,
+      effectiveFrom: "2026-05-01",
+      officialName: "Second Mistake",
+      email: "second@example.com",
+      phone: "020-2000-2000",
+    })
+    await writePerson(context, {
+      revision: 4,
+      effectiveFrom: "2026-04-01",
+      officialName: "Corrected Person",
+      email: "corrected@example.com",
+      phone: "030-3000-3000",
+      correctsRevision: 3,
+    })
+
+    expect(await readPerson(context)).toEqual({
+      canonical: {
+        name: "Corrected Person",
+        email: "corrected@example.com",
+        phone: "030-3000-3000",
+      },
+      myProfile: { name: "Corrected Person", phone: "030-3000-3000" },
+      personRevision: 4,
+      detail: { name: "Corrected Person", email: "corrected@example.com" },
+      profileName: "Corrected Person",
+      staffName: "Corrected Person",
+      accountName: "Corrected Person",
+    })
+    // 会社版を指定した読み取りは、その会社版より後に保存された同じ発効日の版と訂正を数えない。
+    const names: Array<string | null> = []
+    for (const organizationRevision of [2, 3]) {
+      const snapshot = await new EmployeeProfileSnapshotAdapter(context.database).find({
+        employeeId,
+        effectiveOn: "2026-06-02",
+        organizationRevision,
+      })
+      if (snapshot === null || snapshot instanceof Error)
+        throw new Error("missing profile at the company revision")
+      names.push(snapshot.person.readText("officialName"))
+    }
+    expect(names).toEqual(["First Mistake", "Second Mistake"])
+  })
+
+  test("訂正を伴わない版は、これまでどおり発効日で切り替わる", async () => {
+    const context = await fixture()
+    await writePerson(context, {
+      revision: 2,
+      effectiveFrom: "2026-05-01",
+      officialName: "Renamed Person",
+      email: "renamed@example.com",
+      phone: "020-2000-2000",
+    })
+
+    expect(await readPerson(context)).toEqual({
+      canonical: { name: "Renamed Person", email: "renamed@example.com", phone: "020-2000-2000" },
+      myProfile: { name: "Renamed Person", phone: "020-2000-2000" },
+      personRevision: 2,
+      detail: { name: "Renamed Person", email: "renamed@example.com" },
+      profileName: "Renamed Person",
+      staffName: "Renamed Person",
+      accountName: "Renamed Person",
+    })
+    context.clock.now = new Date("2026-04-14T15:00:00Z")
+    expect(await readPerson(context)).toEqual({
+      canonical: { name: "Example Person", email: "you@example.com", phone: "010-1000-1000" },
+      myProfile: { name: "Example Person", phone: "010-1000-1000" },
+      personRevision: 2,
+      detail: { name: "Example Person", email: "you@example.com" },
+      profileName: "Example Person",
+      staffName: "Example Person",
+      accountName: "Example Person",
+    })
   })
 })

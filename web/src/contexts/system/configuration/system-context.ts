@@ -50,6 +50,7 @@ export type SystemClockContext = Readonly<{
 export type SystemAuthorizationContext = Readonly<{
   var: Readonly<{
     accountTokenVersion: number
+    accountSessionFamilyId?: string | null
     permissions: ReadonlySet<string>
     scopedPermissions?: ReadonlyMap<string, ReadonlySet<string>>
     role: string
@@ -75,6 +76,13 @@ export type SystemJwtSecretContext = Readonly<{
   env: Readonly<{ JWT_SECRET?: string }>
 }>
 
+export type SystemSessionConfigurationContext = Readonly<{
+  env: Readonly<{
+    SYSTEM_SESSION_TTL_SECONDS?: string
+    SYSTEM_SESSION_MAX_LIFETIME_SECONDS?: string
+  }>
+}>
+
 export type SystemExternalIdentityContext = Readonly<{
   env: Readonly<{
     IDENTITY_JWKS?: string
@@ -84,7 +92,13 @@ export type SystemExternalIdentityContext = Readonly<{
     IDENTITY_ACCESS_TOKEN_AUDIENCE?: string
     // Service Binding RPC入口だけが受理するaud。未設定ならRPC入口は全て拒否する。
     SERVICE_BINDING_ACCESS_TOKEN_AUDIENCE?: string
+    IDENTITY_LOGIN_URL?: string
+    API_ORIGIN?: string
   }>
+}>
+
+export type SystemPasswordHashContext = Readonly<{
+  env: Readonly<{ PEPPER_SECRET?: string }>
 }>
 
 export type SystemBootstrapContext = Readonly<{

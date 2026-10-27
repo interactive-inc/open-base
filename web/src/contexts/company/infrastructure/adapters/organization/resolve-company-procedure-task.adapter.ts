@@ -113,7 +113,10 @@ async function resolveConfiguredTask(
         : input.authoritySubjectEmployeeId,
     step,
     activatedAt,
-    excludedEmployeeIds: input.excludedEmployeeIds,
+    excludedEmployeeIds: new Set([
+      input.applicant.employeeId,
+      ...(input.excludedEmployeeIds ?? []),
+    ]),
     targetDepartmentCode: input.targetDepartmentCode ?? null,
   }).resolveWorkflowStepSnapshot()
   if (snapshot instanceof Error) return snapshot

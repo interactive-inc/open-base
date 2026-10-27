@@ -23,6 +23,8 @@ SELECT json_object('updatedAt', account.updated_at, 'grants', (SELECT json_group
   'id', id, 'role', role_id, 'createdAt', created_at, 'revokedAt', revoked_at, 'updatedAt', updated_at, 'permission', permission_key)) FROM grants)) AS snapshot
 FROM system_accounts account WHERE account.id = ?1 AND account.status = 'active' AND account.closed_at IS NULL
   AND account.token_version = ?2 AND account.created_at <= ?3
+  AND (?5 IS NULL OR EXISTS (SELECT 1 FROM system_sessions session
+    WHERE session.family_id = ?5 AND session.account_id = account.id AND session.revoked_at IS NULL))
   AND EXISTS (SELECT 1 FROM grants WHERE permission_key IN (?4, 'system:admin'))`
 
 /** 読取資格と開示条件の同じsnapshotを一覧・件数・最終監査でも要求する。 */
@@ -35,6 +37,7 @@ export class SystemAuditDisclosureReadAdapter {
     input: Readonly<{
       accountId: string
       tokenVersion: number
+      sessionFamilyId: string | null
       permission: string
       purpose: string | null
       now: Date
@@ -49,7 +52,13 @@ export class SystemAuditDisclosureReadAdapter {
       input.now.getTime() < 0
     )
       return new SystemAuditDisclosureError("forbidden")
-    const args = [input.accountId, input.tokenVersion, input.now.getTime(), input.permission]
+    const args = [
+      input.accountId,
+      input.tokenVersion,
+      input.now.getTime(),
+      input.permission,
+      input.sessionFamilyId,
+    ]
     try {
       const batch = await this.c.env.DB.batch<{
         snapshot?: string
@@ -92,7 +101,7 @@ export class SystemAuditDisclosureReadAdapter {
       return Object.freeze({
         value,
         assertions: Object.freeze([
-          this.c.env.DB.prepare(`SELECT CASE WHEN EXISTS (SELECT 1 FROM (${authorization}) actor WHERE actor.snapshot = ?5)
+          this.c.env.DB.prepare(`SELECT CASE WHEN EXISTS (SELECT 1 FROM (${authorization}) actor WHERE actor.snapshot = ?6)
           THEN 1 ELSE json_extract('{}', 'system_audit_read_authorization_changed') END AS ok`).bind(
             ...args,
             actor,

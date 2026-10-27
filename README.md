@@ -21,7 +21,13 @@ make dev
 
 ## 初期化とサインイン
 
-サインインはパスキーだけです。パスワードや従業員データは投入しません。`web/.env` のBOOTSTRAP_TOKENと、確認済みの会社情報を使って初期化します。
+人のサインインは、パスワード・パスキー・OIDCから一つを配備ごとに選びます。`SIGN_IN_METHOD` に `password`、`passkey`（未設定時）、`oidc` のいずれかを設定します。それ以外の値ではサインインを受け付けません。選ばなかった方式の入口は404になります。
+
+`SIGN_IN_METHOD`、`IDENTITY_ISSUER`、`OIDC_CLIENT_ID` は公開可能な配備設定です。ローカルでは、管理対象外の `web/void.deploy.json` の `cloudflare.vars` に設定します。`PEPPER_SECRET` と `OIDC_CLIENT_SECRET` は `web/.env` または配備先の秘密値へ保存します。
+
+OIDCを選ぶときは、発行者を `IDENTITY_ISSUER`、client IDを `OIDC_CLIENT_ID` に設定し、IdPへ戻り先 `https://<host>/api/auth/oidc/callback` を登録します。認可codeとPKCEを使い、confidential clientなら `OIDC_CLIENT_SECRET` も設定します。ID tokenの `sub` に結び付いた有効な `oidc` のIdentityを持つAccountだけがサインインできます。
+
+従業員データは自動投入しません。`web/.env` のBOOTSTRAP_TOKENと、確認済みの会社情報を使って初期化します。
 
 ```sh
 bun cli/index.ts bootstrap --help
@@ -30,7 +36,7 @@ bun cli/index.ts bootstrap --email you@example.com \
   --idempotency-key "$COMMAND_ID" --token "$BOOTSTRAP_TOKEN"
 ```
 
-初回は初期アカウントを作り、パスキー招待のURLを表示します。URLをブラウザで開いてパスキーを登録し、`bun cli/index.ts login` でログインしてから、同じコマンドをもう一度実行すると会社を初期化します。
+初回は初期アカウントを作ります。パスワード方式では、サーバーに `PEPPER_SECRET` を設定し、初期パスワードを環境変数 `BASE_BOOTSTRAP_PASSWORD` で渡して `bootstrap --sign-in-method password` を実行します。秘密値を引数や履歴に残さないでください。パスキーの配備では、表示されたパスキー招待のURLをブラウザで開いてパスキーを登録します。OIDCの配備では `--oidc-subject` に初期管理者のIdPのsubjectを渡すと、そのIdentityでサインインできるアカウントを作ります。`bun cli/index.ts login` でログインしてから、同じコマンドをもう一度実行すると会社を初期化します。
 
 会社情報JSONには以下の形式を使います。実際の情報を記入したファイルはリポジトリ外に置いてください。
 
@@ -52,9 +58,15 @@ bun cli/index.ts bootstrap --email you@example.com \
 
 COMMAND_IDはUUIDを使用します。初期化後はBOOTSTRAP_TOKENを設定から除去してAPIを再起動します。
 
-アカウントを追加するときは、管理者がパスキーのIdentityを作り、返ったパスキー招待のURLを本人へ渡します。パスキーを失くした人には `POST /api/system/accounts/{accountId}/passkey-enrollments` で招待を発行し直します。管理者が全員サインインできなくなったときは、BOOTSTRAP_TOKENを一時的に設定し、`POST /api/system/passkey-recoveries` で復旧用の招待を発行します。
+パスキーの配備でアカウントを追加するときは、管理者がパスキーのIdentityを作り、返ったパスキー招待のURLを本人へ渡します。OIDCの配備では、IdPのsubjectを指定して `oidc` のIdentityを作ります。パスキーを失くした人には `POST /api/system/accounts/{accountId}/passkey-enrollments` で招待を発行し直します。管理者が全員サインインできなくなったときは、BOOTSTRAP_TOKENを一時的に設定し、`POST /api/system/passkey-recoveries` で復旧用の招待を発行します。
 
-CLIの `login` はデバイス認証です。表示されたURLをブラウザで開き、パスキーでサインインし直してコードを承認します。MCPはCLIのログインを共有します。再認証が必要な管理操作は、ブラウザでパスキーでサインインした直後だけ行えます。
+パスキーの招待を使って復旧すると、以前のパスキーとセッションは失効します。既存の鍵を残して追加するときは、本人がサインインし直してから追加します。
+
+従業員を同時に登録する `POST /api/company/employee-registrations` も配備の方式を使います。パスワード方式は `password`、OIDC方式は `oidc_subject` を指定し、パスキー方式では返された招待を本人へ渡します。別方式の資格情報を一緒に送ると拒否します。
+
+CLIの `login` はデバイス認証です。表示されたURLをブラウザで開き、サインインし直してコードを承認します。MCPはCLIのログインを共有します。再認証が必要な管理操作は、ブラウザでサインインした直後（5分以内）だけ行えます。OIDCではIdPで認証した時刻（`auth_time`）で判定し、再認証のときはIdPに認証し直しを求めます。
+
+外部の認証サービスで管理操作やCLIへのログインを使うには、`max_age=0` による再認証と、ID tokenの `auth_time` が必要です。本人確認した時刻を証明できないサービスでは、通常のログインだけを受け付け、再認証を必要とする操作は拒否します。
 
 ## Service Bindingによる照会と操作
 

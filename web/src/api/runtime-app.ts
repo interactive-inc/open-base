@@ -161,6 +161,8 @@ const systemAccountsAccountIdIdentitiesIdentityIdRoute: RouteModuleLoader = () =
   import("@system/interface/routes/system.accounts.$accountId.identities.$identityId")
 const systemAccountsAccountIdPasskeyEnrollmentsRoute: RouteModuleLoader = () =>
   import("@system/interface/routes/system.accounts.$accountId.passkey-enrollments")
+const systemAccountsAccountIdPasswordCredentialsRoute: RouteModuleLoader = () =>
+  import("@system/interface/routes/system.accounts.$accountId.password-credentials")
 const systemAccountsAccountIdRoleBindingsRoute: RouteModuleLoader = () =>
   import("@system/interface/routes/system.accounts.$accountId.role-bindings")
 const systemAccountsAccountIdRoleBindingsBindingIdRoute: RouteModuleLoader = () =>
@@ -182,6 +184,8 @@ const systemAuditEventsRoute: RouteModuleLoader = () =>
   import("@system/interface/routes/system.audit-events")
 const systemAuditEventsEventIdRoute: RouteModuleLoader = () =>
   import("@system/interface/routes/system.audit-events.$eventId")
+const systemAuthPasswordResetRoute: RouteModuleLoader = () =>
+  import("@system/interface/routes/system.auth.password.reset")
 const systemBatchJobsRoute: RouteModuleLoader = () =>
   import("@system/interface/routes/system.batch-jobs")
 const systemBootstrapRoute: RouteModuleLoader = () =>
@@ -424,6 +428,11 @@ const ROUTES: ReadonlyArray<readonly [RouteMethod, string, RouteModuleLoader]> =
     "/system/accounts/:accountId/passkey-enrollments",
     systemAccountsAccountIdPasskeyEnrollmentsRoute,
   ],
+  [
+    "PATCH",
+    "/system/accounts/:accountId/password-credentials",
+    systemAccountsAccountIdPasswordCredentialsRoute,
+  ],
   ["GET", "/system/accounts/:accountId/role-bindings", systemAccountsAccountIdRoleBindingsRoute],
   ["POST", "/system/accounts/:accountId/role-bindings", systemAccountsAccountIdRoleBindingsRoute],
   [
@@ -453,6 +462,8 @@ const ROUTES: ReadonlyArray<readonly [RouteMethod, string, RouteModuleLoader]> =
   ["POST", "/system/audit-disclosure-policies", systemAuditDisclosurePoliciesRoute],
   ["GET", "/system/audit-events", systemAuditEventsRoute],
   ["GET", "/system/audit-events/:eventId", systemAuditEventsEventIdRoute],
+  ["POST", "/system/auth/password/reset", systemAuthPasswordResetRoute],
+  ["PATCH", "/system/auth/password/reset", systemAuthPasswordResetRoute],
   ["GET", "/system/batch-jobs", systemBatchJobsRoute],
   ["POST", "/system/bootstrap", systemBootstrapRoute],
   ["GET", "/system/connectors", systemConnectorsRoute],

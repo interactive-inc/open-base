@@ -330,7 +330,7 @@ CREATE TABLE IF NOT EXISTS "user" ("id" TEXT PRIMARY KEY NOT NULL, "name" TEXT N
 CREATE UNIQUE INDEX IF NOT EXISTS "user_email_uidx" ON "user" ("email");
 --> statement-breakpoint
 
-CREATE TABLE IF NOT EXISTS "session" ("id" TEXT PRIMARY KEY NOT NULL, "expiresAt" INTEGER NOT NULL, "token" TEXT NOT NULL, "createdAt" INTEGER NOT NULL, "updatedAt" INTEGER NOT NULL, "ipAddress" TEXT, "userAgent" TEXT, "userId" TEXT NOT NULL REFERENCES "user"("id") ON DELETE CASCADE, "accountTokenVersion" INTEGER, "authenticationMethod" TEXT);
+CREATE TABLE IF NOT EXISTS "session" ("id" TEXT PRIMARY KEY NOT NULL, "expiresAt" INTEGER NOT NULL, "token" TEXT NOT NULL, "createdAt" INTEGER NOT NULL, "updatedAt" INTEGER NOT NULL, "ipAddress" TEXT, "userAgent" TEXT, "userId" TEXT NOT NULL REFERENCES "user"("id") ON DELETE CASCADE, "accountTokenVersion" INTEGER, "authenticationMethod" TEXT, "authenticatedAt" INTEGER);
 --> statement-breakpoint
 
 CREATE UNIQUE INDEX IF NOT EXISTS "session_token_uidx" ON "session" ("token");

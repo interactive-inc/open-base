@@ -1,3 +1,4 @@
+import type { SystemSignedInSession } from "@system/interface/request-environment/system-signed-in-session-channel"
 import {
   ResolveExternalAccessTokenAccountAdapter,
   type ExternalAccessTokenAccountResolution,
@@ -14,7 +15,6 @@ import { SystemAccessTokenStateAdapter } from "@system/infrastructure/adapters/a
 import { AccessTokenService } from "@system/lib/auth/access-token-service"
 import { SYSTEM_ACCESS_TOKEN_PROFILE } from "@system/lib/auth/system-access-token-profile"
 import type { SystemReadAuthentication } from "@system/domain/definitions/system-read-authentication.definition"
-import type { SystemSignedInSession } from "@system/interface/request-environment/system-signed-in-session-channel"
 
 type Bindings = (SystemD1Context & SystemExternalIdentityContext & SystemJwtSecretContext)["env"]
 
@@ -46,8 +46,6 @@ async function resolveSystemSession(props: {
 
   const accountId = zAccountId.safeParse(claims.sub)
   if (!accountId.success) return { kind: "rejected", reason: "invalid token" }
-  // 人のログインはBetter Authのセッションだけで受け付ける。System JWTは機械credentialのものだけ通す。
-  if (claims.machineCredentialId === undefined) return { kind: "rejected", reason: "invalid token" }
 
   const authentication = await new SystemAccessTokenStateAdapter({
     database: props.env.DB,
@@ -56,6 +54,7 @@ async function resolveSystemSession(props: {
     tokenVersion: claims.ver,
     issuedAtMs: claims.issuedAtMs,
     machineCredentialId: claims.machineCredentialId,
+    sessionFamilyId: claims.sid ?? null,
     at: props.now,
   })
   if (authentication instanceof Error) return { kind: "unavailable" }
@@ -72,6 +71,7 @@ async function resolveSystemSession(props: {
         expiresAtMs: claims.exp * 1000,
         machineCredentialId: claims.machineCredentialId ?? null,
         identityBindingId: null,
+        sessionFamilyId: claims.sid ?? null,
       },
     }
   }
@@ -95,7 +95,7 @@ export type VerifiedExternalAccessTokenAccount = Extract<
   Readonly<{ kind: "accepted" }>
 >
 
-/** Bearerを外部access tokenまたは機械credentialのaccess tokenとしてAccountへ解決する。 */
+/** Bearerを外部access tokenまたは従来System sessionとしてAccountへ解決する。 */
 type Context = Readonly<{ env: Bindings }>
 export class ResolveBearerAccountAdapter {
   constructor(private readonly c: Context) {}
@@ -123,7 +123,12 @@ export class ResolveBearerAccountAdapter {
     const session = input.session
     const accountId = zAccountId.safeParse(session.accountId)
     if (!accountId.success) return { kind: "rejected", reason: "invalid session" }
-    if (session.expiresAt.getTime() <= input.now.getTime()) {
+    if (
+      !Number.isSafeInteger(session.expiresAt.getTime()) ||
+      !Number.isSafeInteger(session.createdAt.getTime()) ||
+      session.createdAt.getTime() > input.now.getTime() ||
+      session.expiresAt.getTime() <= input.now.getTime()
+    ) {
       return { kind: "rejected", reason: "session expired" }
     }
     const authentication = await new SystemAccessTokenStateAdapter({
@@ -131,7 +136,8 @@ export class ResolveBearerAccountAdapter {
     }).resolve({
       accountId: accountId.data,
       tokenVersion: session.accountTokenVersion,
-      issuedAtMs: session.authenticatedAt.getTime(),
+      issuedAtMs: session.createdAt.getTime(),
+      sessionFamilyId: null,
       at: input.now,
     })
     if (authentication instanceof Error) return { kind: "unavailable" }
@@ -144,10 +150,11 @@ export class ResolveBearerAccountAdapter {
       readAuthentication: {
         accountId: accountId.data,
         tokenVersion: authentication.account.tokenVersion,
-        issuedAtMs: session.authenticatedAt.getTime(),
+        issuedAtMs: session.createdAt.getTime(),
         expiresAtMs: session.expiresAt.getTime(),
         machineCredentialId: null,
         identityBindingId: null,
+        sessionFamilyId: null,
       },
     }
   }
@@ -168,6 +175,7 @@ export class ResolveBearerAccountAdapter {
       accountId: accountId.data,
       tokenVersion: external.tokenVersion,
       issuedAtMs: 0,
+      sessionFamilyId: null,
       at: input.now,
     })
     if (authentication instanceof Error) return { kind: "unavailable" }
@@ -184,6 +192,7 @@ export class ResolveBearerAccountAdapter {
         expiresAtMs: external.expiresAtMs,
         machineCredentialId: null,
         identityBindingId: external.identityBindingId,
+        sessionFamilyId: null,
       },
     }
   }

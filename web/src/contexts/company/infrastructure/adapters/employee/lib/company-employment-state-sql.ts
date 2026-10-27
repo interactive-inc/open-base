@@ -1,4 +1,9 @@
-/** ?1の会社営業日に有効な雇用と状態を、各期間の最新訂正から組み合わせる。 */
+import { companyEffectiveResourceRevisionSql } from "@/contexts/company/infrastructure/adapters/employee/lib/company-effective-resource-revision-sql"
+
+/**
+ * ?1の会社営業日に有効な雇用と状態を、各期間の最新訂正から組み合わせる。
+ * 人物と従業員の版は正本の時点参照と同じ規則で選び、訂正された版を氏名や連絡先に使わない。
+ */
 export function companyEmploymentStateSql(): string {
   return `WITH ranked_workforce_resources AS (
     SELECT resource.*,
@@ -6,6 +11,7 @@ export function companyEmploymentStateSql(): string {
         ORDER BY effective_from DESC, revision DESC) AS effective_rank
     FROM company_resource_revisions AS resource
     WHERE resource_type IN ('person', 'employee') AND effective_from <= ?1
+      AND ${companyEffectiveResourceRevisionSql("resource")}
   ),
   current_workforce_resources AS (
     SELECT * FROM ranked_workforce_resources

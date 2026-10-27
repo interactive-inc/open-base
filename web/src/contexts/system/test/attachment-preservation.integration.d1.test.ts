@@ -8,10 +8,7 @@ import { StoreAttachment } from "@system/application/attachments/store-attachmen
 import { AttachmentAdapter } from "@system/infrastructure/adapters/attachments/attachment.adapter"
 import { AttachmentPreservationRepository } from "@system/infrastructure/repositories/attachments/attachment-preservation.repository"
 import { SystemPrincipalSecretService } from "@system/lib/auth/system-principal-secret-service"
-import {
-  createSystemSessionApplications,
-  systemTestSignedInSession,
-} from "@system/test/create-system-session-applications.test-support"
+import { createSystemSessionApplications } from "@system/test/create-system-session-applications.test-support"
 import { createSystemAttachmentTestDatabase } from "@system/test/create-system-attachment-test-database.test-support"
 import { createSystemAttachmentTestKekEnvironment } from "@system/test/create-system-attachment-test-kek-environment.test-support"
 import { SystemAttachmentTestBucket } from "@system/test/system-attachment-test-bucket.test-support"
@@ -75,7 +72,6 @@ async function fixture() {
   const bucket = new SystemAttachmentTestBucket()
   const app = systemFactory
     .createApp()
-    .use("*", systemTestSignedInSession)
     .use("*", async (context, next) => {
       context.set("now", () => clock.now)
       context.set("database", database)
@@ -88,7 +84,7 @@ async function fixture() {
   const jwtSecret = "attachment-preservation-test-secret"
   const applications = createSystemSessionApplications({
     context: { env: { DB: db } },
-
+    jwtSecret,
     sessionTtlMilliseconds: 604_800_000,
   })
   if (applications instanceof Error) throw applications

@@ -25,7 +25,7 @@ import {
 } from "node:fs"
 import { createRequire } from "node:module"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { dirname, join } from "node:path"
 import process from "node:process"
 
 export type LocalD1 = Readonly<{
@@ -59,15 +59,17 @@ type Template = Readonly<{
 }>
 
 /** 各製品repositoryの配置差を吸収し、全migrationの正本を返す。 */
-const projectRoot = join(import.meta.dir, "../../../../..")
+const projectRoot = findProjectRoot(import.meta.dir)
 const migrationsDirectory = existsSync(join(projectRoot, "migrations"))
   ? join(projectRoot, "migrations")
-  : join(projectRoot, "drizzle")
+  : existsSync(join(projectRoot, "db", "migrations"))
+    ? join(projectRoot, "db", "migrations")
+    : join(projectRoot, "src", "db", "migrations")
 
 installWorkerdStdioGuard()
 
 /** Miniflareが D1 の Durable Object を永続化する、persist directory 内の相対位置。 */
-const D1_OBJECT_DIRECTORY = join("d1", "miniflare-D1DatabaseObject")
+export const D1_OBJECT_DIRECTORY = join("d1", "miniflare-D1DatabaseObject")
 
 const TEMPLATE_BINDING = "TEMPLATE"
 
@@ -82,7 +84,7 @@ const MIGRATED_SLOT_COUNT = 64
  * 止めることがあり、設定が大きいほど起動が止まりやすいため、1つのworkerdの枠は
  * 1ファイルの上限と同じ数に留める。
  */
-const RUNTIME_MIGRATED_SLOT_COUNT = MIGRATED_SLOT_COUNT
+export const RUNTIME_MIGRATED_SLOT_COUNT = MIGRATED_SLOT_COUNT
 
 /** 1つのworkerdに載せる空DBの枠数。 */
 const RUNTIME_EMPTY_SLOT_COUNT = 32
@@ -536,7 +538,9 @@ function readCachedTemplate(cache: string): Template | null {
     return null
   }
   const directory = join(cache, "persist")
-  if (!existsSync(join(directory, D1_OBJECT_DIRECTORY, metadata.file))) return null
+  // 一時ディレクトリの掃除はファイルを1つずつ消すので、templateと枠のどれかだけが欠けることがある。
+  const files = [metadata.file, ...metadata.slotFiles]
+  if (!files.every((file) => existsSync(join(directory, D1_OBJECT_DIRECTORY, file)))) return null
   const now = new Date()
   utimesSync(cache, now, now)
   return {
@@ -550,10 +554,16 @@ function readCachedTemplate(cache: string): Template | null {
 /**
  * 作ったtemplateをcacheへ公開する。別のプロセスが先に公開していればそちらを使う。
  * 公開は作業ディレクトリのrenameで行い、読み手へ書きかけのtemplateを見せない。
+ *
+ * cacheの位置に読めないtemplateが残っている場合は、取り除いてから公開する。
+ * 一時ディレクトリの掃除で `template.json` だけが消えた形が実際に起き、そのままだとrenameが
+ * 空でないディレクトリに当たって失敗し続け、そのkeyのtemplateを使うtestが全て落ちる。
+ * 読めないtemplateは誰も使っていないので、消しても他のプロセスを壊さない。
  */
-function publishTemplate(cache: string, built: Template): Template {
-  mkdirSync(TEMPLATE_CACHE_ROOT, { recursive: true })
-  const staging = mkdtempSync(join(TEMPLATE_CACHE_ROOT, "staging-"))
+export function publishTemplate(cache: string, built: Template): Template {
+  const root = dirname(cache)
+  mkdirSync(root, { recursive: true })
+  const staging = mkdtempSync(join(root, "staging-"))
   try {
     cpSync(built.directory, join(staging, "persist"), { recursive: true })
     writeFileSync(
@@ -564,21 +574,24 @@ function publishTemplate(cache: string, built: Template): Template {
         slotFiles: built.slotFiles,
       }),
     )
+    if (existsSync(cache) && readCachedTemplate(cache) === null) {
+      rmSync(cache, { recursive: true, force: true })
+    }
     renameSync(staging, cache)
   } catch (error) {
     rmSync(staging, { recursive: true, force: true })
     if (!existsSync(join(cache, "template.json"))) throw error
   }
   rmSync(built.directory, { recursive: true, force: true })
-  removeStaleTemplates(cache)
+  removeStaleTemplates(root, cache)
   return readCachedTemplate(cache) ?? built
 }
 
 /** 使われなくなった古いkeyのtemplateを消す。 */
-function removeStaleTemplates(current: string): void {
+function removeStaleTemplates(root: string, current: string): void {
   const threshold = Date.now() - TEMPLATE_CACHE_RETENTION_MS
-  for (const entry of readdirSync(TEMPLATE_CACHE_ROOT)) {
-    const path = join(TEMPLATE_CACHE_ROOT, entry)
+  for (const entry of readdirSync(root)) {
+    const path = join(root, entry)
     if (path === current) continue
     try {
       if (statSync(path).mtimeMs < threshold) rmSync(path, { recursive: true, force: true })
@@ -697,4 +710,15 @@ function loadMigrationStatements(): ReadonlyArray<ReadonlyArray<string>> {
     .map((file) => splitSqlStatements(readFileSync(join(migrationsDirectory, file), "utf8")))
 
   return migrationStatements
+}
+
+/** `package.json` を持つ最も近い祖先を製品の root として返す。製品ごとに context の深さが違っても同じ root を指す。 */
+function findProjectRoot(directory: string): string {
+  let current = directory
+  while (!existsSync(join(current, "package.json"))) {
+    const parent = dirname(current)
+    if (parent === current) throw new Error(`package.json が見つかりません: ${directory}`)
+    current = parent
+  }
+  return current
 }

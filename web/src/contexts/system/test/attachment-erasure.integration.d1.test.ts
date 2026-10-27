@@ -46,6 +46,7 @@ function authentication(accountId: string) {
     expiresAtMs: now.getTime() + 3_600_000,
     machineCredentialId: null,
     identityBindingId: null,
+    sessionFamilyId: null,
   }
 }
 

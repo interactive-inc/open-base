@@ -30,7 +30,17 @@ export class GrantSystemScopedRoleBindingWithEffectsAdapter {
     const statements: D1PreparedStatement[] = [
       c.database
         .prepare(
-          `SELECT CASE WHEN EXISTS (
+          `SELECT CASE WHEN (EXISTS (
+             SELECT 1 FROM system_accounts admin_actor
+             JOIN system_role_bindings admin_binding ON admin_binding.account_id = admin_actor.id
+             JOIN system_iam_role_permissions admin_permission
+               ON admin_permission.role_id = admin_binding.role_id
+             WHERE admin_actor.id = ?1 AND admin_actor.status = 'active'
+               AND admin_actor.closed_at IS NULL AND admin_binding.revoked_at IS NULL
+               AND admin_binding.resource_type IS NULL
+               AND admin_permission.permission_key = 'system:admin'
+           )
+           OR EXISTS (
            SELECT 1 FROM system_accounts actor
            JOIN system_role_bindings actor_binding ON actor_binding.account_id = actor.id
            JOIN system_iam_role_permissions permission ON permission.role_id = actor_binding.role_id
@@ -39,7 +49,7 @@ export class GrantSystemScopedRoleBindingWithEffectsAdapter {
              AND (actor_binding.resource_type IS NULL OR
                (actor_binding.resource_type = ?3 AND actor_binding.resource_id = ?4))
              AND permission.permission_key = ?5
-         ) AND EXISTS (
+         )) AND EXISTS (
            SELECT 1 FROM system_accounts target
            WHERE target.id = ?2 AND target.status = 'active' AND target.closed_at IS NULL
          ) AND EXISTS (
@@ -48,7 +58,17 @@ export class GrantSystemScopedRoleBindingWithEffectsAdapter {
          ) AND NOT EXISTS (
            SELECT 1 FROM system_iam_role_permissions permission
            WHERE permission.role_id = ?6 AND permission.permission_key = ?7
-         ) AND NOT EXISTS (
+         ) AND (EXISTS (
+             SELECT 1 FROM system_accounts admin_actor
+             JOIN system_role_bindings admin_binding ON admin_binding.account_id = admin_actor.id
+             JOIN system_iam_role_permissions admin_permission
+               ON admin_permission.role_id = admin_binding.role_id
+             WHERE admin_actor.id = ?1 AND admin_actor.status = 'active'
+               AND admin_actor.closed_at IS NULL AND admin_binding.revoked_at IS NULL
+               AND admin_binding.resource_type IS NULL
+               AND admin_permission.permission_key = 'system:admin'
+           )
+           OR NOT EXISTS (
            SELECT 1 FROM system_iam_role_permissions required
            WHERE required.role_id = ?6 AND NOT EXISTS (
              SELECT 1 FROM system_role_bindings actor_role
@@ -58,7 +78,7 @@ export class GrantSystemScopedRoleBindingWithEffectsAdapter {
                  (actor_role.resource_type = ?3 AND actor_role.resource_id = ?4))
                AND possessed.permission_key = required.permission_key
            )
-         ) AND NOT EXISTS (
+         )) AND NOT EXISTS (
            SELECT 1 FROM system_role_bindings current
            WHERE current.account_id = ?2 AND current.resource_type = ?3 AND current.resource_id = ?4
              AND current.revoked_at IS NULL AND (?8 = 0 OR current.id <> ?9 OR current.role_id <> ?6)

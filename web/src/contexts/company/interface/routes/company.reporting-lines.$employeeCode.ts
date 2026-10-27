@@ -1,3 +1,4 @@
+import { canReadCompanyResource } from "@/contexts/company/interface/operations/company-resource-read-permission"
 /** /company/reporting-lines/:employeeCode */
 import { ReadCanonicalOrganizationStateAdapter } from "@/contexts/company/infrastructure/adapters/organization/read-canonical-organization-state.adapter"
 import { ReadCompanySnapshotEmployeesAdapter } from "@/contexts/company/infrastructure/adapters/organization/read-company-snapshot-employees.adapter"
@@ -18,7 +19,7 @@ import { COMPANY_DEFAULT_ORGANIZATION_ID } from "@/contexts/company/domain/defin
 
 const factory = createFactory<CompanyHttpEnvironment>()
 
-// @authorization permission - company:read capabilityで報告ラインを読む
+// @authorization permission - employee:read または company:admin で報告ラインを読む
 export const GET = factory.createHandlers(
   zValidator(
     "param",
@@ -31,7 +32,7 @@ export const GET = factory.createHandlers(
     const actor = context.var.companyActor
     if (actor === undefined) throw new CompanyAuthenticationRequiredError()
     if (
-      !actor.hasCapability("company:read") ||
+      !canReadCompanyResource(actor, "employee") ||
       !actor.canAccessOrganization(COMPANY_DEFAULT_ORGANIZATION_ID)
     )
       throw new CompanyReadForbiddenError()

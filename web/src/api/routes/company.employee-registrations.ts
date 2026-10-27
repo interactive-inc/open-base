@@ -18,6 +18,8 @@ const bodySchema = z.strictObject({
   code: z.string().trim().min(1).max(64),
   name: z.string().trim().min(1).max(200),
   email: z.string().email().max(320),
+  password: z.string().min(1).max(200).optional(),
+  oidc_subject: z.string().trim().min(1).max(255).optional(),
   role: z.enum(["member", "manager", "hr", "root"]),
   hire_on: z.string().date(),
   employment_type: z.enum(["FULL_TIME", "PART_TIME"]),
@@ -26,7 +28,7 @@ const bodySchema = z.strictObject({
   manager_employee_code: z.string().trim().min(1).max(64).nullable().optional(),
 })
 
-// @authorization permission - employee:create、lifecycle、IAM権限をApplicationで再検証してパスキー招待を発行する
+// @authorization permission - employee:create、lifecycle、IAM権限をApplicationで再検証して配備の認証方式に合わせた資格情報を作る
 export const POST = factory.createHandlers(
   verifyBearer,
   zValidator("json", bodySchema),
@@ -53,6 +55,8 @@ export const POST = factory.createHandlers(
       action,
       expectedCompanyRevision: body.expected_company_revision,
       email: body.email,
+      password: body.password,
+      oidcSubject: body.oidc_subject,
       roleKey: body.role,
       idempotencyKey,
       now: context.var.now(),

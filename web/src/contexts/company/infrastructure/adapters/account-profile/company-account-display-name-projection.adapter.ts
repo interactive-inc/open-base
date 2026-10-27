@@ -2,10 +2,14 @@ import { getTableName, sql, type SQL } from "drizzle-orm"
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core"
 import type { CalendarDate } from "@/contexts/company/domain/definitions/calendar-date.definition"
 import { resolveCompanyBusinessDate } from "@/contexts/company/domain/definitions/resolve-company-business-date.definition"
+import { companyEffectiveResourceRevisionSql } from "@/contexts/company/infrastructure/adapters/employee/lib/company-effective-resource-revision-sql"
 
 type Context = Readonly<{ asOf: CalendarDate } | { now: Date; timeZone: string | undefined }>
 
-/** Account表示にも有効日の人物履歴を適用し、接続済みの履歴欠落を古い表示名で補わない。 */
+/**
+ * Account表示にも有効日の人物履歴を適用し、接続済みの履歴欠落を古い表示名で補わない。
+ * 従業員と人物の版は正本の時点参照と同じ規則で選び、訂正された版の氏名を表示しない。
+ */
 export class CompanyAccountDisplayNameProjectionAdapter {
   constructor(private readonly c: Context) {
     Object.freeze(this)
@@ -61,6 +65,7 @@ export class CompanyAccountDisplayNameProjectionAdapter {
             AND current_display_employee.resource_type = 'employee'
             AND current_display_employee.resource_id = display_employee.resource_id
             AND current_display_employee.effective_from <= ${asOf}
+            AND ${sql.raw(companyEffectiveResourceRevisionSql("current_display_employee"))}
           ORDER BY effective_from DESC, revision DESC LIMIT 1)
       JOIN company_resource_revisions display_person
         ON display_person.organization_id = display_employee.organization_id
@@ -72,6 +77,7 @@ export class CompanyAccountDisplayNameProjectionAdapter {
             AND current_display_person.resource_type = 'person'
             AND current_display_person.resource_id = display_person.resource_id
             AND current_display_person.effective_from <= ${asOf}
+            AND ${sql.raw(companyEffectiveResourceRevisionSql("current_display_person"))}
           ORDER BY effective_from DESC, revision DESC LIMIT 1)
       WHERE display_link.account_id = ${accountId}
         AND display_link.organization_id = ${organizationId}

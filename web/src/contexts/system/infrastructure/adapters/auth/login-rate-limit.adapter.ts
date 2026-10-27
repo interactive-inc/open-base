@@ -5,14 +5,14 @@ import type {
 } from "@system/configuration/system-context"
 import { systemAuthenticationAttempts } from "@system/infrastructure/schema/system-core"
 import { LoginRateLimitKeyValue } from "@system/domain/values/auth/login-rate-limit-key.value"
-import { and, count, eq, gt, lte } from "drizzle-orm"
+import { and, count, eq, gt, isNull, lte } from "drizzle-orm"
 
 /**
- * ログイン総当たり防止のレートリミット 。
+ * ログイン総当たり防止のレートリミット。
  *
  * 失敗した認証試行を D1 の system_authentication_attempts に 1 行 1 件で記録し、窓 (15 分) 内の行数が上限以上なら
  * 拒否する分散カウンタ。全 isolate が同じテーブルを見るため、旧実装 (module-scope in-memory Map) で
- * 攻撃面が isolate 数だけ倍増していた問題を解消する 。
+ * 攻撃面が isolate 数だけ倍増していた問題を解消する。
  *
  * このファイルは 2 系統の API を持つ。
  *
@@ -25,7 +25,7 @@ import { and, count, eq, gt, lte } from "drizzle-orm"
  *    resetLoginAttemptsForIdentifier)。単一の IP|識別子 bucket だけだと、IP を変えれば同一アカウントへの
  *    試行がリセットされ、識別子を変えれば同一 IP からの password spray が別 bucket に逃げられた。
  *    さらに check と increment が別クエリだと、並列リクエストが同時に上限未満判定を通過できる
- *    TOCTOU が残っていた 。pair (IP+識別子) / account (識別子単独) / ip (IP単独) の
+ *    TOCTOU が残っていた。pair (IP+識別子) / account (識別子単独) / ip (IP単独) の
  *    3 バケットを、check の前に自分の試行行を insert してから 1 回の db.batch で count する
  *    insert-then-count に変えることで両方を解消する。
  *
@@ -33,9 +33,12 @@ import { and, count, eq, gt, lte } from "drizzle-orm"
  * 削除して拒否するため、429 が続いても窓が延びない (最後に許可された失敗から WINDOW_MS 経過で
  * 自然に窓が空く)。
  *
- * DB 障害時は fail-open。record 系の best-effort な監査書き込み (record-auth-audit-log.ts) と同じく、
- * レートリミットの読み書き失敗でログイン処理自体を巻き戻さない。レートリミットは Basic 認証の背後に
- * 置く defense-in-depth であり、正の認証は機械credentialの秘密値の照合で行われる。D1 が実際に落ちていれば
+ * ログインゲートは表に記録できない入力を DB 操作前に拒否し、DB 障害だけを fail-open にする。
+ * identifier の上限 2048 文字と ip の上限 255 文字は、記録の制約違反を障害として扱わないよう schema の CHECK に揃える。
+ * SQLite の length() は最初の NUL までしか数えないので、NUL を含む値も CHECK に入らないものとして拒否する。
+ * record 系の best-effort な監査書き込み (record-auth-audit-log.ts) と同じく、
+ * DB 障害によるレートリミットの読み書き失敗でログイン処理自体を巻き戻さない。レートリミットは Basic 認証の背後に
+ * 置く defense-in-depth であり、正の認証は verifyPassword 側で行われる。D1 が実際に落ちていれば
  * ログインの identity 参照も同じ DB で失敗するため、fail-open が認証バイパスを生むことはない。
  * ここでの throw 禁止 (T | Error でなく boolean/void を返す) はこの best-effort 方針に合わせたもの。
  */
@@ -91,10 +94,50 @@ export class LoginRateLimitAdapter {
   resetForIdentifier(props: Readonly<{ identifier: string }>): Promise<void> {
     return resetLoginAttemptsForIdentifier(this.c.var.database, props.identifier)
   }
+
+  recordAndCheckPasswordReauthentication(
+    props: Readonly<{ accountId: string; now?: number }>,
+  ): Promise<LoginRateLimitGateResult> {
+    return recordAndCheckPasswordReauthenticationAttempt(
+      this.c.var.database,
+      LoginRateLimitKeyValue.passwordReauthentication(props.accountId).toString(),
+      props.now ?? this.c.var.now().getTime(),
+    )
+  }
+
+  resetPasswordReauthentication(props: Readonly<{ accountId: string }>): Promise<void> {
+    return resetPasswordReauthenticationAttempts(
+      this.c.var.database,
+      LoginRateLimitKeyValue.passwordReauthentication(props.accountId).toString(),
+    )
+  }
+
+  /** 二段階目のコードの試行を Account 単位で数える。数え方は再認証と同じで、名前空間だけを分ける。 */
+  recordAndCheckSecondFactor(
+    props: Readonly<{ accountId: string; now?: number }>,
+  ): Promise<LoginRateLimitGateResult> {
+    return recordAndCheckPasswordReauthenticationAttempt(
+      this.c.var.database,
+      LoginRateLimitKeyValue.secondFactor(props.accountId).toString(),
+      props.now ?? this.c.var.now().getTime(),
+    )
+  }
+
+  resetSecondFactor(props: Readonly<{ accountId: string }>): Promise<void> {
+    return resetPasswordReauthenticationAttempts(
+      this.c.var.database,
+      LoginRateLimitKeyValue.secondFactor(props.accountId).toString(),
+    )
+  }
 }
 
 function toIpPart(ip: string | null): string {
   return ip !== null && ip.length > 0 ? ip : "anonymous"
+}
+
+/** 試行の表の CHECK (1 文字以上 maxLength 文字以下) に入る値か。NUL を含む値は SQLite の length() で短く数えられる。 */
+function isRecordableAttemptText(value: string, maxLength: number): boolean {
+  return value.length >= 1 && value.length <= maxLength && !value.includes("\u0000")
 }
 
 /**
@@ -158,7 +201,7 @@ async function recordLoginAttempt(db: Db, key: string, now: number = Date.now())
 
 /**
  * 認証成功時に該当キーの試行行をすべて削除する。成功を境に窓をリセットすることで、直前に失敗が
- * 続いていても正規ログイン後の再試行がすぐ上限に当たらないようにする 。best-effort。
+ * 続いていても正規ログイン後の再試行がすぐ上限に当たらないようにする。best-effort。
  */
 async function resetLoginAttempts(db: Db, key: string): Promise<void> {
   try {
@@ -175,7 +218,7 @@ async function resetLoginAttempts(db: Db, key: string): Promise<void> {
  * 巻き込み、識別子のみだと単一アカウントを狙う攻撃者が同 IP から複数識別子を試して既存ユーザ列挙
  * できてしまうので、両方を結合する。
  *
- * 正規化は呼び出し側の責務 。メールは normalizeEmail (trim + 小文字化)、社員番号は trim のみ
+ * 正規化は呼び出し側の責務。メールは normalizeEmail (trim + 小文字化)、社員番号は trim のみ
  * (英字入り社員番号の大文字を保つ) 済みの識別子を渡す。ここで一律に小文字化すると社員番号の
  * 大小を潰し Emp-A01 と emp-a01 が同一バケットに落ちるため、builder では小文字化しない
  * (internal verify key と同じく正規化済み前提)。
@@ -201,16 +244,16 @@ const MAX_ATTEMPTS_PER_IP = 50
 export type LoginRateLimitGateResult = { limited: boolean }
 
 /**
- * ログイン専用の原子的レートリミットゲート 。
+ * ログイン専用の原子的レートリミットゲート。
  *
- * 機械credentialの秘密値を照合する前に必ず呼ぶ。まず試行行を 1 行 insert し、同じ db.batch 往復内で
+ * verifyPassword を呼ぶ前に必ず呼ぶ。まず試行行を 1 行 insert し、同じ db.batch 往復内で
  * pair (identifier+ip) / account (identifier 単独) / ip (ip 単独) の 3 バケットを、自分の行を
  * 含めて count する。D1 は 1 つの D1 database につき単一の SQLite 接続を直列実行するため、
  * db.batch でまとめた insert→count は 1 つの実行単位として他リクエストの書込と割り込まない。
- * 「上限確認 → (別リクエストの insert が割り込む) → 記録」の TOCTOU ( の指摘) はこれで消える。
+ * 「上限確認 → (別リクエストの insert が割り込む) → 記録」の TOCTOU はこれで消える。
  *
  * いずれかのバケットが閾値を超えていれば、自分の行だけを削除して limited:true を返す
- * (呼び出し側は秘密値を照合しない。上限到達後に照合を走らせないためであり、
+ * (呼び出し側は verifyPassword を呼ばない。高コストな PBKDF2 を上限到達後に走らせないためであり、
  * 429 が続いても行が残らないので窓も延びない)。閾値未満なら行を残したまま limited:false を返す。
  *
  * 呼び出し側 (login.ts) の後続の扱い:
@@ -236,6 +279,9 @@ async function recordAndCheckLoginAttempt(
   now: number = Date.now(),
 ): Promise<LoginRateLimitGateResult> {
   const ipPart = toIpPart(ip)
+  if (!isRecordableAttemptText(identifier, 2048) || !isRecordableAttemptText(ipPart, 255)) {
+    return { limited: true }
+  }
   const id = crypto.randomUUID()
   const attemptedAt = new Date(now)
   const windowStart = new Date(now - WINDOW_MS)
@@ -315,7 +361,7 @@ async function recordAndCheckLoginAttempt(
 }
 
 /**
- * 認証成功時に該当 identifier の試行行をすべて削除する 。
+ * 認証成功時に該当 identifier の試行行をすべて削除する。
  *
  * pair (identifier+ip) は identifier=X の部分集合なので、この 1 クエリで account・pair の
  * 両方がリセットされる。ip 単独バケットは削除条件に identifier を含まないため対象外のまま残り、
@@ -329,5 +375,96 @@ async function resetLoginAttemptsForIdentifier(db: Db, identifier: string): Prom
       .where(eq(systemAuthenticationAttempts.identifier, identifier))
   } catch (error) {
     console.error("login rate limit reset failed", error)
+  }
+}
+
+/**
+ * ---------------------------------------------------------------------------
+ * パスワード再入力 (再認証・パスワード変更) の原子的ゲート
+ * ---------------------------------------------------------------------------
+ */
+
+/**
+ * 認証済みセッションから自分のパスワードを再入力する操作の、Account 単位の原子的ゲート。
+ *
+ * パスワードの検証より前に必ず呼ぶ。ログインのゲートと同じく、試行行を 1 行 insert してから同じ
+ * db.batch の中で窓内の行数を数える insert-then-count なので、並行した試行でも上限を超えて通らない。
+ * 上限を超えたら自分の行だけを削除して limited:true を返し、呼び出し側は検証に進まない
+ * (拒否が続いても窓は延びない)。
+ *
+ * ログインとはカウンタを分ける。キーは passwordReauthentication の名前空間で、ip 列は NULL のまま
+ * 入れ、数えるのも ip が NULL の行だけにする。ログインのゲートは ip を必ず埋める (無ければ anonymous)
+ * ので、ログインの識別子にこのキーと同じ文字列を送られても、その行はここでは数えない。逆に、
+ * ログインの ip バケットは NULL を数えず、account・pair バケットは識別子で数えるので、ここで入れた行は
+ * ログインの上限を押し上げない。第三者のログイン失敗で正規の利用者の再入力が締め出されることはない。
+ *
+ * 呼び出し側は Account が認証済みであることを前提にするため、IP 単位・識別子横断のバケットは持たない。
+ * 窓と上限はログインと同じ値 (WINDOW_MS / MAX_ATTEMPTS) を使う。成功したら
+ * resetPasswordReauthentication で行を消し、失敗ならこの行をそのまま 1 回分として残す
+ * (検証中の障害で失敗した試行も、ログインと同じく 1 回分として残る)。
+ * DB エラー時はログインのゲートと同じく fail-open で limited:false を返す。
+ */
+async function recordAndCheckPasswordReauthenticationAttempt(
+  db: Db,
+  identifier: string,
+  now: number,
+): Promise<LoginRateLimitGateResult> {
+  const id = crypto.randomUUID()
+  const windowStart = new Date(now - WINDOW_MS)
+
+  try {
+    const insert = db
+      .insert(systemAuthenticationAttempts)
+      .values({ id, identifier, ip: null, attemptedAt: new Date(now) })
+    const accountCount = db
+      .select({ total: count() })
+      .from(systemAuthenticationAttempts)
+      .where(
+        and(
+          eq(systemAuthenticationAttempts.identifier, identifier),
+          isNull(systemAuthenticationAttempts.ip),
+          gt(systemAuthenticationAttempts.attemptedAt, windowStart),
+        ),
+      )
+    const cleanup = db
+      .delete(systemAuthenticationAttempts)
+      .where(
+        and(
+          eq(systemAuthenticationAttempts.identifier, identifier),
+          lte(systemAuthenticationAttempts.attemptedAt, windowStart),
+        ),
+      )
+
+    const [, accountRows] = await db.batch([insert, accountCount, cleanup])
+    const limited = (accountRows[0]?.total ?? 0) > MAX_ATTEMPTS
+
+    if (limited) {
+      await db.delete(systemAuthenticationAttempts).where(eq(systemAuthenticationAttempts.id, id))
+    }
+
+    return { limited }
+  } catch (error) {
+    console.error("password reauthentication rate limit gate failed", error)
+
+    return { limited: false }
+  }
+}
+
+/**
+ * パスワード再入力に成功したとき、そのキーの行を消す。数えるときと同じく ip が NULL の行だけを対象にし、
+ * ログインのゲートが同じ文字列の識別子で入れた行には触れない。best-effort。
+ */
+async function resetPasswordReauthenticationAttempts(db: Db, identifier: string): Promise<void> {
+  try {
+    await db
+      .delete(systemAuthenticationAttempts)
+      .where(
+        and(
+          eq(systemAuthenticationAttempts.identifier, identifier),
+          isNull(systemAuthenticationAttempts.ip),
+        ),
+      )
+  } catch (error) {
+    console.error("password reauthentication rate limit reset failed", error)
   }
 }

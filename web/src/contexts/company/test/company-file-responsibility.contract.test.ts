@@ -9,6 +9,12 @@ const productionFiles = [...new Glob("**/*.ts").scanSync({ cwd: contextDirectory
   .filter((file) => !file.endsWith(".test.ts") && !file.startsWith("test/"))
   .sort()
 
+function findFlatRouteViolations(routeFiles: string[]): string[] {
+  return routeFiles.filter(
+    (file) => file.split("/").length !== 3 || /\/(?:route|create-route)(?:\.test)?\.ts$/.test(file),
+  )
+}
+
 describe("Company file responsibility contract", () => {
   test("全contextのApplicationを一ユースケース一クラスに保つ", () => {
     const files = [
@@ -327,11 +333,30 @@ describe("Company file responsibility contract", () => {
   })
 
   test("routeはURLをdotで表すflat fileだけを許可する", () => {
-    const routeFiles = [...new Glob("interface/routes/**/*.ts").scanSync()]
-    expect(routeFiles.filter((file) => file.split("/").length !== 3)).toEqual([])
+    const routeFiles = [
+      ...new Glob("interface/routes/**/*.ts").scanSync({ cwd: contextDirectory.pathname }),
+    ]
+    expect(routeFiles.length).toBeGreaterThan(0)
+    expect(findFlatRouteViolations(routeFiles)).toEqual([])
+  })
+
+  test("flat routeの判定は入れ子のファイルと汎用route名を検出する", () => {
+    const violations = [
+      "interface/routes/company/employees.ts",
+      "interface/routes/company/employees.test.ts",
+      "interface/routes/route.ts",
+      "interface/routes/route.test.ts",
+      "interface/routes/create-route.ts",
+      "interface/routes/create-route.test.ts",
+    ]
+
     expect(
-      routeFiles.filter((file) => /\/(?:route|create-route)(?:\.test)?\.ts$/.test(file)),
-    ).toEqual([])
+      findFlatRouteViolations([
+        "interface/routes/company.employees.ts",
+        "interface/routes/company.employees.test.ts",
+        ...violations,
+      ]),
+    ).toEqual(violations)
   })
 
   test("routeの失敗はHTTPException派生errorをthrowしResponseを直接生成しない", () => {

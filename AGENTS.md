@@ -20,7 +20,7 @@
 - `web/src/contexts/system` はPrincipal、Account、Identity、認証、認可、汎用手続き、案件、判断、委任、承認、実行許可、監査、証跡、通知、非同期処理、添付、外部接続、運用診断を所有する。
 - `web/src/contexts/company` は法人、会社文脈、人、従業員、雇用、組織、所属、役職、等級、責任、会社上の判断資格とAccount対応を所有する。
 - `web/src/api` は認証middleware、context登録、複数contextのread modelとHTTP合成だけを持つ。業務事実の正本を持たない。
-- `web/src/auth.ts` はBetter Authの設定だけを持つ。人のサインインはパスキーだけで、SystemはcompositionがBetter Authで検証したセッションを受け取ってAccountの現在状態と照合する。
+- `web/src/auth.ts` はBetter Authの設定だけを持つ。人のサインインは配備ごとに `SIGN_IN_METHOD` で選ぶパスワード・パスキー・OIDCの一つで、SystemはcompositionがBetter Authで検証したセッションを受け取ってAccountの現在状態と照合する。
 - `web/src/lib` はcontext、API、DB所有schemaに依存しない技術部品だけを置く。
 - 給与、税、会計、決済、信用調査、法的・医学的判断や個別業務アプリを実装しない。
 - Account roleとtechnical permissionを会社上の判断資格の代用にしない。未定義、候補ゼロ、評価不能はfail closedにする。
@@ -47,13 +47,13 @@
 - 重要な変更に監査、actor chain、理由、証拠、再構成可能な履歴を持つ。
 - Web、CLI、MCP、APIで同じapplication ruleを適用する。
 - 認可、失敗、競合、再試行をテストする。外部連携のtimeout、重複、順序逆転、部分失敗も安全側に扱う。
-- 人のサインインはパスキーだけにする。CLIとMCPはデバイス認証のセッション、他のサービスは機械credentialか外部access tokenを使う。高リスク操作の再認証は直前のパスキーのサインインに限る。
+- 人のサインインは配備ごとにパスワード・パスキー・OIDCから一つを選ぶ。パスワード資格情報の正本はSystemとし、認証基盤へ現在の検証用ハッシュを同期する。三つの方式で動くようにする。CLIとMCPはデバイス認証のセッション、他のサービスは機械credentialか外部access tokenを使う。高リスク操作の再認証は直前のサインインに限る。
 
 ## 開発と検証
 
 `README.md` の手順でローカル設定と新規DBを用意する。秘密値は `bun run --cwd web setup:dev-vars` で生成する。
 
-`portless.json` がホスト名の正本。画面とAPIは `https://base.localhost`（APIは `/api` 配下）。直接接続はport 18787。パスキーはIPアドレスのoriginで使えないため、ブラウザではホスト名で開く。
+`portless.json` がホスト名の正本。画面とAPIは `https://base.localhost`（APIは `/api` 配下）。直接接続はport 18787。パスキーはIPアドレスのoriginで使えないため、ブラウザではホスト名で開く。OIDCの発行者はHTTPSに限り、手元の開発用IdPだけ `http://localhost` を使える。
 
 - 変更後は `make ci` を実行する。重い検査は同時に一つだけ実行する。
 - 型生成、API/CLI/MCP/Webの型検査、formatter/linter、単体テスト、ローカルD1受入を行う。

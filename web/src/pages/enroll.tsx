@@ -38,17 +38,22 @@ export default function Enroll({ token }: Props) {
         onClick={async () => {
           setPending(true)
           setError("")
-          const { authClient, describeAuthError } = await loadAuthClient()
-          const result = await authClient.passkey.addPasskey({
-            context: token,
-            createSession: true,
-          })
-          setPending(false)
-          if (result?.error) {
-            setError(describeAuthError(result.error))
-            return
+          try {
+            const { authClient, describeAuthError } = await loadAuthClient()
+            const result = await authClient.passkey.addPasskey({
+              context: token,
+              createSession: true,
+            })
+            if (result?.error) {
+              setError(describeAuthError(result.error))
+              return
+            }
+            setDone(true)
+          } catch {
+            setError("登録できませんでした。もう一度やり直してください。")
+          } finally {
+            setPending(false)
           }
-          setDone(true)
         }}
       >
         パスキーを登録

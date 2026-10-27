@@ -31,6 +31,6 @@ export class UpdateIntegrationExchange {
       errorCode: command.errorCode,
     })
     if (updated instanceof Error) return updated
-    return this.c.write(updated, current.updatedAt)
+    return this.c.write(updated, current)
   }
 }
