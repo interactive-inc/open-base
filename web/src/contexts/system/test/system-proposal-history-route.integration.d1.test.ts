@@ -18,7 +18,7 @@ import { GET } from "@system/interface/routes/system.proposals.$number.versions.
 // ローカルD1のtemplate作成とDBごとの往復を含むため、既定の5秒を超えることがある。
 setDefaultTimeout(30_000)
 
-async function fixture() {
+async function fixture(subjectContext?: string) {
   const f = await createSystemWorkTestFixture()
   for (const name of [
     "system-workflow",
@@ -76,6 +76,9 @@ async function fixture() {
     supersedesProposalId: null,
     createdAt: f.clock.now,
     firstTask,
+    ...(subjectContext === undefined
+      ? {}
+      : { subject: { context: subjectContext, kind: "entry", id: "entry", version: "1" } }),
   })
   if (first instanceof Error) throw first
   const second = await start.run({
@@ -88,6 +91,9 @@ async function fixture() {
     supersedesProposalId: first.proposal.id,
     createdAt: new Date(f.clock.now.getTime() + 1),
     firstTask: { ...firstTask, openedAt: new Date(f.clock.now.getTime() + 1) },
+    ...(subjectContext === undefined
+      ? {}
+      : { subject: { context: subjectContext, kind: "entry", id: "entry", version: "2" } }),
   })
   if (second instanceof Error) throw second
   f.clock.now = new Date(f.clock.now.getTime() + 2)
@@ -128,6 +134,40 @@ async function fixture() {
     )
   return { ...f, first, second, request }
 }
+
+test("他contextの案件は共通の全件閲覧や申請者の権限でも開示せず、内部queryでだけ照会できる", async () => {
+  const f = await fixture("records")
+  expect((await f.request("45712a13-6a79-4dff-b2b0-d518052d6101")).status).toBe(404)
+  expect((await f.request("86bb9cb9-9f16-4b64-865d-2e7954cf484d", 2)).status).toBe(404)
+  const internal = new SystemD1ProposalAdapter({ env: { DB: f.db } })
+  expect(await internal.findByNumber(f.first.number)).not.toBeNull()
+  const restricted = new SystemD1ProposalAdapter({
+    env: { DB: f.db },
+    visibleSubjectContexts: ["system"],
+  })
+  expect(await restricted.findByNumber(f.first.number)).toBeNull()
+  expect(
+    await restricted.findBySeriesVersion({
+      seriesId: f.first.proposal.seriesId,
+      version: 1,
+      creatorAccountId: f.first.proposal.createdByAccountId,
+    }),
+  ).toBeNull()
+  const list = await restricted.list({
+    creatorAccountIds: null,
+    actorAccountId: null,
+    statuses: null,
+    procedureKey: null,
+    createdFrom: null,
+    createdTo: null,
+    includeCancelled: true,
+    sort: "created_at_desc",
+    limit: 50,
+    offset: 0,
+    at: f.clock.now,
+  })
+  expect(list).toEqual({ proposals: [], total: 0 })
+})
 
 test("Company・業務コードなしで取消済み原版と再提出版を読み、退職相当の停止主体も履歴に残す", async () => {
   const f = await fixture()

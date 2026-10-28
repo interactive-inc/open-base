@@ -6,7 +6,6 @@ export function createPendingSystemPasswordIdentity(
   database: D1Database,
   input: Readonly<{
     actorAccountId: string
-    requesterHasSystemAdmin: boolean
     accountId: string
     email: string
     pendingPasswordHash: string

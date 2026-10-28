@@ -156,9 +156,7 @@ export class SystemD1ProcedureRepository {
     try {
       await this.c.env.DB.batch([
         ...(this.c.publishGuards ?? []),
-        ...(expectedRevision === 0
-          ? this.prepareInitialPublish(definition)
-          : this.prepareRevisionPublish(definition, expectedRevision)),
+        ...this.preparePublishStatements(definition, expectedRevision),
         ...(this.c.publishEffects ?? []),
       ])
 
@@ -171,6 +169,22 @@ export class SystemD1ProcedureRepository {
         ? cause
         : new Error("failed to publish system procedure", { cause })
     }
+  }
+
+  /** 上位contextの設定と同じbatchへ、変更不能な規程版の公開を合成する。 */
+  preparePublishStatements(
+    definition: ProcedureDefinitionEntity,
+    expectedRevision: number,
+  ): ReadonlyArray<D1PreparedStatement> {
+    if (
+      !Number.isSafeInteger(expectedRevision) ||
+      expectedRevision < 0 ||
+      definition.revision !== expectedRevision + 1
+    )
+      throw new Error("invalid procedure revision")
+    return expectedRevision === 0
+      ? this.prepareInitialPublish(definition)
+      : this.prepareRevisionPublish(definition, expectedRevision)
   }
 
   async retire(input: {

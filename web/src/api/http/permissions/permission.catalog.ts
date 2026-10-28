@@ -1,3 +1,4 @@
+import { REVIEW_PERMISSION_ENTRIES } from "@/contexts/performance-review/domain/catalogs/review-permission.catalog"
 import { API_COMPOSITION_PERMISSION_ENTRIES } from "@/api/http/permissions/api-composition-permission-entry.catalog"
 import { SYSTEM_PERMISSION_ENTRIES } from "@/api/http/permissions/system-permission-entry.catalog"
 import { SYSTEM_FEATURE_PERMISSION_ENTRIES } from "@system/domain/catalogs/iam/system-feature-permission-entry.catalog"
@@ -23,4 +24,5 @@ export const PERMISSION_CATALOG = [
   ...SYSTEM_PERMISSION_ENTRIES,
   ...SYSTEM_FEATURE_PERMISSION_ENTRIES,
   ...API_COMPOSITION_PERMISSION_ENTRIES,
+  ...REVIEW_PERMISSION_ENTRIES,
 ] satisfies ReadonlyArray<PermissionEntry>

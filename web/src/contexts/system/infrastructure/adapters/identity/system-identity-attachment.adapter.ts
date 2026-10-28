@@ -1,3 +1,4 @@
+import { SystemCredentialIssuanceAuthorityAdapter } from "@system/infrastructure/adapters/identity/system-credential-issuance-authority.adapter"
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
 import type { AccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { SystemAuditEventEntity } from "@system/domain/entities/system-audit-event.entity"
@@ -14,40 +15,6 @@ export type PreparedSystemIdentityAttachment = Readonly<{
 }>
 type Context = SystemD1Context
 
-/**
- * 操作主体が対象Accountとしてsign inできる経路を足してよいかを判定する。
- * system:admin、またはiam:writeと対象Accountの全権限を持つ有効なglobal割当だけを許可する。
- * 対象の権限はresource割当や開始前の割当も含め、操作主体の権限を超える昇格を防ぐ。
- */
-function attachmentAuthoritySql(otherwise: string): string {
-  return `WITH actor_permissions AS (
-       SELECT DISTINCT permission.permission_key AS key
-       FROM system_accounts account
-       INNER JOIN system_role_bindings binding ON binding.account_id = account.id
-       INNER JOIN system_iam_role_permissions permission ON permission.role_id = binding.role_id
-       WHERE account.id = ?1 AND account.status = 'active'
-         AND binding.resource_type IS NULL AND binding.revoked_at IS NULL
-         AND binding.created_at <= ?3
-     ), target_permissions AS (
-       SELECT DISTINCT permission.permission_key AS key
-       FROM system_role_bindings binding
-       INNER JOIN system_iam_role_permissions permission ON permission.role_id = binding.role_id
-       WHERE binding.account_id = ?2 AND binding.revoked_at IS NULL
-     )
-     SELECT CASE WHEN
-       EXISTS (SELECT 1 FROM actor_permissions WHERE key = 'system:admin')
-       OR (
-         EXISTS (SELECT 1 FROM actor_permissions WHERE key = 'iam:write')
-         AND NOT EXISTS (
-           SELECT 1 FROM target_permissions target
-           WHERE NOT EXISTS (
-             SELECT 1 FROM actor_permissions actor WHERE actor.key = target.key
-           )
-         )
-       )
-     THEN 1 ELSE ${otherwise} END AS ok`
-}
-
 /** 既存Accountへのmachine-managed Identity追加を監査込みで準備する。 */
 export class SystemIdentityAttachmentAdapter {
   constructor(private readonly c: Context) {
@@ -62,10 +29,10 @@ export class SystemIdentityAttachmentAdapter {
   }): Promise<boolean | Error> {
     if (!Number.isSafeInteger(input.now.getTime())) return false
     try {
-      const ok = await this.c.env.DB.prepare(attachmentAuthoritySql("0"))
-        .bind(input.actorAccountId, input.accountId, input.now.getTime())
-        .first<number>("ok")
-      return ok === 1
+      return await new SystemCredentialIssuanceAuthorityAdapter(this.c.env.DB).canIssue({
+        ...input,
+        allowSelf: false,
+      })
     } catch (caught) {
       return caught instanceof Error
         ? caught
@@ -106,11 +73,12 @@ export class SystemIdentityAttachmentAdapter {
     })
     if (auditEvent instanceof Error) return auditEvent
     const database = this.c.env.DB
+    const authorityGuard = new SystemCredentialIssuanceAuthorityAdapter(database)
+      .prepare({ ...input, allowSelf: false })
+      .toSQL()
     const statements = [
       // 事前判定の後に権限が変わっても、同じ変更単位の中で再検査して昇格を拒否する。
-      database
-        .prepare(attachmentAuthoritySql("abs(-9223372036854775808)"))
-        .bind(input.actorAccountId, input.accountId, input.now.getTime()),
+      database.prepare(authorityGuard.sql).bind(...authorityGuard.params),
       database
         .prepare(
           `INSERT INTO system_identity_bindings

@@ -24,6 +24,7 @@ const securityTables = Object.freeze({
 
 /** 文を実行せず返すだけの公開builder。呼び出し側が同じbatchへ監査を加える。 */
 const callerAuditedStatementBuilders = Object.freeze([
+  "infrastructure/adapters/auth/invalidate-system-password-reset-challenges.adapter.ts",
   "interface/operations/prepare-system-password-account-registration.ts",
 ])
 

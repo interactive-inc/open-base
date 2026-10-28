@@ -95,7 +95,7 @@ async function seedIdentities(database: D1Database) {
         targetAccountId,
         `${state}@example.com`,
         state === "pending" ? null : 0,
-        state === "revoked" ? 5 : null,
+        null,
       )
       .run()
     await database
@@ -103,6 +103,23 @@ async function seedIdentities(database: D1Database) {
       (identity_id, password_hash, changed_at, created_at, updated_at) VALUES (?1, ?2, 0, 0, 0)`)
       .bind(identityId, oldHash)
       .run()
+    await database
+      .prepare(`INSERT INTO system_password_reset_challenges
+      (id, token_hash, account_id, identity_id, created_at, expires_at, used_at)
+      VALUES (?1, ?2, ?3, ?4, 0, ?5, NULL)`)
+      .bind(
+        testLiteralId(`reset-link-${state}`),
+        String(["first", "second", "pending", "revoked"].indexOf(state) + 1).padStart(64, "0"),
+        targetAccountId,
+        identityId,
+        now.getTime() + 3_600_000,
+      )
+      .run()
+    if (state === "revoked")
+      await database
+        .prepare("UPDATE system_identity_bindings SET revoked_at = 5 WHERE id = ?1")
+        .bind(identityId)
+        .run()
   }
   return oldHash
 }
@@ -119,6 +136,13 @@ test("管理者の再設定は有効なpassword Identity全件の旧パスワー
       .bind(testLiteralId(`password-reset-${state}`))
       .first<{ password_hash: string; changed_at: number }>()
     if (credential === null) throw new Error("expected credential")
+    const challenge = await fixture.database
+      .prepare("SELECT used_at FROM system_password_reset_challenges WHERE identity_id = ?1")
+      .bind(testLiteralId(`password-reset-${state}`))
+      .first<{ used_at: number | null }>()
+    expect(challenge).toEqual({
+      used_at: state === "pending" || state === "revoked" ? null : now.getTime(),
+    })
     if (state === "pending" || state === "revoked") {
       expect(credential).toEqual({ password_hash: oldHash, changed_at: 0 })
       continue
@@ -176,6 +200,34 @@ test("複数credentialの再設定は監査に失敗すると全件とセッシ�
       .bind(targetAccountId)
       .first<{ token_version: number }>(),
   ).toEqual({ token_version: 0 })
+  expect(
+    (await fixture.database.prepare("SELECT used_at FROM system_password_reset_challenges").all())
+      .results,
+  ).toEqual(Array.from({ length: 4 }, () => ({ used_at: null })))
+})
+
+test("既発行リンクの失効に失敗したらパスワードも世代も変更しない", async () => {
+  const fixture = await createFixture()
+  const oldHash = await seedIdentities(fixture.database)
+  await execSql(
+    fixture.database,
+    `CREATE TRIGGER reject_link_invalidation BEFORE UPDATE OF used_at ON system_password_reset_challenges BEGIN SELECT RAISE(ABORT, 'invalidation unavailable'); END;`,
+  )
+  expect((await fixture.reset()).status).toBe(503)
+  const credentials = await fixture.database
+    .prepare("SELECT password_hash FROM system_password_credentials")
+    .all()
+  expect(credentials.results).toEqual(Array.from({ length: 4 }, () => ({ password_hash: oldHash })))
+  expect(
+    await fixture.database
+      .prepare("SELECT token_version FROM system_accounts WHERE id = ?1")
+      .bind(targetAccountId)
+      .first<number>("token_version"),
+  ).toBe(0)
+  expect(
+    (await fixture.database.prepare("SELECT used_at FROM system_password_reset_challenges").all())
+      .results,
+  ).toEqual(Array.from({ length: 4 }, () => ({ used_at: null })))
 })
 
 test("管理者の再設定は二段階認証の登録と待機中のログインの challenge も消す", async () => {

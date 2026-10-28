@@ -7,6 +7,7 @@ type RequestOptions = {
   query?: Record<string, string | number | boolean | null | undefined>
   json?: unknown
   stepUpToken?: string
+  idempotencyKey?: string
 }
 
 export async function api<T = unknown>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -38,6 +39,7 @@ async function request<T = unknown>(
   if (options.stepUpToken !== undefined) {
     headers["x-system-step-up"] = options.stepUpToken
   }
+  if (options.idempotencyKey !== undefined) headers["Idempotency-Key"] = options.idempotencyKey
 
   if (options.json !== undefined) {
     headers["content-type"] = "application/json"

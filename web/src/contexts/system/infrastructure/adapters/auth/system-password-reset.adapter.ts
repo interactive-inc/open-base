@@ -1,3 +1,4 @@
+import { InvalidateSystemPasswordResetChallengesAdapter } from "@system/infrastructure/adapters/auth/invalidate-system-password-reset-challenges.adapter"
 import type { AccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { zIdentityId } from "@system/domain/schemas/identity/identity-id.schema"
 import type { IdentityId } from "@system/domain/schemas/identity/identity-id.schema"
@@ -44,6 +45,9 @@ export class SystemPasswordResetAdapter {
 
   async reset(props: ResetProps): Promise<SystemPasswordResetMutation | Error> {
     try {
+      const invalidation = new InvalidateSystemPasswordResetChallengesAdapter(this.c.env.DB)
+        .prepare({ accountId: props.targetAccountId, identityId: undefined, now: props.now })
+        .toSQL()
       const statements = [
         this.prepareActorAccountGuard(props.actorAccountId, props.targetAccountId),
         this.c.env.DB.prepare(
@@ -79,6 +83,7 @@ export class SystemPasswordResetAdapter {
         this.c.env.DB.prepare(
           "DELETE FROM system_totp_login_challenges WHERE account_id = ?1",
         ).bind(props.targetAccountId),
+        this.c.env.DB.prepare(invalidation.sql).bind(...invalidation.params),
         ...props.auditStatements,
       ]
       const executions = await this.c.env.DB.batch(statements)

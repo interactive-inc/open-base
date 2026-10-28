@@ -1,5 +1,6 @@
 import responsibilityAdoptionHandler from "@/app/employees/responsibility-adoption/route"
 import workItemHandler from "@/app/work-items/route"
+import reviewsHandler from "@/app/reviews/route"
 import assignmentAdoptionHandler from "@/app/employees/assignment-adoption/route"
 import organizationAdoptionHandler from "@/app/departments/adoption/route"
 import { HTTPException } from "hono/http-exception"
@@ -141,6 +142,7 @@ routes.post("/application-requests/reject/:app_id?", ...appRejectHandler)
 routes.post("/employee-grades", ...employeeGradesRootHandler)
 
 routes.post("/work-items/:operation?/:id?", ...workItemHandler)
+routes.post("/reviews/:resource?/:operation?/:id?", ...reviewsHandler)
 
 routes.post("/grade-definitions", ...gradesHandler)
 routes.post("/grade-definitions/list", ...gradesListHandler)

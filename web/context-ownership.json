@@ -16,6 +16,10 @@
     "infrastructure": ["adapters", "repositories", "schema"],
     "interface": ["capabilities", "operations", "ports", "request-environment", "routes"]
   },
-  "businessAreaOwners": {},
-  "routeOwners": {}
+  "businessAreaOwners": {
+    "performance-review": "performance-review"
+  },
+  "routeOwners": {
+    "performance-review": "performance-review"
+  }
 }

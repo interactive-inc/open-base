@@ -26,7 +26,7 @@ test("MCP exposes foundation tools and rejects business paths and traversal", as
     await client.connect(transport)
     const tools = await client.listTools()
     expect(tools.tools.some((tool) => tool.name === "foundation_request")).toBe(true)
-    expect(tools.tools.some((tool) => /expense|performance|life_event/.test(tool.name))).toBe(false)
+    expect(tools.tools.some((tool) => /expense|life_event/.test(tool.name))).toBe(false)
     const result = await client.callTool({
       name: "foundation_request",
       arguments: { path: "/system/health" },

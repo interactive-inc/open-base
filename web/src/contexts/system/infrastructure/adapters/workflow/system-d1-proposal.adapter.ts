@@ -98,6 +98,7 @@ type ProposalRow = Readonly<{
   created_by_account_id: string
   created_at: number
   case_id: string
+  subject_context: string
   status: SystemProposalStatus
   updated_at: number
   current_task_key: string | null
@@ -141,6 +142,7 @@ const proposalSelect = `SELECT
   proposal.created_by_account_id,
   proposal.created_at,
   workflow_case.id AS case_id,
+  workflow_case.subject_context,
   workflow_case.status,
   workflow_case.updated_at,
   current_task.task_key AS current_task_key,
@@ -174,7 +176,10 @@ JOIN system_cases AS workflow_case ON workflow_case.id = proposal_case.case_id
 LEFT JOIN system_decision_tasks AS current_task
   ON current_task.case_id = workflow_case.id AND current_task.outcome IS NULL`
 type Context = SystemD1Context &
-  Readonly<{ visibleCompletionOperationKeys?: ReadonlyArray<string | null> }>
+  Readonly<{
+    visibleCompletionOperationKeys?: ReadonlyArray<string | null>
+    visibleSubjectContexts?: ReadonlyArray<string>
+  }>
 
 /** Systemの判断正本だけを読み、Company表示や業務意味を組み立てないquery adapter。 */
 export class SystemD1ProposalAdapter implements SystemProposalQuery {
@@ -203,6 +208,11 @@ export class SystemD1ProposalAdapter implements SystemProposalQuery {
         .bind(input.seriesId, input.version, input.creatorAccountId)
         .first<ProposalRow>()
       if (row === null) return null
+      if (
+        this.c.visibleSubjectContexts !== undefined &&
+        !this.c.visibleSubjectContexts.includes(row.subject_context)
+      )
+        return null
       if (
         this.c.visibleCompletionOperationKeys !== undefined &&
         !this.c.visibleCompletionOperationKeys.includes(row.completion_operation_key)
@@ -238,6 +248,8 @@ export class SystemD1ProposalAdapter implements SystemProposalQuery {
         .first<ProposalRow>()
 
       return row === null ||
+        (this.c.visibleSubjectContexts !== undefined &&
+          !this.c.visibleSubjectContexts.includes(row.subject_context)) ||
         (this.c.visibleCompletionOperationKeys !== undefined &&
           !this.c.visibleCompletionOperationKeys.includes(row.completion_operation_key))
         ? null
@@ -264,6 +276,12 @@ export class SystemD1ProposalAdapter implements SystemProposalQuery {
         return `?${bindings.length}`
       }
 
+      if (this.c.visibleSubjectContexts !== undefined) {
+        if (this.c.visibleSubjectContexts.length === 0) return { proposals: [], total: 0 }
+        conditions.push(
+          `workflow_case.subject_context IN (${this.c.visibleSubjectContexts.map(bind).join(", ")})`,
+        )
+      }
       if (this.c.visibleCompletionOperationKeys !== undefined) {
         const keys = this.c.visibleCompletionOperationKeys
         if (keys.length === 0) return { proposals: [], total: 0 }

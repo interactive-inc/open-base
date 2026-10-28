@@ -1,7 +1,10 @@
 import { strict as assert } from "node:assert"
 import { randomUUID } from "node:crypto"
 import { z } from "zod"
-import { app } from "@/api/app"
+import { app as productApp } from "@/api/app"
+import { Hono } from "hono"
+import { ROUTE_MODULE_REGISTRY } from "@/api/route-module.registry"
+import type { HonoEnv } from "@/bindings"
 import { COMPANY_DEFAULT_ORGANIZATION_ID } from "@/contexts/company/domain/definitions/company-organization-identity.definition"
 import { completeSystemPasskeyEnrollment } from "@system/interface/operations/complete-system-passkey-enrollment"
 import { readSystemAccountTokenVersion } from "@system/interface/operations/read-system-account-token-version"
@@ -10,6 +13,19 @@ import {
   type SystemSignedInSession,
 } from "@system/interface/request-environment/system-signed-in-session-channel"
 import { startLocalD1, stopLocalD1 } from "@system/test/local-d1/start-local-d1.test-support"
+
+// 業務routeを除いた実際の基盤だけのrouterでも同じ認証middlewareを通す。
+const app = new Hono<HonoEnv>()
+const businessPrefixes = ROUTE_MODULE_REGISTRY.filter((module) => module.tier === "business").map(
+  (module) => `/${module.context}`,
+)
+for (const route of productApp.routes) {
+  if (
+    businessPrefixes.some((prefix) => route.path === prefix || route.path.startsWith(`${prefix}/`))
+  )
+    continue
+  app.on(route.method, route.path, route.handler)
+}
 
 /**
  * 業務contextを一つも登録しないWorkerで、SystemとCompanyだけの受入を通す。

@@ -17,7 +17,7 @@ import { SystemAuditEventEntity } from "@system/domain/entities/system-audit-eve
 import { SystemAuditEventRepository } from "@system/infrastructure/repositories/audit/system-audit-event.repository"
 import { SystemFeaturePermission } from "@system/domain/catalogs/iam/system-feature-permission.catalog"
 
-// @authorization service - 明示した閲覧権限・申請判断の関係・開示監査を満たす提案版だけを読む
+// @authorization service - System自身の案件だけを権限・参加関係・監査で開示し、他contextの案件は所有者の認可に委ねる
 export const GET = systemFactory.createHandlers(
   authenticateSystemAccessToken,
   zValidator(
@@ -43,7 +43,7 @@ export const GET = systemFactory.createHandlers(
     )
       throw new SystemForbiddenError()
     const parameters = context.req.valid("param")
-    const reader = new SystemD1ProposalAdapter(context)
+    const reader = new SystemD1ProposalAdapter({ ...context, visibleSubjectContexts: ["system"] })
     const located = await reader.findByNumber(parameters.number, parameters.version)
     if (located instanceof Error) throw new SystemProposalHistoryUnavailableError()
     if (located === null) throw new SystemNotFoundError()

@@ -77,6 +77,12 @@ import * as companyReportingLinesEmployeeCodeRoute from "@/contexts/company/inte
 import * as companyResourceHistoryTypeIdRoute from "@/contexts/company/interface/routes/company.resource-history.$type.$id"
 import * as companyResponsibilityResourceAdoptionsRoute from "@/contexts/company/interface/routes/company.responsibility-resource-adoptions"
 import * as companyWorkforceConnectionCompletionsRoute from "@/contexts/company/interface/routes/company.workforce-connection-completions"
+import * as performanceReviewCyclesRoute from "@/contexts/performance-review/interface/routes/performance-review.cycles"
+import * as performanceReviewCyclesIdRoute from "@/contexts/performance-review/interface/routes/performance-review.cycles.$id"
+import * as performanceReviewSheetsRoute from "@/contexts/performance-review/interface/routes/performance-review.sheets"
+import * as performanceReviewSheetsIdRoute from "@/contexts/performance-review/interface/routes/performance-review.sheets.$id"
+import * as performanceReviewSheetsIdCommandsRoute from "@/contexts/performance-review/interface/routes/performance-review.sheets.$id.commands"
+import * as performanceReviewSheetsIdHistoryRoute from "@/contexts/performance-review/interface/routes/performance-review.sheets.$id.history"
 import * as systemAccountsRoute from "@system/interface/routes/system.accounts"
 import * as systemAccountsAccountIdRoute from "@system/interface/routes/system.accounts.$accountId"
 import * as systemAccountsAccountIdIdentitiesRoute from "@system/interface/routes/system.accounts.$accountId.identities"
@@ -369,6 +375,14 @@ const routePart28 = createRouteApp()
     "/company/workforce-connection-completions",
     ...companyWorkforceConnectionCompletionsRoute.POST,
   )
+  .get("/performance-review/cycles", ...performanceReviewCyclesRoute.GET)
+  .post("/performance-review/cycles", ...performanceReviewCyclesRoute.POST)
+  .get("/performance-review/cycles/:id", ...performanceReviewCyclesIdRoute.GET)
+  .get("/performance-review/sheets", ...performanceReviewSheetsRoute.GET)
+  .post("/performance-review/sheets", ...performanceReviewSheetsRoute.POST)
+  .get("/performance-review/sheets/:id", ...performanceReviewSheetsIdRoute.GET)
+  .post("/performance-review/sheets/:id/commands", ...performanceReviewSheetsIdCommandsRoute.POST)
+  .get("/performance-review/sheets/:id/history", ...performanceReviewSheetsIdHistoryRoute.GET)
   .get("/system/accounts", ...systemAccountsRoute.GET)
   .post("/system/accounts", ...systemAccountsRoute.POST)
   .get("/system/accounts/:accountId", ...systemAccountsAccountIdRoute.GET)
@@ -426,6 +440,8 @@ const routePart28 = createRouteApp()
   .get("/system/connectors", ...systemConnectorsRoute.GET)
   .post("/system/connectors", ...systemConnectorsRoute.POST)
   .patch("/system/connectors/:connectorId", ...systemConnectorsConnectorIdRoute.PATCH)
+
+const routePart29 = createRouteApp()
   .get("/system/dead-letters", ...systemDeadLettersRoute.GET)
   .post(
     "/system/dead-letters/:deadLetterId/requeue",
@@ -437,8 +453,6 @@ const routePart28 = createRouteApp()
   .get("/system/health", ...systemHealthRoute.GET)
   .patch("/system/inbox-messages/:messageId", ...systemInboxMessagesMessageIdRoute.PATCH)
   .get("/system/integration-exchanges", ...systemIntegrationExchangesRoute.GET)
-
-const routePart29 = createRouteApp()
   .post("/system/integration-exchanges", ...systemIntegrationExchangesRoute.POST)
   .get(
     "/system/integration-exchanges/:exchangeId",
@@ -512,6 +526,8 @@ const routePart29 = createRouteApp()
     ...systemWorkItemsIdEvidenceAttachmentIdRoute.GET,
   )
   .post("/system/work-items/:id/handovers", ...systemWorkItemsIdHandoversRoute.POST)
+
+const routePart30 = createRouteApp()
   .post("/system/work-items/:id/handovers/accept", ...systemWorkItemsIdHandoversAcceptRoute.POST)
   .post("/system/work-items/:id/handovers/decline", ...systemWorkItemsIdHandoversDeclineRoute.POST)
   .get("/system/work-items/:id/history", ...systemWorkItemsIdHistoryRoute.GET)
@@ -549,6 +565,7 @@ export const app = createAppBase()
   .route("/", routePart27)
   .route("/", routePart28)
   .route("/", routePart29)
+  .route("/", routePart30)
 
 export type AppType = typeof app
 
@@ -587,6 +604,7 @@ type ApiClientPart26 = ReturnType<typeof hc<typeof routePart26>>
 type ApiClientPart27 = ReturnType<typeof hc<typeof routePart27>>
 type ApiClientPart28 = ReturnType<typeof hc<typeof routePart28>>
 type ApiClientPart29 = ReturnType<typeof hc<typeof routePart29>>
+type ApiClientPart30 = ReturnType<typeof hc<typeof routePart30>>
 export type ApiClient = ApiClientPart0 &
   ApiClientPart1 &
   ApiClientPart2 &
@@ -616,4 +634,5 @@ export type ApiClient = ApiClientPart0 &
   ApiClientPart26 &
   ApiClientPart27 &
   ApiClientPart28 &
-  ApiClientPart29
+  ApiClientPart29 &
+  ApiClientPart30

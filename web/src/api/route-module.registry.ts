@@ -1,3 +1,4 @@
+import { reviewContextModule } from "@/contexts/performance-review/interface/module"
 import { systemContextModule } from "@system/interface/module"
 import { companyContextModule } from "@/contexts/company/interface/module"
 import type { ApiRouteModuleRegistration } from "@/api/api-route-module"
@@ -18,6 +19,7 @@ export const ROUTE_MODULE_REGISTRY = [
     ],
   },
   companyContextModule,
+  reviewContextModule,
   {
     context: "api",
     tier: "composition",

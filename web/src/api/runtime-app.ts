@@ -151,6 +151,18 @@ const companyResponsibilityResourceAdoptionsRoute: RouteModuleLoader = () =>
   import("@/contexts/company/interface/routes/company.responsibility-resource-adoptions")
 const companyWorkforceConnectionCompletionsRoute: RouteModuleLoader = () =>
   import("@/contexts/company/interface/routes/company.workforce-connection-completions")
+const performanceReviewCyclesRoute: RouteModuleLoader = () =>
+  import("@/contexts/performance-review/interface/routes/performance-review.cycles")
+const performanceReviewCyclesIdRoute: RouteModuleLoader = () =>
+  import("@/contexts/performance-review/interface/routes/performance-review.cycles.$id")
+const performanceReviewSheetsRoute: RouteModuleLoader = () =>
+  import("@/contexts/performance-review/interface/routes/performance-review.sheets")
+const performanceReviewSheetsIdRoute: RouteModuleLoader = () =>
+  import("@/contexts/performance-review/interface/routes/performance-review.sheets.$id")
+const performanceReviewSheetsIdCommandsRoute: RouteModuleLoader = () =>
+  import("@/contexts/performance-review/interface/routes/performance-review.sheets.$id.commands")
+const performanceReviewSheetsIdHistoryRoute: RouteModuleLoader = () =>
+  import("@/contexts/performance-review/interface/routes/performance-review.sheets.$id.history")
 const systemAccountsRoute: RouteModuleLoader = () =>
   import("@system/interface/routes/system.accounts")
 const systemAccountsAccountIdRoute: RouteModuleLoader = () =>
@@ -407,6 +419,14 @@ const ROUTES: ReadonlyArray<readonly [RouteMethod, string, RouteModuleLoader]> =
   ],
   ["GET", "/company/workforce-connection-completions", companyWorkforceConnectionCompletionsRoute],
   ["POST", "/company/workforce-connection-completions", companyWorkforceConnectionCompletionsRoute],
+  ["GET", "/performance-review/cycles", performanceReviewCyclesRoute],
+  ["POST", "/performance-review/cycles", performanceReviewCyclesRoute],
+  ["GET", "/performance-review/cycles/:id", performanceReviewCyclesIdRoute],
+  ["GET", "/performance-review/sheets", performanceReviewSheetsRoute],
+  ["POST", "/performance-review/sheets", performanceReviewSheetsRoute],
+  ["GET", "/performance-review/sheets/:id", performanceReviewSheetsIdRoute],
+  ["POST", "/performance-review/sheets/:id/commands", performanceReviewSheetsIdCommandsRoute],
+  ["GET", "/performance-review/sheets/:id/history", performanceReviewSheetsIdHistoryRoute],
   ["GET", "/system/accounts", systemAccountsRoute],
   ["POST", "/system/accounts", systemAccountsRoute],
   ["GET", "/system/accounts/:accountId", systemAccountsAccountIdRoute],

@@ -1,3 +1,4 @@
+import { SystemCredentialIssuanceAuthorityAdapter } from "@system/infrastructure/adapters/identity/system-credential-issuance-authority.adapter"
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 import type { PasswordResetTokenHash } from "@system/domain/schemas/auth/password-reset-token-hash.schema"
@@ -12,7 +13,7 @@ export type PendingSystemPasswordIdentityResult =
   | Readonly<{ identityId: string; challengeId: string }>
   | "account_not_found"
   | "duplicate"
-  | "root_forbidden"
+  | "authority_forbidden"
   | Error
 type Context = SystemD1Context
 
@@ -25,8 +26,6 @@ export class CreatePendingSystemPasswordIdentityAdapter {
   async createPendingSystemPasswordIdentity(
     input: Readonly<{
       actorAccountId: string
-      /** 操作者がsystem:adminを持つか。持たない操作者は他人のroot Accountへ追加できない。 */
-      requesterHasSystemAdmin: boolean
       accountId: string
       email: string
       pendingPasswordHash: string
@@ -100,25 +99,16 @@ export class CreatePendingSystemPasswordIdentityAdapter {
       if (identityAudit instanceof Error) return identityAudit
       if (challengeAudit instanceof Error) return challengeAudit
       const auditRepository = new SystemAuditEventRepository(this.c)
+      const authorityGuard = new SystemCredentialIssuanceAuthorityAdapter(database)
+        .prepare({
+          actorAccountId: actorAccountId.data,
+          accountId: accountId.data,
+          now: input.now,
+          allowSelf: true,
+        })
+        .toSQL()
       const statements = [
-        // 事前読取の後に対象へrootが付与されても、他人のroot Accountへの追加はbatchごと取り消す。
-        database
-          .prepare(
-            `SELECT CASE WHEN
-               ?1 = ?2
-               OR ?3 = 1
-               OR NOT EXISTS (
-                 SELECT 1
-                 FROM system_role_bindings binding
-                 INNER JOIN system_iam_role_permissions permission
-                   ON permission.role_id = binding.role_id
-                 WHERE binding.account_id = ?2
-                   AND binding.revoked_at IS NULL
-                   AND permission.permission_key = 'system:admin'
-               )
-             THEN 1 ELSE abs(-9223372036854775808) END AS ok`,
-          )
-          .bind(actorAccountId.data, accountId.data, Number(input.requesterHasSystemAdmin)),
+        database.prepare(authorityGuard.sql).bind(...authorityGuard.params),
         database
           .prepare(
             `INSERT INTO system_identity_bindings
@@ -178,7 +168,7 @@ export class CreatePendingSystemPasswordIdentityAdapter {
       return Object.freeze({ identityId: identityId.data, challengeId })
     } catch (caught) {
       if (caught instanceof Error && caught.message.includes("integer overflow")) {
-        return "root_forbidden"
+        return "authority_forbidden"
       }
       if (caught instanceof Error && caught.message.toLowerCase().includes("unique")) {
         return "duplicate"

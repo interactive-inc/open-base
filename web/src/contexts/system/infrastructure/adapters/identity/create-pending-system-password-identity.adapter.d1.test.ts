@@ -24,6 +24,17 @@ async function createFixture(): Promise<SystemSessionTestContext> {
      VALUES ('5e1c3b4a-7d8f-4091-8cbd-2e3f4a5b6c73', 'system:admin');`,
   )
 
+  await execSql(
+    fixture.database,
+    `
+    INSERT INTO system_iam_roles (id, key, kind, name, created_at, updated_at)
+    VALUES ('11111111-1111-4111-8111-111111111111', 'issuer', 'custom', 'Issuer', 0, 0);
+    INSERT INTO system_iam_role_permissions (role_id, permission_key)
+    VALUES ('11111111-1111-4111-8111-111111111111', 'iam:write');
+    INSERT INTO system_role_bindings (id, account_id, role_id, created_at)
+    VALUES ('22222222-2222-4222-8222-222222222222', '${operatorAccountId}', '11111111-1111-4111-8111-111111111111', 0);
+  `,
+  )
   return fixture
 }
 
@@ -45,7 +56,6 @@ function createPending(
     fixture.context,
   ).createPendingSystemPasswordIdentity({
     actorAccountId: input.actorAccountId,
-    requesterHasSystemAdmin: input.requesterHasSystemAdmin,
     accountId: targetAccountId,
     email: input.email,
     pendingPasswordHash: "pending-password-hash-placeholder",
@@ -80,7 +90,7 @@ describe("CreatePendingSystemPasswordIdentityAdapter", () => {
       email: "takeover@example.com",
     })
 
-    expect(result).toBe("root_forbidden")
+    expect(result).toBe("authority_forbidden")
     expect(await countWrites(fixture)).toEqual({
       identities: 0,
       challenges: 0,
@@ -93,6 +103,7 @@ describe("CreatePendingSystemPasswordIdentityAdapter", () => {
     const fixture = await createFixture()
     await grantRoot(fixture, targetAccountId)
 
+    await grantRoot(fixture, operatorAccountId)
     const byAdmin = await createPending(fixture, {
       actorAccountId: operatorAccountId,
       requesterHasSystemAdmin: true,

@@ -1,8 +1,8 @@
 # Open Base
 
-SystemとCompanyを独立して利用するためのオープンソース基盤です。認証、認可、手続き、承認、監査、通知と、会社、従業員、雇用、組織の正本を提供します。API、CLI、MCP、Web UIを含みます。
+SystemとCompanyを共通基盤とするオープンソースのTypeScriptモノレポです。認証、認可、手続き、承認、監査、通知と、会社、従業員、雇用、組織の正本を提供します。業務contextとして目標管理と評価を提供し、主な利用入口はMCPです。
 
-会社固有のサービスや社内インフラには依存しません。個別の業務アプリは含みません。
+会社固有のサービスや社内インフラには依存しません。業務contextはCompanyとSystemを利用し、共通基盤から業務contextへは依存しません。
 
 ## ローカル開発
 
@@ -125,13 +125,25 @@ bun mcp/index.ts
 
 MCPは標準入出力で起動します。`.mcp.json` の接続設定も使用できます。CLIで対象APIへログインすると、MCPも同じ接続先の認証情報を利用します。
 
+## 目標管理と評価
+
+`performance-review` contextが評価期間・目標・自己評価・評価者の評価を所有し、承認はSystem、判断資格はCompanyを使います。画面は追加せずAPIとMCPを提供します。
+
+MCPの`review_cycles_create`で評価期間を作り、本人が`review_sheets_create`で目標を作ります。`review_sheets_command`から提出・訂正・自己評価・承認・差戻し・取消を行います。評価者は`review_sheets_list`の`scope: "inbox"`で自分が現在判断できる案件を確認します。
+
+CLIの`base reviews`からも同じ操作を行えます。期間ごとに評価尺度と区分配分を指定でき、上期・下期や「目標70％・行動30％」などの制度を固定します。省略時は5段階・目標100％です。
+
+操作前には`review_sheets_show`で期待版と`decision_target`を取得します。変更には理由とUUIDの`idempotency_key`が必要です。同じ要求を再送するときは同じキーを使い、409では読み直して内容を再確認します。
+
+権限、状態、MCPの操作手順は[評価contextの仕様](.docs/features/performance-review.md)を参照してください。
+
 ## 検証とDB
 
 ```sh
 make ci
 ```
 
-新規DBにはSystemとCompanyのテーブル、view、制約、初期カタログだけを作成します。実データや業務アプリのテーブルは作成しません。ローカルD1の受入テストで初期化、認証、雇用、組織、判断資格、承認、通知、監査を検証します。
+新規DBにはSystem・Companyと評価contextのテーブル、view、制約、初期カタログを作成します。実データや社員の初期データは投入しません。ローカルD1の受入テストで初期化、認証、雇用、組織、判断資格、承認、通知、監査を検証します。
 
 `web/tests/fixtures/released-migrations` は共有contextの過去のschema変換を検証するための固定fixtureです。業務テーブルの旧DDLも含みますが、実行時のmigrationや配備には使いません。実行時の正本は `web/src/db/migrations` だけです。
 
