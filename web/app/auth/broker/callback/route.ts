@@ -40,29 +40,32 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const names = identityLoginCookieNames(redirectUri, state)
   const expectedState = request.cookies.get(names.state)?.value ?? null
   const codeVerifier = request.cookies.get(names.verifier)?.value ?? null
+  const stepUpReturn =
+    state === expectedState && codeVerifier !== null
+      ? (request.cookies.get(names.stepUpReturn)?.value ?? null)
+      : null
   const code = request.nextUrl.searchParams.get("code")
   const brokerError = request.nextUrl.searchParams.get("error")
 
   if (brokerError !== null) {
-    return clearIdentityCookies(redirectToError(request, brokerError), names)
+    return clearIdentityCookies(redirectToError(request, brokerError, stepUpReturn), names)
   }
 
   if (!code || !expectedState || !codeVerifier || state !== expectedState) {
-    return clearIdentityCookies(redirectToError(request, "invalid_state"), names)
+    return clearIdentityCookies(redirectToError(request, "invalid_state", stepUpReturn), names)
   }
 
   const token = await exchangeIdentityCode({ code, codeVerifier, redirectUri, issuer })
   if (token instanceof Error) {
-    return clearIdentityCookies(redirectToError(request, "login_failed"), names)
+    return clearIdentityCookies(redirectToError(request, "login_failed", stepUpReturn), names)
   }
 
   // 再認証として始めたときは、ログインし直さず現在のsessionへ再認証grantを発行する。
-  const stepUpReturn = request.cookies.get(names.stepUpReturn)?.value ?? null
   if (stepUpReturn !== null) {
     const grant = await issueExternalIdentityStepUpGrant(token)
     const maxAge = grant instanceof Error ? null : stepUpCookieMaxAge(grant.expiresAt, new Date())
     if (grant instanceof Error || maxAge === null) {
-      return clearIdentityCookies(redirectToError(request, "step_up_failed"), names)
+      return clearIdentityCookies(redirectToError(request, "step_up_failed", stepUpReturn), names)
     }
     const returnPath = resolveStepUpReturnPath(stepUpReturn) ?? "/"
     const response = NextResponse.redirect(new URL(returnPath, requestOrigin(request)))
@@ -108,9 +111,17 @@ function requestOrigin(request: NextRequest): string {
   return `${forwardedProto}://${forwardedHost}`
 }
 
-function redirectToError(request: NextRequest, reason: string): NextResponse {
+function redirectToError(
+  request: NextRequest,
+  reason: string,
+  stepUpReturn: string | null = null,
+): NextResponse {
   const url = new URL("/auth/broker/error", requestOrigin(request))
   url.searchParams.set("reason", reason)
+  if (stepUpReturn !== null) {
+    url.searchParams.set("purpose", "step-up")
+    url.searchParams.set("return_to", resolveStepUpReturnPath(stepUpReturn) ?? "/")
+  }
 
   return NextResponse.redirect(url)
 }

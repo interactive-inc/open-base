@@ -155,7 +155,57 @@ describe("GET /auth/broker/callback", () => {
     const response = await GET(request)
 
     expect(response.headers.get("Location")).toContain("/auth/broker/error?reason=step_up_failed")
+    const retryContext = new URL(response.headers.get("Location") ?? "")
+    expect(retryContext.searchParams.get("purpose")).toBe("step-up")
+    expect(retryContext.searchParams.get("return_to")).toBe("/system/roles")
     expect(mocks.postIdentityLogin).not.toHaveBeenCalled()
     expect(response.cookies.get("step_up")).toBeUndefined()
+  })
+
+  test("stateを照合できないcallbackは再認証の戻り先を引き継がない", async () => {
+    process.env.IDENTITY_LOGIN_URL = issuer
+    process.env.IDENTITY_REDIRECT_URI = redirectUri
+    const names = identityLoginCookieNames(redirectUri, state)
+    const request = new NextRequest(
+      `https://app.example.com/auth/broker/callback?code=example-code&state=${state}`,
+    )
+    request.cookies.set(names.state, "different")
+    request.cookies.set(names.verifier, verifier)
+    request.cookies.set(names.stepUpReturn, "/system/roles")
+
+    const response = await GET(request)
+    const errorUrl = new URL(response.headers.get("Location") ?? "")
+
+    expect(errorUrl.searchParams.get("purpose")).toBeNull()
+    expect(errorUrl.searchParams.get("return_to")).toBeNull()
+    expect(mocks.exchangeIdentityCode).not.toHaveBeenCalled()
+  })
+
+  test("並行する再認証の失敗はそれぞれの戻り先を保つ", async () => {
+    process.env.IDENTITY_LOGIN_URL = issuer
+    process.env.IDENTITY_REDIRECT_URI = redirectUri
+    mocks.exchangeIdentityCode.mockResolvedValue("signed.identity.jwt")
+    mocks.issueExternalIdentityStepUpGrant.mockResolvedValue(new Error("invalid_credentials"))
+    const states = [state, "3e704986-1d12-4eef-ab51-e4981519f659"]
+    const paths = ["/system/roles", "/company/employees"]
+    const requests = states.map((flowState, index) => {
+      const names = identityLoginCookieNames(redirectUri, flowState)
+      const request = new NextRequest(
+        `https://app.example.com/auth/broker/callback?code=example-code&state=${flowState}`,
+      )
+      request.cookies.set(names.state, flowState)
+      request.cookies.set(names.verifier, verifier)
+      request.cookies.set(names.stepUpReturn, paths[index] ?? "/")
+      return request
+    })
+
+    const responses = await Promise.all(requests.map((request) => GET(request)))
+
+    expect(
+      responses.map((response) =>
+        new URL(response.headers.get("Location") ?? "").searchParams.get("return_to"),
+      ),
+    ).toEqual(paths)
+    expect(mocks.postIdentityLogin).not.toHaveBeenCalled()
   })
 })

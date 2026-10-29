@@ -14,9 +14,12 @@ import { passwordHashNeedsRehash } from "@system/lib/auth/password-hash-needs-re
 import { SystemPrincipalSecretService } from "@system/lib/auth/system-principal-secret-service"
 import { SystemIdentityTokenVerifier } from "@system/lib/auth/system-identity-token-verifier"
 import { verifySystemPassword } from "@system/lib/auth/verify-system-password"
+import { StepUpRateLimitAdapter } from "@system/infrastructure/adapters/auth/step-up-rate-limit.adapter"
+import { SystemStepUpAuditAdapter } from "@system/infrastructure/adapters/audit/system-step-up-audit.adapter"
 import {
   SystemCredentialsInvalidError,
   SystemPrincipalUnavailableError,
+  SystemAuthenticationRateLimitedError,
 } from "@system/interface/errors"
 import { authenticateSystemAccessToken } from "@system/interface/middlewares/authenticate-system-access-token"
 import { systemFactory } from "@system/interface/request-environment/system-factory"
@@ -52,6 +55,15 @@ export const POST = systemFactory.createHandlers(
       if (pepper === undefined || pepper.length === 0) {
         throw new SystemPrincipalUnavailableError()
       }
+      const rateLimit = new StepUpRateLimitAdapter({ database: context.env.DB })
+      const limited = await rateLimit.recordAndCheck({
+        accountId: accountId.data,
+        ip: context.req.header("CF-Connecting-IP") ?? null,
+        now,
+      })
+      if (limited instanceof Error) throw new SystemPrincipalUnavailableError(limited)
+      if (limited) throw new SystemAuthenticationRateLimitedError()
+
       const authentication = await new SystemPasswordCredentialAdapter({
         database: context.env.DB,
       }).authenticateAccount(
@@ -65,7 +77,15 @@ export const POST = systemFactory.createHandlers(
       if (authentication instanceof Error) {
         throw new SystemPrincipalUnavailableError(authentication)
       }
-      if (authentication.kind === "rejected") throw new SystemCredentialsInvalidError()
+      if (authentication.kind === "rejected") {
+        const audit = await new SystemStepUpAuditAdapter({
+          env: { DB: context.env.DB },
+        }).recordDenied(accountId.data, now)
+        if (audit instanceof Error) throw new SystemPrincipalUnavailableError(audit)
+        throw new SystemCredentialsInvalidError()
+      }
+      const reset = await rateLimit.reset(accountId.data)
+      if (reset instanceof Error) throw new SystemPrincipalUnavailableError(reset)
     } else {
       const issuer = context.env.IDENTITY_ISSUER
       const audience = context.env.IDENTITY_AUDIENCE

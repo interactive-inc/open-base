@@ -1,5 +1,7 @@
+import { resolveIdentityRetryPath } from "@/lib/auth/resolve-identity-retry-path"
+
 type Props = {
-  searchParams: Promise<{ reason?: string }>
+  searchParams: Promise<{ reason?: string; purpose?: string; return_to?: string }>
 }
 
 /**
@@ -10,10 +12,16 @@ type Props = {
 export default async function BrokerErrorPage(props: Props) {
   const searchParams = await props.searchParams
 
-  const retryUrl = process.env.IDENTITY_LOGIN_URL ? "/auth/broker/login" : "/"
+  const retryUrl = resolveIdentityRetryPath({
+    isConfigured: Boolean(process.env.IDENTITY_LOGIN_URL),
+    purpose: searchParams.purpose ?? null,
+    returnTo: searchParams.return_to ?? null,
+  })
+  const isStepUp = searchParams.purpose === "step-up"
 
-  const message =
-    searchParams.reason === "account_not_found"
+  const message = isStepUp
+    ? "再認証できませんでした。ログイン中のアカウントで認証し直してください。"
+    : searchParams.reason === "account_not_found"
       ? "アカウントがありません。管理者に連絡してください。"
       : searchParams.reason === "step_up_failed"
         ? "再認証できませんでした。ログイン中のアカウントで認証し直してください。"
@@ -22,11 +30,13 @@ export default async function BrokerErrorPage(props: Props) {
   return (
     <main className="flex min-h-screen items-center justify-center p-8">
       <div className="max-w-md space-y-4 text-center">
-        <h1 className="text-xl font-semibold">ログインできませんでした</h1>
+        <h1 className="text-xl font-semibold">
+          {isStepUp ? "再認証できませんでした" : "ログインできませんでした"}
+        </h1>
         <p className="text-muted-foreground">{message}</p>
         <p>
           <a href={retryUrl} className="underline">
-            ログインをやり直す
+            {isStepUp ? "再認証をやり直す" : "ログインをやり直す"}
           </a>
         </p>
       </div>
