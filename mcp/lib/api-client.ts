@@ -1,6 +1,9 @@
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
+import { AuthenticationState } from "@/lib/authentication-state"
+import { SessionRefreshCoordinator } from "@/lib/session-refresh-coordinator"
+import { refreshCurrentToken } from "@/lib/refresh-current-token"
 
 type EndpointTokens = {
   token: string | null
@@ -164,21 +167,23 @@ type RequestOptions = {
   json?: unknown
 }
 
-let cachedBaseUrl: string | null = null
-let cachedToken: string | null = null
+const authentication = new AuthenticationState({ resolveBaseUrl, readTokens })
+const consumedRefreshTokens = new Map<string, string>()
+const sessionRefreshes = new SessionRefreshCoordinator({
+  refresh: (baseUrl, failedToken) =>
+    refreshCurrentToken({
+      baseUrl,
+      failedToken,
+      consumedRefreshTokens,
+      readTokens,
+      rotate: tryRefresh,
+      saveTokens: writeTokens,
+      updateToken: (token) => authentication.updateToken(token),
+    }),
+})
 
 export async function ensureAuth(): Promise<{ baseUrl: string; token: string | null }> {
-  if (cachedBaseUrl !== null) {
-    return { baseUrl: cachedBaseUrl, token: cachedToken }
-  }
-
-  cachedBaseUrl = resolveBaseUrl()
-
-  const tokens = await readTokens(cachedBaseUrl)
-
-  cachedToken = tokens.token
-
-  return { baseUrl: cachedBaseUrl, token: cachedToken }
+  return authentication.get()
 }
 
 export async function apiRequest<T = unknown>(
@@ -214,29 +219,17 @@ export async function apiRequest<T = unknown>(
   })
 
   if (res.status === 401) {
-    const tokens = await readTokens(baseUrl)
+    const refreshed = await sessionRefreshes.refresh({ baseUrl, failedToken: token })
 
-    if (tokens.refresh_token !== null) {
-      const refreshed = await tryRefresh(baseUrl, tokens.refresh_token)
-
-      if (refreshed !== null) {
-        cachedToken = refreshed.access_token
-        headers.Authorization = `Bearer ${refreshed.access_token}`
-
-        // 更新で refresh token も入れ替わる。使い終えた古い token を保存し直すと、次の更新が必ず失敗する。
-        await writeTokens(
-          baseUrl,
-          refreshed.access_token,
-          refreshed.refresh_token ?? tokens.refresh_token,
-        ).catch(() => {})
-
-        res = await fetch(url, {
-          method: options.method ?? "GET",
-          headers,
-          body: options.json !== undefined ? JSON.stringify(options.json) : undefined,
-          signal: AbortSignal.timeout(15_000),
-        })
-      }
+    if (refreshed !== null) {
+      await res.body?.cancel()
+      headers.Authorization = `Bearer ${refreshed}`
+      res = await fetch(url, {
+        method: options.method ?? "GET",
+        headers,
+        body: options.json !== undefined ? JSON.stringify(options.json) : undefined,
+        signal: AbortSignal.timeout(15_000),
+      })
     }
   }
 

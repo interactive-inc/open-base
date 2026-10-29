@@ -41,7 +41,12 @@ afterAll(async () => {
 })
 
 test("401で更新したら、入れ替わった refresh token を保存して次の更新に使う", async () => {
-  expect(await apiRequest<{ ok: boolean }>("/employees")).toEqual({ ok: true })
+  expect(
+    await Promise.all([
+      apiRequest<{ ok: boolean }>("/employees"),
+      apiRequest<{ ok: boolean }>("/employees"),
+    ]),
+  ).toEqual([{ ok: true }, { ok: true }])
   expect(presented).toEqual(["first-refresh"])
   const saved = JSON.parse(await readFile(join(directory, "settings.json"), "utf8"))
   expect(saved.endpoints[`http://127.0.0.1:${server?.port}`]).toMatchObject({
