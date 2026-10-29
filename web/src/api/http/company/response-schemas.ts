@@ -204,6 +204,7 @@ export type AppManagementDashboard = z.infer<typeof zAppManagementDashboard>
 
 /** 認証済み本人の社員情報（GET /me）。 */
 export const zAppAuthMe = z.object({
+  account_id: z.uuid(),
   id: zEmployeeId,
   // 外部プロビジョニングで作られた本人は社員コードを持たない（code=null）。GET /me は本人の code を
   // そのまま返すため nullable。

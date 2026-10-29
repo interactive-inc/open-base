@@ -23,6 +23,7 @@ const plainAccountId = "7b1f3e52-8f0e-4f53-9d38-1c2f7c0d9a11"
 
 const app = createRuntimeApp()
 let env: Bindings
+let rootAccountId: string
 let key: SystemIdentityTestKey
 
 type Called = { count: number }
@@ -103,6 +104,7 @@ beforeAll(async () => {
   })
   expect(bootstrap.status).toBe(201)
   const root = z.object({ account_id: z.string() }).parse(bootstrap.body)
+  rootAccountId = root.account_id
   // rootは外部access tokenで呼ぶ。人のサインインはBetter Authが担い、このtestでは扱わない。
   await env.DB.prepare(
     `INSERT INTO system_identity_bindings
@@ -154,6 +156,7 @@ describe("executeServiceBindingRequest", () => {
     })
 
     expect(viaHttp.status).toBe(200)
+    expect(viaHttp.body).toMatchObject({ account_id: rootAccountId, code: "FIRST-001" })
     expect(viaRpc).toEqual({
       ok: true,
       status: 200,

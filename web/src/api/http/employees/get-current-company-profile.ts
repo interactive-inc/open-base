@@ -34,6 +34,7 @@ export class GetCurrentCompanyProfile {
     if (profile instanceof Error)
       throw new InternalError("failed to load employee profile revision")
     return zAppAuthMe.parse({
+      account_id: session.accountId,
       id: employee.id,
       code: employee.employeeCode,
       name: profile?.person.readText("officialName") ?? employee.officialName,
