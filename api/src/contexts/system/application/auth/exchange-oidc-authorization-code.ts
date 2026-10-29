@@ -7,7 +7,7 @@ import { SystemAuditEventEntity } from "@system/domain/entities/system-audit-eve
 import type { OidcClientRegistryValue } from "@system/domain/values/oauth/oidc-client-registry.value"
 import { OidcScopeValue } from "@system/domain/values/oauth/oidc-scope.value"
 import { oidcAccessTokenLifetime } from "@system/domain/values/oauth/oidc-token-lifetime.value"
-import { SystemAuditEventRepository } from "@system/infrastructure/repositories/audit/system-audit-event.repository"
+import { AppendOidcAuthenticatedAuditAdapter } from "@system/infrastructure/adapters/audit/append-oidc-authenticated-audit.adapter"
 import type {
   SystemClockContext,
   SystemD1Context,
@@ -87,6 +87,7 @@ export class ExchangeOidcAuthorizationCode {
       issuer: props.issuer,
       clientId: client.id,
       accountId: authorizationCode.accountId,
+      tokenVersion: authorizationCode.tokenVersion,
       scope: scope.toString(),
     })
     if (accessToken instanceof Error) {
@@ -104,7 +105,11 @@ export class ExchangeOidcAuthorizationCode {
     })
     if (audit instanceof Error) return new OidcTemporarilyUnavailableApplicationError(audit)
 
-    const appended = await new SystemAuditEventRepository(this.c).append(audit)
+    const appended = await new AppendOidcAuthenticatedAuditAdapter(this.c).append({
+      accountId: authorizationCode.accountId,
+      tokenVersion: authorizationCode.tokenVersion,
+      audit,
+    })
     if (appended instanceof Error) {
       return new OidcTemporarilyUnavailableApplicationError(appended)
     }

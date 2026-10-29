@@ -35,6 +35,7 @@ describe("consumeOidcAuthorizationCode", () => {
       clientId: "system-console",
       redirectUri: "https://console.example.test/callback",
       accountId,
+      tokenVersion: 0,
       codeChallenge: await toPkceS256Challenge(verifier),
       nonce: "nonce-with-enough-entropy",
       scope: ["openid"],
@@ -77,6 +78,7 @@ describe("consumeOidcAuthorizationCode", () => {
       await new ConsumeOidcAuthorizationCodeAdapter(context).consumeOidcAuthorizationCode(valid),
     ).toEqual({
       accountId,
+      tokenVersion: 0,
       nonce: "nonce-with-enough-entropy",
       scope: "openid",
     })
@@ -101,6 +103,7 @@ describe("consumeOidcAuthorizationCode", () => {
       clientId: "system-console",
       redirectUri: "https://console.example.test/callback",
       accountId,
+      tokenVersion: 0,
       codeChallenge: await toPkceS256Challenge(verifier),
       nonce: "nonce-with-enough-entropy",
       scope: ["openid"],
@@ -141,6 +144,7 @@ describe("consumeOidcAuthorizationCode", () => {
       clientId: "system-console",
       redirectUri: "https://console.example.test/callback",
       accountId,
+      tokenVersion: 0,
       codeChallenge: await toPkceS256Challenge(verifier),
       nonce: "nonce-with-enough-entropy",
       scope: ["openid", "email"],
@@ -163,6 +167,7 @@ describe("consumeOidcAuthorizationCode", () => {
     expect(consumed.filter((result) => result !== null && !(result instanceof Error))).toEqual([
       {
         accountId,
+        tokenVersion: 0,
         nonce: "nonce-with-enough-entropy",
         scope: "openid email",
       },

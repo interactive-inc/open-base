@@ -26,6 +26,7 @@ describe("findOidcAccessToken", () => {
       issuer: "https://identity.example.test",
       clientId: "system-console",
       accountId,
+      tokenVersion: 0,
       scope: "openid email",
     })
 
@@ -45,7 +46,7 @@ describe("findOidcAccessToken", () => {
         issuer: "https://identity.example.test",
         accessToken: issued.accessToken,
       }),
-    ).toEqual({ clientId: "system-console", accountId, scope: "openid email" })
+    ).toEqual({ clientId: "system-console", accountId, tokenVersion: 0, scope: "openid email" })
     expect(
       await new FindOidcAccessTokenAdapter({
         var: { database, now: () => new Date("2026-01-01T00:05:00.000Z") },

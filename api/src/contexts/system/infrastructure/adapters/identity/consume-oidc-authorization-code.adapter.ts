@@ -6,7 +6,7 @@ import type {
   SystemDatabaseContext,
 } from "@system/configuration/system-context"
 import { systemOidcAuthorizationCodes } from "@system/infrastructure/schema/system-core"
-import { and, eq, gt } from "drizzle-orm"
+import { and, eq, gt, lte, sql } from "drizzle-orm"
 
 type Props = Readonly<{
   issuer: string
@@ -18,6 +18,7 @@ type Props = Readonly<{
 
 type ConsumedAuthorizationCode = Readonly<{
   accountId: AccountId
+  tokenVersion: number
   nonce: string
   scope: string
 }>
@@ -49,15 +50,23 @@ export class ConsumeOidcAuthorizationCodeAdapter {
             eq(systemOidcAuthorizationCodes.redirectUri, props.redirectUri),
             eq(systemOidcAuthorizationCodes.codeChallenge, secrets[1]),
             gt(systemOidcAuthorizationCodes.expiresAt, now),
+            lte(systemOidcAuthorizationCodes.createdAt, now),
+            sql`EXISTS (SELECT 1 FROM system_accounts WHERE id=system_oidc_authorization_codes.account_id
+              AND status='active' AND closed_at IS NULL AND token_version=system_oidc_authorization_codes.token_version)`,
           ),
         )
         .returning({
           accountId: systemOidcAuthorizationCodes.accountId,
+          tokenVersion: systemOidcAuthorizationCodes.tokenVersion,
           nonce: systemOidcAuthorizationCodes.nonce,
           scope: systemOidcAuthorizationCodes.scope,
         })
 
-      return consumed.at(0) ?? null
+      const row = consumed.at(0)
+      if (row === undefined) return null
+      return Number.isSafeInteger(row.tokenVersion) && row.tokenVersion >= 0
+        ? row
+        : new Error("OIDC code state is invalid")
     } catch (caught) {
       return caught instanceof Error ? caught : new Error("authorization code consume failed")
     }

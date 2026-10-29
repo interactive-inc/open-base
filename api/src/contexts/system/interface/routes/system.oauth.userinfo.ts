@@ -51,6 +51,23 @@ export const GET = systemFactory.createHandlers(async (c) => {
     throw new OIDCInvalidTokenError(new OidcInvalidTokenApplicationError())
   }
 
+  const current = await new FindOidcAccessTokenAdapter(c).findOidcAccessToken({
+    issuer,
+    accessToken,
+  })
+  if (current instanceof Error)
+    throw new OIDCTemporarilyUnavailableError(
+      new OidcTemporarilyUnavailableApplicationError(current),
+    )
+  if (
+    current === null ||
+    current.tokenVersion !== storedAccessToken.tokenVersion ||
+    current.accountId !== storedAccessToken.accountId ||
+    current.clientId !== storedAccessToken.clientId ||
+    current.scope !== storedAccessToken.scope
+  )
+    throw new OIDCInvalidTokenError(new OidcInvalidTokenApplicationError())
+
   return c.json(
     {
       sub: identity.subject,

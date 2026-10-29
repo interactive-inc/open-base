@@ -28,6 +28,7 @@ describe("createOidcAuthorizationCode", () => {
       clientId: "system-console",
       redirectUri: "https://console.example.test/callback",
       accountId: zAccountId.parse("d5858208-e680-4db8-a05d-8bf4f900c24e"),
+      tokenVersion: 0,
       codeChallenge: "a".repeat(43),
       nonce: "nonce-with-enough-entropy",
       scope: ["openid"],

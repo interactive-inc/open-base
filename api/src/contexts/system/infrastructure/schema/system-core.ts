@@ -361,9 +361,11 @@ export const systemOidcAuthorizationCodes = sqliteTable(
     nonce: text("nonce").notNull(),
     scope: text("scope").notNull(),
     expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    tokenVersion: integer("token_version").notNull().default(0),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   },
   (table) => [
+    check("system_oidc_authorization_codes_token_version", sql`${table.tokenVersion} >= 0`),
     index("system_oidc_authorization_codes_expires_idx").on(table.expiresAt),
     check(
       "system_oidc_authorization_codes_hash_length",
@@ -391,9 +393,11 @@ export const systemOidcAccessTokens = sqliteTable(
       .references(() => systemAccounts.id, { onDelete: "cascade" }),
     scope: text("scope").notNull(),
     expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    tokenVersion: integer("token_version").notNull().default(0),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   },
   (table) => [
+    check("system_oidc_access_tokens_token_version", sql`${table.tokenVersion} >= 0`),
     index("system_oidc_access_tokens_expires_idx").on(table.expiresAt),
     check(
       "system_oidc_access_tokens_hash_length",

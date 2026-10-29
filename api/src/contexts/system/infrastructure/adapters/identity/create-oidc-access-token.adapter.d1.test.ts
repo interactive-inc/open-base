@@ -25,6 +25,7 @@ describe("createOidcAccessToken", () => {
       issuer: "https://identity.example.test",
       clientId: "system-console",
       accountId: zAccountId.parse("d5858208-e680-4db8-a05d-8bf4f900c24e"),
+      tokenVersion: 0,
       scope: "openid",
     })
 

@@ -7,7 +7,7 @@ import {
 import { SystemAuditEventEntity } from "@system/domain/entities/system-audit-event.entity"
 import type { AccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
-import { SystemAuditEventRepository } from "@system/infrastructure/repositories/audit/system-audit-event.repository"
+import { AppendOidcAuthenticatedAuditAdapter } from "@system/infrastructure/adapters/audit/append-oidc-authenticated-audit.adapter"
 import { CreateOidcAuthorizationCodeAdapter } from "@system/infrastructure/adapters/identity/create-oidc-authorization-code.adapter"
 import type { OidcClientRegistryValue } from "@system/domain/values/oauth/oidc-client-registry.value"
 import { OidcScopeValue } from "@system/domain/values/oauth/oidc-scope.value"
@@ -82,6 +82,7 @@ export class ApproveOidcAuthorization {
       clientId: client.id,
       redirectUri: props.redirectUri,
       accountId: accountId.data,
+      tokenVersion: this.c.var.accountTokenVersion,
       codeChallenge: props.codeChallenge,
       nonce: props.nonce,
       scope: scope.items,
@@ -126,7 +127,11 @@ export class ApproveOidcAuthorization {
 
     if (audit instanceof Error) return audit
 
-    const appended = await new SystemAuditEventRepository(this.c).append(audit)
+    const appended = await new AppendOidcAuthenticatedAuditAdapter(this.c).append({
+      accountId: props.accountId,
+      tokenVersion: this.c.var.accountTokenVersion,
+      audit,
+    })
 
     return appended instanceof Error ? appended : null
   }

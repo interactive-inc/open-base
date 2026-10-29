@@ -7,13 +7,14 @@ import type {
 import { createOidcSecret } from "@system/application/auth/identity/lib/create-oidc-secret"
 import { hashOidcSecret } from "@system/application/auth/identity/lib/hash-oidc-secret"
 import { systemOidcAuthorizationCodes } from "@system/infrastructure/schema/system-core"
-import { lte } from "drizzle-orm"
+import { lte, sql } from "drizzle-orm"
 
 type Props = Readonly<{
   issuer: string
   clientId: string
   redirectUri: string
   accountId: AccountId
+  tokenVersion: number
   codeChallenge: string
   nonce: string
   scope: ReadonlyArray<string>
@@ -38,18 +39,25 @@ export class CreateOidcAuthorizationCodeAdapter {
       await this.c.var.database
         .delete(systemOidcAuthorizationCodes)
         .where(lte(systemOidcAuthorizationCodes.expiresAt, now))
-      await this.c.var.database.insert(systemOidcAuthorizationCodes).values({
-        codeHash,
-        issuer: props.issuer,
-        clientId: props.clientId,
-        redirectUri: props.redirectUri,
-        accountId: props.accountId,
-        codeChallenge: props.codeChallenge,
-        nonce: props.nonce,
-        scope: props.scope.join(" "),
-        expiresAt,
-        createdAt: now,
-      })
+      const stored = await this.c.var.database
+        .insert(systemOidcAuthorizationCodes)
+        .values({
+          codeHash,
+          issuer: props.issuer,
+          clientId: props.clientId,
+          redirectUri: props.redirectUri,
+          accountId: props.accountId,
+          codeChallenge: props.codeChallenge,
+          nonce: props.nonce,
+          scope: props.scope.join(" "),
+          tokenVersion: sql`(SELECT token_version FROM system_accounts
+          WHERE id=${props.accountId} AND token_version=${props.tokenVersion}
+            AND status='active' AND closed_at IS NULL AND created_at<=${now.getTime()})`,
+          expiresAt,
+          createdAt: now,
+        })
+        .returning({ hash: systemOidcAuthorizationCodes.codeHash })
+      if (stored.length !== 1) return new Error("OIDC authentication changed")
 
       return Object.freeze({ code, expiresAt })
     } catch (caught) {

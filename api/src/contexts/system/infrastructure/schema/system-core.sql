@@ -376,6 +376,7 @@ CREATE TABLE system_oidc_authorization_codes (
   nonce TEXT NOT NULL,
   scope TEXT NOT NULL,
   expires_at INTEGER NOT NULL,
+  token_version INTEGER NOT NULL DEFAULT 0 CHECK (token_version >= 0),
   created_at INTEGER NOT NULL,
   CHECK (expires_at > created_at)
 );
@@ -392,6 +393,7 @@ CREATE TABLE system_oidc_access_tokens (
     REFERENCES system_accounts(id) ON DELETE CASCADE,
   scope TEXT NOT NULL,
   expires_at INTEGER NOT NULL,
+  token_version INTEGER NOT NULL DEFAULT 0 CHECK (token_version >= 0),
   created_at INTEGER NOT NULL,
   CHECK (expires_at > created_at)
 );

@@ -7,12 +7,13 @@ import type {
 import { createOidcSecret } from "@system/application/auth/identity/lib/create-oidc-secret"
 import { hashOidcSecret } from "@system/application/auth/identity/lib/hash-oidc-secret"
 import { systemOidcAccessTokens } from "@system/infrastructure/schema/system-core"
-import { lte } from "drizzle-orm"
+import { lte, sql } from "drizzle-orm"
 
 type Props = Readonly<{
   issuer: string
   clientId: string
   accountId: AccountId
+  tokenVersion: number
   scope: string
 }>
 type Context = SystemDatabaseContext & SystemClockContext
@@ -35,15 +36,22 @@ export class CreateOidcAccessTokenAdapter {
       await this.c.var.database
         .delete(systemOidcAccessTokens)
         .where(lte(systemOidcAccessTokens.expiresAt, now))
-      await this.c.var.database.insert(systemOidcAccessTokens).values({
-        tokenHash,
-        issuer: props.issuer,
-        clientId: props.clientId,
-        accountId: props.accountId,
-        scope: props.scope,
-        expiresAt,
-        createdAt: now,
-      })
+      const stored = await this.c.var.database
+        .insert(systemOidcAccessTokens)
+        .values({
+          tokenHash,
+          issuer: props.issuer,
+          clientId: props.clientId,
+          accountId: props.accountId,
+          scope: props.scope,
+          tokenVersion: sql`(SELECT token_version FROM system_accounts
+          WHERE id=${props.accountId} AND token_version=${props.tokenVersion}
+            AND status='active' AND closed_at IS NULL AND created_at<=${now.getTime()})`,
+          expiresAt,
+          createdAt: now,
+        })
+        .returning({ hash: systemOidcAccessTokens.tokenHash })
+      if (stored.length !== 1) return new Error("OIDC authentication changed")
 
       return Object.freeze({ accessToken, expiresAt })
     } catch (caught) {
