@@ -151,6 +151,91 @@ async function fixture() {
   return { db, clock, admin, reader, other, command, request, publish, read }
 }
 
+for (const operation of ["read-policy", "publish-policy"]) {
+  test(`監査開示設定の${operation}直前のfamily logoutを拒否する`, async () => {
+    const f = await fixture()
+    const method = operation === "read-policy" ? "findCurrent" : "append"
+    const read = spyOn(SystemAuditDisclosurePolicyRepository.prototype, "findCurrent")
+    const append = spyOn(SystemAuditDisclosurePolicyRepository.prototype, "append")
+    const originalRead = read.getMockImplementation()
+    const originalAppend = append.getMockImplementation()
+    if (originalRead === undefined || originalAppend === undefined)
+      throw new Error("missing original policy methods")
+    const revoke = async () => {
+      await f.db.prepare("UPDATE system_sessions SET revoked_at=?1").bind(Date.now()).run()
+    }
+    read.mockImplementation(async function (this: SystemAuditDisclosurePolicyRepository, ...args) {
+      if (method === "findCurrent") await revoke()
+      return originalRead.call(this, ...args)
+    })
+    append.mockImplementation(async function (
+      this: SystemAuditDisclosurePolicyRepository,
+      ...args
+    ) {
+      if (method === "append") await revoke()
+      return originalAppend.call(this, ...args)
+    })
+    try {
+      const response =
+        operation === "publish-policy"
+          ? await f.publish()
+          : await f.request(`/system/audit-disclosure-policies?scope=${f.command.scope}`, {
+              headers: f.admin,
+            })
+      const count = await f.db
+        .prepare("SELECT count(*) AS count FROM system_audit_disclosure_policy_revisions")
+        .first<number>("count")
+      expect({ status: response.status, count }).toEqual({ status: 403, count: 0 })
+    } finally {
+      read.mockRestore()
+      append.mockRestore()
+    }
+  })
+}
+
+test("監査開示設定transaction内のlogoutは設定と成功監査を巻き戻す", async () => {
+  const f = await fixture()
+  const before = await f.db
+    .prepare("SELECT count(*) AS count FROM system_audit_events")
+    .first<number>("count")
+  await f.db
+    .prepare(`CREATE TRIGGER revoke_disclosure_session AFTER INSERT ON system_audit_disclosure_policy_revisions
+    BEGIN UPDATE system_sessions SET revoked_at=${Date.now()}; END`)
+    .run()
+  const response = await f.publish()
+  expect(response.status).toBe(403)
+  expect(
+    await f.db
+      .prepare("SELECT count(*) AS count FROM system_audit_disclosure_policy_revisions")
+      .first<number>("count"),
+  ).toBe(0)
+  expect(
+    await f.db.prepare("SELECT count(*) AS count FROM system_audit_events").first<number>("count"),
+  ).toBe(before)
+  expect(
+    await f.db
+      .prepare("SELECT count(*) AS count FROM system_sessions WHERE revoked_at IS NOT NULL")
+      .first<number>("count"),
+  ).toBe(0)
+})
+
+test("開示設定の再送も途中logoutで既存結果を開示しない", async () => {
+  const f = await fixture()
+  expect((await f.publish()).status).toBe(201)
+  const read = spyOn(SystemAuditDisclosurePolicyRepository.prototype, "findCommand")
+  const original = read.getMockImplementation()
+  if (original === undefined) throw new Error("missing original disclosure command lookup")
+  read.mockImplementation(async function (this: SystemAuditDisclosurePolicyRepository, ...args) {
+    await f.db.prepare("UPDATE system_sessions SET revoked_at=?1").bind(Date.now()).run()
+    return original.call(this, ...args)
+  })
+  try {
+    expect((await f.publish()).status).toBe(403)
+  } finally {
+    read.mockRestore()
+  }
+})
+
 test.each([false, true])(
   "依頼照会後の保存を再送なら受理し、同じキーで内容変更なら拒否する（内容変更: %s）",
   async (changed) => {

@@ -1,3 +1,4 @@
+import { PrepareSystemReadAuthorizationAdapter } from "@system/infrastructure/adapters/iam/prepare-system-read-authorization.adapter"
 import { SystemAttachmentError } from "@system/domain/errors"
 import { SystemHumanOperationAuthorizationAdapter } from "@system/infrastructure/adapters/iam/system-human-operation-authorization.adapter"
 import type { SystemHTTPExceptionProps } from "@system/interface/errors"
@@ -6,7 +7,11 @@ import type { SystemHTTPExceptionProps } from "@system/interface/errors"
 export function toAttachmentPreservationHttpFailure(
   cause: Error | "forbidden" | "conflict" | "not_found",
 ): SystemHTTPExceptionProps {
-  if (cause === "forbidden" || SystemHumanOperationAuthorizationAdapter.rejected(cause))
+  if (
+    cause === "forbidden" ||
+    SystemHumanOperationAuthorizationAdapter.rejected(cause) ||
+    PrepareSystemReadAuthorizationAdapter.isRejected(cause)
+  )
     return {
       status: 403,
       code: "forbidden",

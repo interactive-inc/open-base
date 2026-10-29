@@ -1,3 +1,4 @@
+import { PrepareSystemReadAuthorizationAdapter } from "@system/infrastructure/adapters/iam/prepare-system-read-authorization.adapter"
 import { SystemAuditDisclosureError } from "@system/domain/errors"
 import { SystemHumanOperationAuthorizationAdapter } from "@system/infrastructure/adapters/iam/system-human-operation-authorization.adapter"
 import type { SystemHTTPExceptionProps } from "@system/interface/errors"
@@ -7,6 +8,7 @@ export function toAuditDisclosureHttpFailure(cause: Error | "forbidden"): System
   if (
     cause === "forbidden" ||
     SystemHumanOperationAuthorizationAdapter.rejected(cause) ||
+    PrepareSystemReadAuthorizationAdapter.isRejected(cause) ||
     (cause instanceof SystemAuditDisclosureError && cause.kind === "forbidden")
   )
     return { status: 403, code: "forbidden", detail: "開示設定を操作する権限がありません", cause }

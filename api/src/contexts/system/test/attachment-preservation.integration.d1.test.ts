@@ -168,6 +168,115 @@ async function fixture() {
   }
 }
 
+for (const operation of ["read", "create", "release"]) {
+  test(`保全の${operation}直前にfamilyがlogoutしたら開示・変更しない`, async () => {
+    const c = await fixture()
+    const command = c.command()
+    if (operation !== "create") expect((await c.create(command)).status).toBe(201)
+    const headers = await c.headers()
+    const repositoryMethod = operation === "read" ? "findMany" : "write"
+    const revoke = async () => {
+      await c.db.prepare("UPDATE system_sessions SET revoked_at=?1").bind(Date.now()).run()
+    }
+    const read = spyOn(AttachmentPreservationRepository.prototype, "findMany")
+    const write = spyOn(AttachmentPreservationRepository.prototype, "write")
+    const originalRead = read.getMockImplementation()
+    const originalWrite = write.getMockImplementation()
+    if (originalRead === undefined || originalWrite === undefined)
+      throw new Error("missing original preservation methods")
+    read.mockImplementation(async function (this: AttachmentPreservationRepository, ...args) {
+      if (repositoryMethod === "findMany") await revoke()
+      return originalRead.call(this, ...args)
+    })
+    write.mockImplementation(async function (this: AttachmentPreservationRepository, ...args) {
+      if (repositoryMethod === "write") await revoke()
+      return originalWrite.call(this, ...args)
+    })
+    try {
+      const response = await c.request(
+        operation === "release" ? `${c.endpoint}/${command.id}/release` : c.endpoint,
+        {
+          method: operation === "read" ? "GET" : "POST",
+          headers,
+          ...(operation === "read"
+            ? {}
+            : {
+                body: JSON.stringify(
+                  operation === "release"
+                    ? {
+                        operationId: crypto.randomUUID(),
+                        expectedRevision: 1,
+                        reason: "Review completed",
+                      }
+                    : command,
+                ),
+              }),
+        },
+      )
+      const revision = await c.db
+        .prepare("SELECT revision FROM system_attachment_preservations WHERE id=?1")
+        .bind(command.id)
+        .first<number>("revision")
+      expect({ status: response.status, revision }).toEqual({
+        status: 403,
+        revision: operation === "create" ? null : 1,
+      })
+    } finally {
+      read.mockRestore()
+      write.mockRestore()
+    }
+  })
+}
+
+test("保全保存transaction内のlogoutは変更と成功監査ごと巻き戻す", async () => {
+  const c = await fixture()
+  const headers = await c.headers()
+  const before = await c.db
+    .prepare("SELECT count(*) AS count FROM system_audit_events")
+    .first<number>("count")
+  await c.db
+    .prepare(`CREATE TRIGGER revoke_preservation_session AFTER INSERT ON system_attachment_preservations
+    BEGIN UPDATE system_sessions SET revoked_at=${Date.now()}; END`)
+    .run()
+  const response = await c.request(c.endpoint, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(c.command()),
+  })
+  expect(response.status).toBe(403)
+  expect(
+    await c.db
+      .prepare("SELECT count(*) AS count FROM system_attachment_preservations")
+      .first<number>("count"),
+  ).toBe(0)
+  expect(
+    await c.db.prepare("SELECT count(*) AS count FROM system_audit_events").first<number>("count"),
+  ).toBe(before)
+  expect(
+    await c.db
+      .prepare("SELECT count(*) AS count FROM system_sessions WHERE revoked_at IS NOT NULL")
+      .first<number>("count"),
+  ).toBe(0)
+})
+
+test("保全の再送も途中logoutで既存結果を開示しない", async () => {
+  const c = await fixture()
+  const command = c.command()
+  expect((await c.create(command)).status).toBe(201)
+  const read = spyOn(AttachmentPreservationRepository.prototype, "find")
+  const original = read.getMockImplementation()
+  if (original === undefined) throw new Error("missing original preservation lookup")
+  read.mockImplementation(async function (this: AttachmentPreservationRepository, ...args) {
+    await c.db.prepare("UPDATE system_sessions SET revoked_at=?1").bind(Date.now()).run()
+    return original.call(this, ...args)
+  })
+  try {
+    expect((await c.create(command)).status).toBe(403)
+  } finally {
+    read.mockRestore()
+  }
+})
+
 test("複数の削除停止を個別に解除し、最後の保全がなくなるまで本体を残す", async () => {
   const c = await fixture()
   await c.db

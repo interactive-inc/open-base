@@ -35,10 +35,14 @@ export class SystemAuditDisclosurePolicyRepository {
       const batch = await this.c.env.DB.batch<{ snapshot_json: string }>([
         ...this.c.assertions,
         statement,
+        ...this.c.assertions,
       ])
-      if (batch.length !== this.c.assertions.length + 1 || batch.some((result) => !result.success))
+      if (
+        batch.length !== this.c.assertions.length * 2 + 1 ||
+        batch.some((result) => !result.success)
+      )
         return new SystemAuditDisclosureError("unavailable")
-      const row = batch.at(-1)?.results.at(0)
+      const row = batch[this.c.assertions.length]?.results.at(0)
       if (row === undefined) return null
       const entity = SystemAuditDisclosurePolicyEntity.create(JSON.parse(row.snapshot_json))
       return entity instanceof Error
@@ -78,6 +82,7 @@ export class SystemAuditDisclosurePolicyRepository {
           crypto.randomUUID(),
         ),
         abortWhenPreviousStatementChangedNoRows(this.c.env.DB),
+        ...this.c.assertions,
       ]
       const results = await this.c.env.DB.batch(statements)
       if (results.length !== statements.length || results.some((result) => !result.success))

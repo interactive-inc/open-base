@@ -2,7 +2,7 @@ import type {
   SystemD1Context,
   SystemAuthorizationContext,
 } from "@system/configuration/system-context"
-import { SystemHumanOperationAuthorizationAdapter } from "@system/infrastructure/adapters/iam/system-human-operation-authorization.adapter"
+import { prepareSystemHumanBearerAuthorization } from "@system/interface/authorization/prepare-system-human-bearer-authorization"
 import { SystemPrincipalSecretService } from "@system/lib/auth/system-principal-secret-service"
 
 /** 保全の参照・変更に必要な人の権限と再認証をtransactionでも照合する。 */
@@ -10,9 +10,7 @@ export async function prepareAttachmentPreservationAuthorization(
   context: SystemD1Context & SystemAuthorizationContext,
   input: Readonly<{ now: Date; stepUpToken: string | null }>,
 ): Promise<ReadonlyArray<D1PreparedStatement> | "forbidden" | Error> {
-  const proof = await new SystemHumanOperationAuthorizationAdapter(context).prepare({
-    accountId: context.var.userId,
-    tokenVersion: context.var.accountTokenVersion,
+  const proof = await prepareSystemHumanBearerAuthorization(context, {
     permissions: ["system:admin"],
     now: input.now,
   })

@@ -51,11 +51,15 @@ export class AttachmentPreservationRepository {
       const batch = await this.c.env.DB.batch<{ snapshot_json: string }>([
         ...this.c.assertions,
         statement,
+        ...this.c.assertions,
       ])
-      if (batch.length !== this.c.assertions.length + 1 || batch.some((result) => !result.success))
+      if (
+        batch.length !== this.c.assertions.length * 2 + 1 ||
+        batch.some((result) => !result.success)
+      )
         return new Error("preservation read failed")
       const entities: AttachmentPreservationEntity[] = []
-      for (const row of batch.at(-1)?.results ?? []) {
+      for (const row of batch[this.c.assertions.length]?.results ?? []) {
         const entity = AttachmentPreservationEntity.create(JSON.parse(row.snapshot_json))
         if (entity instanceof Error)
           return new Error("stored preservation is invalid", { cause: entity })
@@ -106,6 +110,7 @@ export class AttachmentPreservationRepository {
       this.c.env.DB.prepare(
         "SELECT CASE WHEN changes() = 0 THEN json_extract('{}', 'attachment_preservation_revision_changed') ELSE 1 END AS ok",
       ),
+      ...this.c.assertions,
     ]
   }
 

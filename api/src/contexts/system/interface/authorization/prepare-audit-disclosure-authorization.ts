@@ -2,7 +2,7 @@ import type {
   SystemD1Context,
   SystemAuthorizationContext,
 } from "@system/configuration/system-context"
-import { SystemHumanOperationAuthorizationAdapter } from "@system/infrastructure/adapters/iam/system-human-operation-authorization.adapter"
+import { prepareSystemHumanBearerAuthorization } from "@system/interface/authorization/prepare-system-human-bearer-authorization"
 import { SystemPrincipalSecretService } from "@system/lib/auth/system-principal-secret-service"
 
 /** 開示設定の管理は現在の人の管理権限を要求し、変更時は再認証も固定する。 */
@@ -10,9 +10,7 @@ export async function prepareAuditDisclosureAuthorization(
   context: SystemD1Context & SystemAuthorizationContext,
   input: Readonly<{ now: Date; stepUpToken: string | null }>,
 ) {
-  const proof = await new SystemHumanOperationAuthorizationAdapter(context).prepare({
-    accountId: context.var.userId,
-    tokenVersion: context.var.accountTokenVersion,
+  const proof = await prepareSystemHumanBearerAuthorization(context, {
     permissions: ["system:admin"],
     now: input.now,
   })
