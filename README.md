@@ -68,6 +68,8 @@ MCPは標準入出力で起動します。`.mcp.json` の接続設定も使用�
 
 MCPの申請承認・却下では、先に `application_requests_show` で内容を確認し、応答の `decision_target` を `application_requests_approve` / `application_requests_reject` に渡してください。対象の版が変わった場合はAPIが競合を返すため、改めて内容を確認して判断します。
 
+CLIも `base application-requests show <id>` で内容を確認し、応答の `decision_target` を承認・却下の `--decision-target '<json>'` に渡します。却下には `--comment` も必要です。
+
 MCPの `foundation_request` では、`headers` に `x-company-organization-id`、`if-match`、`x-system-step-up` を指定できます。Companyの対象会社・更新する版・Systemの再認証tokenをAPIが要求する場合に渡してください。冪等性keyは既存の `idempotency_key` を使います。Bearerは保存済みの認証情報から設定します。
 
 `path` は `/system` または `/company` から始まるURI pathです。ID内の `/`、`?`、`#`、`%` はURI符号化してください。例えば `person:example` は `person%3Aexample` と指定でき、コロンやUnicodeのIDも扱えます。query parameterはpathへ連結せず `query` に指定します。

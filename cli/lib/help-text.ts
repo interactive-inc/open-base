@@ -29,8 +29,8 @@ commands:
   application-requests inbox                  自分宛の承認待ち一覧
   application-requests mine                   自分の申請一覧 (--status)
   application-requests show <id>              申請の詳細
-  application-requests approve <id>           申請を承認 (--comment)
-  application-requests reject <id>            申請を却下 (--comment)
+  application-requests approve <id>           申請を承認 (--decision-target <json> [--comment])
+  application-requests reject <id>            申請を却下 (--decision-target <json> --comment)
   application-requests workflow-repair list   修復が必要な承認フロー一覧
   application-requests workflow-repair reassign <id>  承認候補を再割当 (--candidates <id,id,...> --reason <text>)
   application-requests mine                   申請一覧
