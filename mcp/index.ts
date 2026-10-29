@@ -147,13 +147,33 @@ server.tool(
     query: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
     body: z.record(z.string(), z.unknown()).optional(),
     idempotency_key: z.string().max(255).optional(),
+    headers: z
+      .strictObject({
+        "x-company-organization-id": z
+          .string()
+          .regex(/^\S{1,255}$/)
+          .optional(),
+        "if-match": z
+          .string()
+          .regex(/^(?:W\/)?(?:"\d+"|\d+)$/)
+          .optional(),
+        "x-system-step-up": z
+          .string()
+          .regex(/^[0-9a-f]{64}$/)
+          .optional(),
+      })
+      .optional()
+      .describe(
+        "API preconditions: Company organization, expected revision, and System step-up token. Use idempotency_key separately.",
+      ),
   },
-  async ({ path, method, query, body, idempotency_key }) => {
-    const data = await apiRequest(path, {
-      method,
-      query,
-      json: body,
-      idempotencyKey: idempotency_key,
+  async (args) => {
+    const data = await apiRequest(args.path, {
+      method: args.method,
+      query: args.query,
+      json: args.body,
+      idempotencyKey: args.idempotency_key,
+      headers: args.headers,
     })
     return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] }
   },

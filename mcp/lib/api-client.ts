@@ -167,6 +167,7 @@ type RequestOptions = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
   query?: Record<string, string | number | boolean | null | undefined>
   idempotencyKey?: string
+  headers?: Readonly<Record<string, string | undefined>>
   json?: unknown
 }
 
@@ -234,6 +235,9 @@ export async function apiRequest<T = unknown>(
   }
 
   const headers: Record<string, string> = {}
+  for (const header of Object.entries(options.headers ?? {})) {
+    if (header[1] !== undefined) headers[header[0]] = header[1]
+  }
   if (options.idempotencyKey !== undefined) headers["Idempotency-Key"] = options.idempotencyKey
 
   if (options.json !== undefined) {

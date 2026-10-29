@@ -64,6 +64,8 @@ bun mcp/index.ts
 
 MCPは標準入出力で起動します。`.mcp.json` の接続設定も使用できます。CLIで対象APIへログインすると、MCPも同じ接続先の認証情報を利用します。
 
+MCPの `foundation_request` では、`headers` に `x-company-organization-id`、`if-match`、`x-system-step-up` を指定できます。Companyの対象会社・更新する版・Systemの再認証tokenをAPIが要求する場合に渡してください。冪等性keyは既存の `idempotency_key` を使います。Bearerは保存済みの認証情報から設定します。
+
 ## 検証とDB
 
 ```sh
