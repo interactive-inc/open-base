@@ -24,6 +24,8 @@ export type ServiceBindingRequestInput = Readonly<{
   query?: Readonly<Record<string, string>>
   /** JSONとして送る本文。GET・HEADでは渡さない。 */
   body?: unknown
+  /** 書き込みの再送を同一要求として扱うUUID。任意headerは受け取らない。 */
+  idempotencyKey?: string
 }>
 
 type ServiceBindingApp = Readonly<{
@@ -68,6 +70,7 @@ const inputSchema = z.strictObject({
   path: z.string().min(1).max(MAX_PATH_LENGTH),
   query: z.record(z.string().min(1).max(200), z.string().max(2_000)).optional(),
   body: z.unknown().optional(),
+  idempotencyKey: z.uuid().optional(),
 })
 
 type Input = z.output<typeof inputSchema>
@@ -243,6 +246,9 @@ export async function executeServiceBindingRequest(
 
   const headers = new Headers({ accept: "application/json" })
   if (body !== null) headers.set("content-type", "application/json")
+  if (input.data.idempotencyKey !== undefined) {
+    headers.set("idempotency-key", input.data.idempotencyKey)
+  }
   const request = new Request(toRequestUrl(props.env, input.data).toString(), {
     method: input.data.method,
     headers,

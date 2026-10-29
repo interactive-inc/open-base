@@ -125,6 +125,8 @@ bun mcp/index.ts
 
 MCPは標準入出力で起動します。`.mcp.json` の接続設定も使用できます。CLIで対象APIへログインすると、MCPも同じ接続先の認証情報を利用します。
 
+APIの配備だけではリモートMCPのツールは公開されません。外部のMCPハブで利用する場合は、ハブ側のツール登録と本人認証の接続も配備してください。Service Bindingの`request`で評価APIを呼ぶ書き込みでは、UUIDの`idempotencyKey`を指定します。APIと同じ理由・期待版・判断対象・権限の検証が適用され、任意のHTTP headerや主体の指定は受け付けません。
+
 ## 目標管理と評価
 
 `performance-review` contextが評価期間・目標・自己評価・評価者の評価を所有し、承認はSystem、判断資格はCompanyを使います。画面は追加せずAPIとMCPを提供します。

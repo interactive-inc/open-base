@@ -193,6 +193,39 @@ describe("executeServiceBindingRequest", () => {
     expect(viaRpc).toMatchObject({ ok: true, status: viaHttp.status })
   })
 
+  test("RPCで評価期間を作成・再送し、同じキーの異なる本文は競合として拒否する", async () => {
+    const token = await tokenOf(rootSubject, serviceBindingAudience)
+    const input = {
+      method: "POST",
+      path: "/performance-review/cycles",
+      idempotencyKey: crypto.randomUUID(),
+      body: {
+        id: crypto.randomUUID(),
+        name: "Example review period",
+        starts_on: "2026-04-01",
+        ends_on: "2026-09-30",
+        reason: "Confirmed review setup",
+      },
+    }
+    const first = await rpc(token, input)
+    expect(first).toMatchObject({ ok: true, status: 201 })
+    const retried = await rpc(token, input)
+    expect(retried).toMatchObject({ ok: true, body: first.ok ? first.body : null })
+    expect(
+      await rpc(token, {
+        ...input,
+        body: { ...input.body, name: "Different request" },
+      }),
+    ).toMatchObject({ ok: true, status: 409 })
+    expect(
+      await rpc(await tokenOf(plainSubject, serviceBindingAudience), {
+        ...input,
+        idempotencyKey: crypto.randomUUID(),
+        body: { ...input.body, id: crypto.randomUUID() },
+      }),
+    ).toMatchObject({ ok: true, status: 401 })
+  })
+
   test("認証できないtokenはappを呼ばずにrejectedを返す", async () => {
     const called = { count: 0 }
     const target = spyApp(called, () => new Response("unexpected"))
@@ -216,6 +249,8 @@ describe("executeServiceBindingRequest", () => {
     const inputs: ReadonlyArray<unknown> = [
       undefined,
       "GET /company/current-profile",
+      { method: "POST", path: "/performance-review/cycles", idempotencyKey: "bad\r\nheader" },
+      { method: "POST", path: "/performance-review/cycles", headers: { authorization: "forged" } },
       { method: "TRACE", path: "/company/current-profile" },
       { method: "get", path: "/company/current-profile" },
       { method: "GET", path: "https://example.com/company/current-profile" },
