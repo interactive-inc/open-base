@@ -91,19 +91,22 @@ async function tryRefresh(
       return null
     }
 
-    const body = (await res.json()) as { access_token?: unknown; refresh_token?: unknown }
+    const body: unknown = await res.json()
 
-    if (typeof body.access_token !== "string" || body.access_token === "") {
+    if (
+      typeof body !== "object" ||
+      body === null ||
+      !("access_token" in body) ||
+      typeof body.access_token !== "string" ||
+      body.access_token === "" ||
+      !("refresh_token" in body) ||
+      (body.refresh_token !== null &&
+        (typeof body.refresh_token !== "string" || body.refresh_token === ""))
+    ) {
       return null
     }
 
-    return {
-      access_token: body.access_token,
-      refresh_token:
-        typeof body.refresh_token === "string" && body.refresh_token !== ""
-          ? body.refresh_token
-          : null,
-    }
+    return { access_token: body.access_token, refresh_token: body.refresh_token }
   } catch {
     return null
   }
