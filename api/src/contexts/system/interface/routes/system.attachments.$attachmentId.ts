@@ -19,6 +19,7 @@ import {
 } from "@system/interface/errors"
 import { authenticateSystemAccessToken } from "@system/interface/middlewares/authenticate-system-access-token"
 import { systemFactory } from "@system/interface/request-environment/system-factory"
+import { toAttachmentContentDisposition } from "@system/interface/operations/to-attachment-content-disposition"
 
 /**
  * 紐づけ前の添付を、預けた本人だけが取り出す。業務レコードへ紐づいた後の閲覧は
@@ -166,7 +167,7 @@ export const GET = systemFactory.createHandlers(authenticateSystemAccessToken, a
     headers: {
       "content-type": content.contentType,
       "content-length": String(content.byteSize),
-      "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(content.fileName)}`,
+      "content-disposition": toAttachmentContentDisposition(content.fileName),
       "cache-control": "no-store",
     },
   })

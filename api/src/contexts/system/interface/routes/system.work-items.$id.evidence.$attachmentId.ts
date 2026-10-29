@@ -2,6 +2,7 @@ import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit
 import { z } from "zod"
 import { zValidator } from "@hono/zod-validator"
 import { systemFactory } from "@system/interface/request-environment/system-factory"
+import { toAttachmentContentDisposition } from "@system/interface/operations/to-attachment-content-disposition"
 import { authenticateSystemAccessToken } from "@system/interface/middlewares/authenticate-system-access-token"
 import { prepareSystemWorkContext } from "@system/interface/work/prepare-system-work-context"
 import { SystemWorkItemError } from "@system/domain/errors"
@@ -115,7 +116,7 @@ export const GET = systemFactory.createHandlers(
       headers: {
         "content-type": attachment.contentType,
         "content-length": String(attachment.byteSize),
-        "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(attachment.fileName)}`,
+        "content-disposition": toAttachmentContentDisposition(attachment.fileName),
         "cache-control": "no-store",
         "x-content-type-options": "nosniff",
       },

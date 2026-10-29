@@ -5,6 +5,7 @@ import { toBase64 } from "@system/application/attachments/lib/to-base64"
 import { z } from "zod"
 import { zValidator } from "@hono/zod-validator"
 import { systemFactory } from "@system/interface/request-environment/system-factory"
+import { toAttachmentContentDisposition } from "@system/interface/operations/to-attachment-content-disposition"
 import { authenticateSystemAccessToken } from "@system/interface/middlewares/authenticate-system-access-token"
 import { preparePreservedRecordReadAuthorization } from "@system/interface/authorization/prepare-preserved-record-read-authorization"
 import { DisclosePreservedRecordContent } from "@system/application/records/disclose-preserved-record-content"
@@ -76,16 +77,16 @@ export const GET = systemFactory.createHandlers(
         throw new SystemPreservedRecordUnavailableError()
       const checked = await persistence.revalidate(content.assertions)
       if (checked instanceof Error) throw new SystemPreservedRecordUnavailableError()
-      const fileName = encodeURIComponent(
-        new TextDecoder().decode(new TextEncoder().encode(attachment.metadata.fileName)),
-      ).replace(/[!'()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`)
       const contentType = /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i.test(
         attachment.metadata.contentType,
       )
         ? attachment.metadata.contentType
         : "application/octet-stream"
       context.header("Content-Type", contentType)
-      context.header("Content-Disposition", `attachment; filename*=UTF-8''${fileName}`)
+      context.header(
+        "Content-Disposition",
+        toAttachmentContentDisposition(attachment.metadata.fileName),
+      )
       context.header("X-Content-Type-Options", "nosniff")
       return context.body(attachment.contentBytes().buffer)
     }

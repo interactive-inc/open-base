@@ -3,6 +3,7 @@ import { Miniflare } from "miniflare"
 import { createAppBase } from "@/api/app-base"
 import { ATTACHMENT_MAX_BYTE_SIZE } from "@system/domain/catalogs/attachments/attachment-content.catalog"
 import { POST } from "@system/interface/routes/system.attachments"
+import { GET as GET_ATTACHMENT } from "@system/interface/routes/system.attachments.$attachmentId"
 import { createSystemAttachmentTestDatabase } from "@system/test/create-system-attachment-test-database.test-support"
 import { createSystemAttachmentTestKekEnvironment } from "@system/test/create-system-attachment-test-kek-environment.test-support"
 import { SystemAccessTokenIssuer } from "@system/lib/auth/system-access-token-issuer"
@@ -24,7 +25,9 @@ const fixture = {
 }
 const now = new Date()
 const secret = "example-attachment-http-secret"
-const app = createAppBase().post("/system/attachments", ...POST)
+const app = createAppBase()
+  .post("/system/attachments", ...POST)
+  .get("/system/attachments/:attachmentId", ...GET_ATTACHMENT)
 beforeAll(async () => {
   const accountId = zAccountId.parse("3b2b8827-25c9-459b-a05b-6eff821639e0")
   await fixture.database
@@ -43,9 +46,9 @@ beforeAll(async () => {
 })
 afterAll(() => runtime.dispose())
 
-async function upload(size: number, withContentLength = false) {
+async function upload(size: number, withContentLength = false, fileName = "example.pdf") {
   const form = new FormData()
-  form.set("file", new File([new Uint8Array(size)], "example.pdf", { type: "application/pdf" }))
+  form.set("file", new File([new Uint8Array(size)], fileName, { type: "application/pdf" }))
   const request = new Request("https://api.example.com/system/attachments", {
     method: "POST",
     body: form,
@@ -63,6 +66,30 @@ async function upload(size: number, withContentLength = false) {
   }
   return app.request(request, undefined, environment())
 }
+
+test("記号を含む添付名はfilename拡張parameter内で符号化する", async () => {
+  const uploaded = await upload(100, false, "example 'copy'(1)*.pdf")
+  expect(uploaded.status).toBe(201)
+  const stored: unknown = await uploaded.json()
+  if (
+    typeof stored !== "object" ||
+    stored === null ||
+    !("id" in stored) ||
+    typeof stored.id !== "string"
+  )
+    throw new Error("missing attachment id")
+  const response = await app.request(
+    "https://api.example.com/system/attachments/" + stored.id,
+    {
+      headers: { authorization: `Bearer ${fixture.token}` },
+    },
+    environment(),
+  )
+  expect(response.status).toBe(200)
+  expect(response.headers.get("content-disposition")).toBe(
+    "attachment; filename*=UTF-8''example%20%27copy%27%281%29%2A.pdf",
+  )
+})
 function environment() {
   return {
     DB: fixture.database,

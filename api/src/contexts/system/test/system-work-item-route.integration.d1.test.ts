@@ -485,11 +485,11 @@ test("未認証、主体の偽装、machine依頼、入力の余分な項目を�
   })
 })
 
-async function evidenceFixture() {
+async function evidenceFixture(fileName = "evidence.pdf") {
   const f = await fixture()
   const form = new FormData()
   const plaintext = "%PDF-1.7 確認の根拠"
-  form.set("file", new File([plaintext], "evidence.pdf", { type: "application/pdf" }))
+  form.set("file", new File([plaintext], fileName, { type: "application/pdf" }))
   const upload = await f.request("/system/attachments", {
     method: "POST",
     headers: {
@@ -518,6 +518,17 @@ async function evidenceFixture() {
     path,
   }
 }
+
+test("証拠ファイル名の記号をContent-Dispositionへ符号化する", async () => {
+  const f = await evidenceFixture("example 'copy'(1)*.pdf")
+  const response = await f.request(f.path, {
+    headers: f.headers.get("45712a13-6a79-4dff-b2b0-d518052d6101"),
+  })
+  expect(response.status).toBe(200)
+  expect(response.headers.get("content-disposition")).toBe(
+    "attachment; filename*=UTF-8''example%20%27copy%27%281%29%2A.pdf",
+  )
+})
 
 test("証拠の本文を参加者だけに開示し、内容と版を開示監査へ結び付ける", async () => {
   const f = await evidenceFixture()
