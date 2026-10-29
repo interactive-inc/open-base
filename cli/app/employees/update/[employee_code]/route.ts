@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import { zValidator } from "@hono/zod-validator"
 import { z } from "zod"
 import { createClient } from "@/lib/http/hc-client"
@@ -53,7 +54,7 @@ export default factory.createHandlers(
     const client = await createClient()
 
     const response = await client.company["employee-directory"][":code"].$put({
-      param: { code: employeeCode },
+      param: encodePathParams({ code: employeeCode }),
       header: { "idempotency-key": query["idempotency-key"] },
       json: {
         name: query.name,

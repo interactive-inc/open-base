@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import { createClient } from "@/lib/api/hc-client"
 import type { SystemIntegrationExchange } from "@/lib/api/types/system-operation-types"
 
@@ -8,7 +9,7 @@ export async function getSystemIntegrationExchange(
   const client = await createClient()
 
   const response = await client.system["integration-exchanges"][":exchangeId"].$get({
-    param: { exchangeId },
+    param: encodePathParams({ exchangeId }),
   })
 
   if (response.status >= 400) {

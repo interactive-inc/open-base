@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import { createClient } from "@/lib/api/hc-client"
 import type { EmployeeDetailItem } from "@/lib/api/types/employee-list-item"
 
@@ -9,7 +10,7 @@ export async function getEmployeeByCode(code: string): Promise<EmployeeDetailIte
   const client = await createClient()
 
   const response = await client.company["employee-directory"][":code"].$get({
-    param: { code: code },
+    param: encodePathParams({ code: code }),
   })
 
   const status: number = response.status

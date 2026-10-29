@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import { z } from "zod"
 import { zValidator } from "@hono/zod-validator"
 import { createClient } from "@/lib/http/hc-client"
@@ -43,7 +44,7 @@ export default factory.createHandlers(
 
     const response = await client.company["organization-units"][":code"].$delete(
       {
-        param: { code: query.code },
+        param: encodePathParams({ code: query.code }),
         json: {
           expected_organization_revision: query["organization-revision"],
           expected_as_of: query["as-of"],

@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import { createClient } from "@/lib/api/hc-client"
 import { toResponseError } from "@/lib/api/to-response-error"
 
@@ -8,7 +9,7 @@ export async function getEmployeeLifecycleEvents(
   const client = await createClient()
   const response = await client.company["employee-lifecycle"][":code"].events.$get(
     {
-      param: { code },
+      param: encodePathParams({ code }),
       query: {
         from: query.from,
         to: query.to,

@@ -42,7 +42,7 @@ test("all pages keep the observed company revision and missing archive does not 
     const request = new Request(input, init)
     const url = new URL(request.url)
     if (url.pathname === "/company/employee-directory/E001") return Response.json(employee)
-    if (url.pathname === "/company/grade-award-archives/by-employee/employee:test")
+    if (url.pathname === "/company/grade-award-archives/by-employee/employee%3Atest")
       return Response.json({ error: "missing" }, { status: 404 })
     expect(url.pathname).toBe("/company/grade-assignment-history")
     expect(request.headers.get("x-company-organization-id")).toBe(
@@ -90,7 +90,7 @@ test.each([
           ...employee,
           profile: failure === "unconnected" ? null : employee.profile,
         })
-      if (url.pathname === "/company/grade-award-archives/by-employee/employee:test")
+      if (url.pathname === "/company/grade-award-archives/by-employee/employee%3Atest")
         return Response.json(
           { error: "missing" },
           { status: failure === "archive-forbidden" ? 403 : 404 },

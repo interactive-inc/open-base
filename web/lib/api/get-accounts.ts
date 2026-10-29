@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import { createClient } from "@/lib/api/hc-client"
 
 /** System Account と active Role Binding の一覧を正規 System API から取得する。 */
@@ -14,7 +15,7 @@ export async function getAccounts() {
   const roleBindingResponses = await Promise.all(
     body.accounts.map((account) =>
       client.system.accounts[":accountId"]["role-bindings"].$get({
-        param: { accountId: account.id },
+        param: encodePathParams({ accountId: account.id }),
       }),
     ),
   )

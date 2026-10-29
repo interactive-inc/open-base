@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import { createClient } from "@/lib/api/hc-client"
 import { toApiResponseError } from "@/lib/api/to-api-response-error"
 import { toStepUpHeaders } from "@/lib/api/to-step-up-headers"
@@ -16,7 +17,10 @@ export async function revokeAccountRole(
 
   const response = await client.system.accounts[":accountId"]["role-bindings"][
     ":bindingId"
-  ].$delete({ param: { accountId, bindingId } }, { headers: toStepUpHeaders(stepUpToken) })
+  ].$delete(
+    { param: encodePathParams({ accountId, bindingId }) },
+    { headers: toStepUpHeaders(stepUpToken) },
+  )
 
   if (response.status !== 204) {
     return toApiResponseError(response, "failed to revoke role")

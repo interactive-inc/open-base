@@ -7,6 +7,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": webRoot,
+      "@base": fileURLToPath(new URL("../lib/", import.meta.url)),
     },
   },
   test: {

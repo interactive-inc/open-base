@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import { createClient } from "@/lib/api/hc-client"
 import { toApiResponseError } from "@/lib/api/to-api-response-error"
 import { toStepUpHeaders } from "@/lib/api/to-step-up-headers"
@@ -16,7 +17,7 @@ export async function grantAccountRole(
 
   const response = await client.system.accounts[":accountId"]["role-bindings"].$post(
     {
-      param: { accountId },
+      param: encodePathParams({ accountId }),
       json: { role_id: roleId, resource: null },
     },
     { headers: toStepUpHeaders(stepUpToken) },

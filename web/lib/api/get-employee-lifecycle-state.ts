@@ -1,10 +1,11 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import { createClient } from "@/lib/api/hc-client"
 import { toResponseError } from "@/lib/api/to-response-error"
 
 export async function getEmployeeLifecycleState(code: string, asOf?: string) {
   const client = await createClient()
   const response = await client.company["employee-lifecycle"][":code"].state.$get(
-    { param: { code }, query: { as_of: asOf } },
+    { param: encodePathParams({ code }), query: { as_of: asOf } },
     { init: { cache: "no-store" } },
   )
   if (!response.ok) {

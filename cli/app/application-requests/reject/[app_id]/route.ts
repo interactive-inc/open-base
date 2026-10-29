@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import { parseDecisionTarget } from "@/lib/application-requests/parse-decision-target"
 import { zValidator } from "@hono/zod-validator"
 import { z } from "zod"
@@ -35,7 +36,7 @@ export default factory.createHandlers(
     const client = await createClient()
 
     const response = await client["company"]["application-requests"][":id"].reject.$post({
-      param: { id: appId },
+      param: encodePathParams({ id: appId }),
       json: { comment: comment.data, decision_target: target },
     })
 

@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import type { EntityId } from "@/lib/api/types/entity-id"
 import { createClient } from "@/lib/api/hc-client"
 import { toResponseError } from "@/lib/api/to-response-error"
@@ -10,7 +11,7 @@ export async function withdrawApplication(id: EntityId): Promise<null | Error> {
   const client = await createClient()
 
   const response = await client["company"]["application-requests"][":id"].$delete({
-    param: { id: String(id) },
+    param: encodePathParams({ id: String(id) }),
   })
 
   if (response.status >= 400) {

@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import { createClient } from "@/lib/api/hc-client"
 import { toApiResponseError } from "@/lib/api/to-api-response-error"
 import { toStepUpHeaders } from "@/lib/api/to-step-up-headers"
@@ -19,7 +20,7 @@ export async function updateRole(roleId: string, props: Props): Promise<null | A
 
   const response = await client.system.roles[":roleId"].$patch(
     {
-      param: { roleId },
+      param: encodePathParams({ roleId }),
       json: {
         name: props.name,
         description: props.description,

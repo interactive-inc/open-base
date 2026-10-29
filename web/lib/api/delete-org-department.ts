@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import type { OrgDepartmentEditExpectation } from "@/lib/api/types/org-types"
 import { createClient } from "@/lib/api/hc-client"
 import { toResponseError } from "@/lib/api/to-response-error"
@@ -13,7 +14,7 @@ export async function deleteOrgDepartment(
   const client = await createClient()
 
   const response = await client.company["organization-units"][":code"].$delete(
-    { param: { code }, json: expectation },
+    { param: encodePathParams({ code }), json: expectation },
     { headers: { "Idempotency-Key": crypto.randomUUID() } },
   )
 

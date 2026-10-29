@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import { createClient } from "@/lib/api/hc-client"
 import type { SystemMachineCredential } from "@/lib/api/types/system-operation-types"
 
@@ -11,7 +12,7 @@ export async function getSystemMachineCredentials(
   const client = await createClient()
 
   const response = await client.system.principals[":principalId"]["machine-credentials"].$get({
-    param: { principalId },
+    param: encodePathParams({ principalId }),
   })
 
   if (response.status >= 400) {

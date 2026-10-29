@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import { createClient } from "@/lib/api/hc-client"
 import type { SystemReconciliationRun } from "@/lib/api/types/system-operation-types"
 
@@ -13,7 +14,7 @@ export async function getSystemReconciliationRuns(
 
   const response = await client.system["integration-exchanges"][":exchangeId"][
     "reconciliations"
-  ].$get({ param: { exchangeId } })
+  ].$get({ param: encodePathParams({ exchangeId }) })
 
   if (response.status >= 400) {
     return new Error("failed to load system reconciliation runs")

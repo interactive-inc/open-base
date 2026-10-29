@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import { zValidator } from "@hono/zod-validator"
 import { z } from "zod"
 import { writeFile } from "node:fs/promises"
@@ -116,7 +117,7 @@ export default factory.createHandlers(
         throw new UsageError("証拠は --attachment-id と --output を指定してください")
       const client = await createClient()
       const response = await client.system["work-items"][":id"].evidence[":attachmentId"].$get({
-        param: { id: id ?? "", attachmentId: input["attachment-id"] },
+        param: encodePathParams({ id: id ?? "", attachmentId: input["attachment-id"] }),
       })
       if (!response.ok) throw new ApiError(response.status, "証拠の取得に失敗しました")
       const bytes = new Uint8Array(await response.arrayBuffer())

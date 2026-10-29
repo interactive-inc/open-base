@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import type { EntityId } from "@/lib/api/types/entity-id"
 import { createClient } from "@/lib/api/hc-client"
 import { toResponseError } from "@/lib/api/to-response-error"
@@ -5,7 +6,7 @@ import { toResponseError } from "@/lib/api/to-response-error"
 export async function resubmitApplication(id: EntityId, payload: unknown) {
   const client = await createClient()
   const response = await client["company"]["application-requests"][":id"].resubmit.$post({
-    param: { id: String(id) },
+    param: encodePathParams({ id: String(id) }),
     json: { payload },
   })
   if (response.status >= 400) {

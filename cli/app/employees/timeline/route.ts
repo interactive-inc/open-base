@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import { factory } from "@/factory"
 import { UsageError } from "@/lib/errors"
 import { createClient } from "@/lib/http/hc-client"
@@ -24,7 +25,7 @@ export default factory.createHandlers(
     if (!input.code) throw new UsageError("--code が必要です")
     const client = await createClient()
     const response = await client.company["employee-lifecycle"][":code"].events.$get({
-      param: { code: input.code },
+      param: encodePathParams({ code: input.code }),
       query: {
         from: input.from,
         to: input.to,

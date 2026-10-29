@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import { zValidator } from "@hono/zod-validator"
 import { z } from "zod"
 import { createClient } from "@/lib/http/hc-client"
@@ -27,7 +28,10 @@ export default factory.createHandlers(
     }
     const response = await (
       await createClient()
-    ).company["application-requests"][":id"].resubmit.$post({ param: { id }, json: { payload } })
+    ).company["application-requests"][":id"].resubmit.$post({
+      param: encodePathParams({ id }),
+      json: { payload },
+    })
     return c.json(await response.json())
   },
 )

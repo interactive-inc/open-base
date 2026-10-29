@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import { createClient } from "@/lib/api/hc-client"
 import { toApiResponseError } from "@/lib/api/to-api-response-error"
 import { toStepUpHeaders } from "@/lib/api/to-step-up-headers"
@@ -14,7 +15,7 @@ export async function deleteRole(
   const client = await createClient()
 
   const response = await client.system.roles[":roleId"].$delete(
-    { param: { roleId } },
+    { param: encodePathParams({ roleId }) },
     { headers: toStepUpHeaders(stepUpToken) },
   )
 

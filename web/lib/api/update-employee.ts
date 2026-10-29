@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import { createClient } from "@/lib/api/hc-client"
 import { toResponseError } from "@/lib/api/to-response-error"
 import type { EmployeeUpdateRequest } from "@/lib/api/types/employee-types"
@@ -11,7 +12,7 @@ export async function updateEmployee(
   const client = await createClient()
 
   const response = await client.company["employee-directory"][":code"].$put({
-    param: { code },
+    param: encodePathParams({ code }),
     header: { "idempotency-key": commandId },
     json: request,
   })

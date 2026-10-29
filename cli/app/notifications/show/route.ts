@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import { z } from "zod"
 import { zValidator } from "@hono/zod-validator"
 import { createClient } from "@/lib/http/hc-client"
@@ -18,7 +19,7 @@ export default factory.createHandlers(
     const client = await createClient()
 
     const response = await client.system.notifications[":id"].$get({
-      param: { id: query.id },
+      param: encodePathParams({ id: query.id }),
     })
     if (response.status !== 200) throw new UsageError("通知の取得に失敗しました")
 

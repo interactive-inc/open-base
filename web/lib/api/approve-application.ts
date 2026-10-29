@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import type { EntityId } from "@/lib/api/types/entity-id"
 import type { ApplicationDecisionTarget } from "@/lib/api/types/application-types"
 import { createClient } from "@/lib/api/hc-client"
@@ -12,7 +13,7 @@ export async function approveApplication(
   const client = await createClient()
 
   const response = await client["company"]["application-requests"][":id"].approve.$post({
-    param: { id: String(id) },
+    param: encodePathParams({ id: String(id) }),
     json: { comment, decision_target: decisionTarget },
   })
 

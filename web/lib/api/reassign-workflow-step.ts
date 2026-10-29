@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import type { EntityId } from "@/lib/api/types/entity-id"
 import { createClient } from "@/lib/api/hc-client"
 import { toApiResponseError } from "@/lib/api/to-api-response-error"
@@ -17,7 +18,7 @@ export async function reassignWorkflowStep(
   const response = await client["company"]["application-requests"][":id"][
     "reassign-workflow-step"
   ].$post({
-    param: { id: String(applicationId) },
+    param: encodePathParams({ id: String(applicationId) }),
     json: {
       candidate_employee_ids: [...request.candidate_employee_ids],
       required_approvals: request.required_approvals,

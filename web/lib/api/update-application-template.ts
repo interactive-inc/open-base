@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import { createClient } from "@/lib/api/hc-client"
 import { toResponseError } from "@/lib/api/to-response-error"
 import type {
@@ -16,7 +17,7 @@ export async function updateApplicationTemplate(
   const client = await createClient()
 
   const response = await client["company"]["application-templates"][":code"].$put({
-    param: { code: code },
+    param: encodePathParams({ code: code }),
     json: {
       name: request.name,
       category: request.category,

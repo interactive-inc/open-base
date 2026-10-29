@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import { zValidator } from "@hono/zod-validator"
 import { z } from "zod"
 import { createClient } from "@/lib/http/hc-client"
@@ -19,7 +20,7 @@ export default factory.createHandlers(
     const client = await createClient()
 
     const response = await client.system.notifications[":id"].$patch({
-      param: { id: notificationId },
+      param: encodePathParams({ id: notificationId }),
       json: { read: true },
     })
     if (response.status !== 200) throw new UsageError("通知の既読化に失敗しました")

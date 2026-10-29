@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import { z } from "zod"
 import { zValidator } from "@hono/zod-validator"
 import { createClient } from "@/lib/http/hc-client"
@@ -19,7 +20,7 @@ export default factory.createHandlers(
     const client = await createClient()
 
     const response = await client["company"]["application-requests"][":id"].$delete({
-      param: { id: appId },
+      param: encodePathParams({ id: appId }),
     })
 
     if (response.status !== 204) {

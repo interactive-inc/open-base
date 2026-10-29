@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import { createClient } from "@/lib/api/hc-client"
 import type { SystemPrincipal } from "@/lib/api/types/system-operation-types"
 
@@ -6,7 +7,7 @@ export async function getSystemPrincipal(principalId: string): Promise<SystemPri
   const client = await createClient()
 
   const response = await client.system.principals[":principalId"].$get({
-    param: { principalId },
+    param: encodePathParams({ principalId }),
   })
 
   if (response.status >= 400) {

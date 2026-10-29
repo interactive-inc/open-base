@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import { zValidator } from "@hono/zod-validator"
 import { z } from "zod"
 import { createClient } from "@/lib/http/hc-client"
@@ -32,7 +33,7 @@ export default factory.createHandlers(
     }
     const endpoint = client.company["application-templates"][":code"].workflow
     if (query.definition === undefined) {
-      const response = await endpoint.$get({ param: { code } })
+      const response = await endpoint.$get({ param: encodePathParams({ code }) })
       await ensureOk(response)
       return c.json(await response.json())
     }
@@ -57,7 +58,7 @@ export default factory.createHandlers(
       throw new UsageError("--definition はJSONオブジェクトで指定してください")
     }
     const response = await endpoint.$put({
-      param: { code },
+      param: encodePathParams({ code }),
       json: { ...definition, expected_revision: expectedRevision },
     })
     await ensureOk(response)

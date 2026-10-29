@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import type { EntityId } from "@/lib/api/types/entity-id"
 import { createClient } from "@/lib/api/hc-client"
 import { ApiResponseError } from "@/lib/api/api-response-error"
@@ -7,7 +8,7 @@ export async function getApplicationDetail(id: EntityId) {
   const client = await createClient()
 
   const response = await client["company"]["application-requests"][":id"].$get({
-    param: { id: String(id) },
+    param: encodePathParams({ id: String(id) }),
   })
 
   if (response.status >= 400) {

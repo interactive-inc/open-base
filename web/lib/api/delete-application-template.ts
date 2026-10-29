@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import { createClient } from "@/lib/api/hc-client"
 import { toResponseError } from "@/lib/api/to-response-error"
 
@@ -9,7 +10,7 @@ export async function deleteApplicationTemplate(code: string): Promise<null | Er
   const client = await createClient()
 
   const response = await client["company"]["application-templates"][":code"].$delete({
-    param: { code: code },
+    param: encodePathParams({ code: code }),
   })
 
   if (response.status >= 400) {

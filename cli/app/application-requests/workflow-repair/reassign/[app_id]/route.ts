@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import { zValidator } from "@hono/zod-validator"
 import { z } from "zod"
 import { factory } from "@/factory"
@@ -70,7 +71,7 @@ export default factory.createHandlers(
     const response = await client["company"]["application-requests"][":id"][
       "reassign-workflow-step"
     ].$post({
-      param: { id: applicationId },
+      param: encodePathParams({ id: applicationId }),
       json: {
         candidate_employee_ids: candidateEmployeeIds,
         required_approvals: requiredApprovals,

@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import { zValidator } from "@hono/zod-validator"
 import { z } from "zod"
 import { createClient } from "@/lib/http/hc-client"
@@ -19,7 +20,7 @@ export default factory.createHandlers(
     const client = await createClient()
 
     const response = await client.company["reporting-lines"][":employeeCode"].$get({
-      param: { employeeCode },
+      param: encodePathParams({ employeeCode }),
     })
 
     const rows = await response.json()

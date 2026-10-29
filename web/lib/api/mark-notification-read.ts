@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import { createClient } from "@/lib/api/hc-client"
 
 /** PATCH /system/notifications/:id。指定した通知を既読にする。 */
@@ -5,7 +6,7 @@ export async function markNotificationRead(notificationId: string): Promise<void
   const client = await createClient()
 
   const response = await client.system.notifications[":id"].$patch({
-    param: { id: String(notificationId) },
+    param: encodePathParams({ id: String(notificationId) }),
     json: { read: true },
   })
 

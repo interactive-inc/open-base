@@ -1,3 +1,4 @@
+import { encodePathParams } from "@base/http/encode-path-params"
 import { createClient } from "@/lib/api/hc-client"
 import type { OrgDepartmentResponse } from "@/lib/api/types/org-types"
 
@@ -6,7 +7,7 @@ export async function getOrgDepartment(code: string): Promise<OrgDepartmentRespo
   const client = await createClient()
 
   const response = await client.company["organization-units"][":code"].$get({
-    param: { code },
+    param: encodePathParams({ code }),
   })
 
   if (response.status >= 400) {
