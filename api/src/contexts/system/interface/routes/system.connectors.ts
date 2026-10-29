@@ -80,7 +80,7 @@ export const POST = systemFactory.createHandlers(
     if (event instanceof Error) throw new SystemIntegrationUnavailableError(event)
     const assertions = await prepareSystemWriteAuthorization(context, {
       now,
-      requiredPermission: "integration:write",
+      requiredPermissions: ["integration:write"],
       stepUpToken: context.req.header("x-system-step-up") ?? "",
     })
     if (assertions === "forbidden") throw new SystemForbiddenError()

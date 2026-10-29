@@ -49,7 +49,7 @@ export const PATCH = systemFactory.createHandlers(
     }
     const assertions = await prepareSystemWriteAuthorization(context, {
       now,
-      requiredPermission: "integration:write",
+      requiredPermissions: ["integration:write"],
       stepUpToken: context.req.header("x-system-step-up") ?? "",
       resource: { type: "system:connector", id: connectorId },
     })

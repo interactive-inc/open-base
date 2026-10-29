@@ -72,7 +72,7 @@ export const PATCH = systemFactory.createHandlers(
     const assertions = await prepareSystemWriteAuthorization(context, {
       now,
       stepUpToken: context.req.header("x-system-step-up") ?? "",
-      requiredPermission: "iam:write",
+      requiredPermissions: ["iam:write"],
       principalRename: {
         principalId: changed.id,
         revision: changed.revision,

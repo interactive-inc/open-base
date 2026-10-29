@@ -1,3 +1,4 @@
+import { PrepareSystemReadAuthorizationAdapter } from "@system/infrastructure/adapters/iam/prepare-system-read-authorization.adapter"
 import type { AccountId } from "@system/domain/schemas/iam/account-id.schema"
 import type { SystemD1Context } from "@system/configuration/system-context"
 import { SystemDeliveryEntity } from "@system/domain/entities/system-delivery.entity"
@@ -57,7 +58,7 @@ export type SystemDeadLetterRequeueResult = Readonly<{
   jobId: string
 }>
 
-type Context = SystemD1Context
+type Context = SystemD1Context & Readonly<{ assertions?: ReadonlyArray<D1PreparedStatement> }>
 
 /** 汎用job・outbox・inbox・dead letterを同じleaseと冪等性規則で保存する。 */
 export class SystemDeliveryRepository {
@@ -472,26 +473,36 @@ export class SystemDeliveryRepository {
 
   async findDeadLetter(id: string): Promise<SystemDeadLetterView | null | Error> {
     try {
-      const row = await this.c.env.DB.prepare(
-        `SELECT id, source_type, source_id, payload_digest, reason_code, attempt,
-                recorded_at, requeued_job_id, requeued_at
-         FROM system_dead_letters WHERE id = ?1 LIMIT 1`,
-      )
-        .bind(id)
-        .first<{
-          id: string
-          source_type: "job" | "outbox" | "inbox"
-          source_id: string
-          payload_digest: string
-          reason_code: string
-          attempt: number
-          recorded_at: number
-          requeued_job_id: string | null
-          requeued_at: number | null
-        }>()
-      return row === null ? null : toDeadLetterView(row)
-    } catch (caught) {
-      return caught instanceof Error ? caught : new Error("failed to read System dead letter")
+      const statement =
+        this.c.env.DB.prepare(`SELECT id, source_type, source_id, payload_digest, reason_code, attempt,
+        recorded_at, requeued_job_id, requeued_at FROM system_dead_letters WHERE id=?1 LIMIT 1`).bind(
+          id,
+        )
+      const assertions = this.c.assertions ?? []
+      const results = await this.c.env.DB.batch<Parameters<typeof toDeadLetterView>[0]>([
+        ...assertions,
+        statement,
+        ...assertions,
+      ])
+      if (results.length !== assertions.length * 2 + 1 || results.some((result) => !result.success))
+        return new Error("dead letter read failed")
+      const row = results[assertions.length]?.results.at(0)
+      return row === undefined ? null : toDeadLetterView(row)
+    } catch (cause) {
+      return cause instanceof Error ? cause : new Error("dead letter read failed")
+    }
+  }
+
+  /** source照会などの非同期処理後にも、既存再投入結果を返す現在の資格を検査する。 */
+  async verifyRequeueAuthorization(): Promise<void | Error> {
+    const assertions = this.c.assertions ?? []
+    if (assertions.length === 0) return
+    try {
+      const results = await this.c.env.DB.batch([...assertions])
+      if (results.length !== assertions.length || results.some((result) => !result.success))
+        return new Error("dead letter authorization failed")
+    } catch (cause) {
+      return cause instanceof Error ? cause : new Error("dead letter authorization failed")
     }
   }
 
@@ -518,6 +529,7 @@ export class SystemDeliveryRepository {
     } else if (job.handlerKey !== null) return "conflict"
     try {
       const statements: D1PreparedStatement[] = [
+        ...(this.c.assertions ?? []),
         this.c.env.DB.prepare(
           `INSERT INTO system_jobs
              (id, operation_key, payload_digest, idempotency_key, created_by_account_id,
@@ -546,6 +558,7 @@ export class SystemDeliveryRepository {
           "SELECT CASE WHEN changes() = 1 THEN 1 ELSE abs(-9223372036854775808) END AS ok",
         ),
         ...auditStatements,
+        ...(this.c.assertions ?? []),
       ]
       const results = await this.c.env.DB.batch(statements)
       if (results.length !== statements.length || results.some((result) => !result.success)) {
@@ -553,7 +566,10 @@ export class SystemDeliveryRepository {
       }
       return { status: "created", jobId: job.id }
     } catch (caught) {
+      if (PrepareSystemReadAuthorizationAdapter.isRejected(caught))
+        return caught instanceof Error ? caught : new Error("dead letter authorization failed")
       const replay = await this.findDeadLetter(deadLetterId)
+      if (replay instanceof Error) return replay
       if (replay === null) return "not_found"
       if (!(replay instanceof Error) && replay.requeuedJobId !== null) {
         return { status: "replayed", jobId: replay.requeuedJobId }

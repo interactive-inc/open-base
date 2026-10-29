@@ -1,3 +1,7 @@
+import { prepareSystemWriteAuthorization } from "@system/interface/authorization/prepare-system-write-authorization"
+import { authenticateSystemAccessToken } from "@system/interface/middlewares/authenticate-system-access-token"
+import { requireSystemStepUp } from "@system/interface/middlewares/require-system-step-up"
+import { createSystemSessionApplications } from "@system/test/create-system-session-applications.test-support"
 import { execSql } from "@system/test/local-d1/exec-sql.test-support"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { SystemDeliveryEntity } from "@system/domain/entities/system-delivery.entity"
@@ -15,7 +19,7 @@ import { POST as machineSessionPOST } from "@system/interface/routes/system.mach
 import { SystemPrincipalSecretService } from "@system/lib/auth/system-principal-secret-service"
 import { SystemSessionTestContext } from "@system/test/system-session-test-context.test-support"
 import { seedSystemStepUpGrant } from "@system/test/seed-system-step-up-grant.test-support"
-import { describe, expect, setDefaultTimeout, test } from "bun:test"
+import { describe, expect, setDefaultTimeout, spyOn, test } from "bun:test"
 import { hc } from "hono/client"
 import { z } from "zod"
 
@@ -298,3 +302,217 @@ async function issueAccessToken(fixture: SystemSessionTestContext): Promise<stri
   expect(response.status).toBe(201)
   return z.object({ access_token: z.string() }).parse(await response.json()).access_token
 }
+
+async function requeueMutationFixture(shortStepUp = false) {
+  const fixture = await SystemSessionTestContext.create()
+  await seedWorker(fixture)
+  const at = new Date()
+  const actor = zAccountId.parse("c08ec37d-0fe5-4282-9670-5ca99e6ad604")
+  await fixture.database.batch([
+    fixture.database
+      .prepare(
+        "INSERT INTO system_accounts(id,status,token_version,created_at,updated_at) VALUES (?1,'active',0,?2,?2)",
+      )
+      .bind(actor, at.getTime() - 600_000),
+    fixture.database
+      .prepare(
+        "INSERT INTO system_role_bindings(id,account_id,role_id,resource_type,resource_id,created_at) VALUES (?1,?2,'fcc965d5-8be4-4a24-86fe-4453fb422bde',NULL,NULL,1)",
+      )
+      .bind(crypto.randomUUID(), actor),
+  ])
+  const applications = createSystemSessionApplications({
+    context: fixture.context,
+    jwtSecret,
+    sessionTtlMilliseconds: 604_800_000,
+  })
+  if (applications instanceof Error) throw applications
+  const session = await applications.issue.execute({
+    accountId: actor,
+    tokenVersion: 0,
+    now: at,
+    auditContext: { authorizationJson: null, metadataJson: null },
+  })
+  if (session instanceof Error || session.kind === "rejected")
+    throw new Error("test session issuance failed")
+  const stepUp = await seedSystemStepUpGrant(
+    fixture,
+    actor,
+    shortStepUp ? new Date(at.getTime() - 299_000) : at,
+  )
+  const queued = SystemDeliveryEntity.create({
+    id: crypto.randomUUID(),
+    kind: "job",
+    operationKey: "example.retry",
+    payloadDigest: "a".repeat(64),
+    idempotencyKey: "example-retry",
+    status: "queued",
+    attempt: 0,
+    maxAttempts: 1,
+    availableAt: at,
+    leaseAccountId: null,
+    leaseTokenHash: null,
+    leaseExpiresAt: null,
+    lastErrorCode: null,
+    createdAt: at,
+    updatedAt: at,
+    completedAt: null,
+  })
+  if (queued instanceof Error) throw queued
+  const repository = new SystemDeliveryRepository(fixture.context)
+  expect(await repository.create(queued, actor, null, [])).toBe("created")
+  const leased = queued.claim(actor, "b".repeat(64), at, 30_000)
+  if (leased instanceof Error) throw leased
+  expect(await repository.update(queued, leased, [])).toBe("updated")
+  const failed = leased.fail(actor, "b".repeat(64), "example.failed", at, at)
+  if (failed instanceof Error) throw failed
+  expect(await repository.update(leased, failed, [])).toBe("updated")
+  const letters = await repository.findDeadLetters()
+  if (letters instanceof Error || !letters[0]) throw new Error("missing test dead letter")
+  const id = letters[0].id
+  const app = systemFactory
+    .createApp()
+    .use("*", async (c, next) => {
+      c.set("now", () => at)
+      await next()
+    })
+    .post("/system/dead-letters/:deadLetterId/requeue", ...deadLetterRequeuePOST)
+    .post(
+      "/empty-permissions",
+      authenticateSystemAccessToken,
+      requireSystemStepUp,
+      async (context) => {
+        const proof = await prepareSystemWriteAuthorization(context, {
+          now: at,
+          requiredPermissions: [],
+          stepUpToken: stepUp,
+        })
+        return context.json({ forbidden: proof === "forbidden" }, proof === "forbidden" ? 403 : 500)
+      },
+    )
+  const request = (path = `/system/dead-letters/${id}/requeue`) =>
+    app.request(
+      path,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${session.accessToken}`,
+          "x-system-step-up": stepUp,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          max_attempts: 1,
+          available_at: at.toISOString(),
+          reason: "Test retry",
+        }),
+      },
+      { DB: fixture.database, JWT_SECRET: jwtSecret },
+    )
+  const snapshot = () =>
+    fixture.database
+      .prepare(`SELECT (SELECT count(*) FROM system_jobs) AS jobs,
+    (SELECT group_concat(requeued_job_id) FROM system_dead_letters) AS requeued,
+    (SELECT count(*) FROM system_audit_events) AS audits`)
+      .first<Record<string, unknown>>()
+  return { database: fixture.database, request, snapshot, id }
+}
+
+type RequeueMutationCase = Readonly<{
+  replay: boolean
+  change: "logout" | "authority" | "step-up" | "version" | "expiry"
+}>
+const requeueMutationCases: ReadonlyArray<RequeueMutationCase> = [
+  { replay: false, change: "logout" },
+  { replay: true, change: "logout" },
+  { replay: false, change: "authority" },
+  { replay: false, change: "step-up" },
+  { replay: false, change: "version" },
+  { replay: false, change: "expiry" },
+]
+for (const scenario of requeueMutationCases) {
+  const replay = scenario.replay
+  test(`dead letter再投入は途中${scenario.change}で状態と成功監査を変えない: ${replay}`, async () => {
+    const f = await requeueMutationFixture(scenario.change === "expiry")
+    if (replay) expect((await f.request()).status).toBe(201)
+    const before = await f.snapshot()
+    const requeue = spyOn(SystemDeliveryRepository.prototype, "requeueDeadLetter")
+    const find = spyOn(SystemDeliveryRepository.prototype, "find")
+    const originalRequeue = requeue.getMockImplementation()
+    const originalFind = find.getMockImplementation()
+    if (!originalRequeue || !originalFind) throw new Error("missing original delivery methods")
+    const revoke = async () => {
+      if (scenario.change === "authority") {
+        await f.database
+          .prepare("DELETE FROM system_iam_role_permissions WHERE permission_key='system:admin'")
+          .run()
+        return
+      }
+      if (scenario.change === "step-up") {
+        await f.database
+          .prepare("UPDATE system_step_up_grants SET revoked_at=?1")
+          .bind(Date.now())
+          .run()
+        return
+      }
+      if (scenario.change === "version") {
+        await f.database
+          .prepare(
+            "UPDATE system_accounts SET token_version=token_version+1 WHERE id='c08ec37d-0fe5-4282-9670-5ca99e6ad604'",
+          )
+          .run()
+        return
+      }
+      if (scenario.change === "expiry") {
+        const expiry = await f.database
+          .prepare("SELECT max(expires_at) AS expiry FROM system_step_up_grants")
+          .first<number>("expiry")
+        if (expiry === null) throw new Error("missing step-up expiry")
+        expect(Date.now()).toBeLessThan(expiry)
+        await Bun.sleep(Math.max(0, expiry - Date.now()) + 50)
+        return
+      }
+      await f.database.prepare("UPDATE system_sessions SET revoked_at=?1").bind(Date.now()).run()
+    }
+    requeue.mockImplementation(async function (this: SystemDeliveryRepository, ...args) {
+      if (!replay) await revoke()
+      return originalRequeue.call(this, ...args)
+    })
+    find.mockImplementation(async function (this: SystemDeliveryRepository, ...args) {
+      if (replay) await revoke()
+      return originalFind.call(this, ...args)
+    })
+    try {
+      expect({ status: (await f.request()).status, snapshot: await f.snapshot() }).toEqual({
+        status: 403,
+        snapshot: before,
+      })
+    } finally {
+      requeue.mockRestore()
+      find.mockRestore()
+    }
+  })
+}
+
+test("再投入transaction中のlogoutでjob・再投入記録・監査を全て巻き戻す", async () => {
+  const f = await requeueMutationFixture()
+  const before = await f.snapshot()
+  await f.database
+    .prepare(
+      `CREATE TRIGGER revoke_requeue_session AFTER INSERT ON system_jobs BEGIN UPDATE system_sessions SET revoked_at=${Date.now()}; END`,
+    )
+    .run()
+  expect((await f.request()).status).toBe(403)
+  expect(await f.snapshot()).toEqual(before)
+})
+
+test("現在の資格での再送はjobと成功監査を重複させない", async () => {
+  const f = await requeueMutationFixture()
+  expect((await f.request()).status).toBe(201)
+  const before = await f.snapshot()
+  expect((await f.request()).status).toBe(200)
+  expect(await f.snapshot()).toEqual(before)
+})
+
+test("空の要求permissionは権限検査を省略せず拒否する", async () => {
+  const f = await requeueMutationFixture()
+  expect((await f.request("/empty-permissions")).status).toBe(403)
+})

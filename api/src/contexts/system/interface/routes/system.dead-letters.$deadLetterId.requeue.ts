@@ -1,3 +1,5 @@
+import { prepareSystemWriteAuthorization } from "@system/interface/authorization/prepare-system-write-authorization"
+import { PrepareSystemReadAuthorizationAdapter } from "@system/infrastructure/adapters/iam/prepare-system-read-authorization.adapter"
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
 import { SystemAuditEventEntity } from "@system/domain/entities/system-audit-event.entity"
 import { SystemDeliveryEntity } from "@system/domain/entities/system-delivery.entity"
@@ -44,10 +46,19 @@ export const POST = systemFactory.createHandlers(
     }
     const accountId = zAccountId.safeParse(context.var.userId)
     if (!accountId.success) throw new SystemDeliveryUnavailableError(accountId.error)
-    const systemContext = { env: { DB: context.env.DB } }
+    const assertions = await prepareSystemWriteAuthorization(context, {
+      now,
+      requiredPermissions: ["batch:write", "system:admin"],
+      stepUpToken: context.req.header("x-system-step-up") ?? "",
+    })
+    if (assertions === "forbidden") throw new SystemForbiddenError()
+    if (assertions instanceof Error) throw new SystemDeliveryUnavailableError(assertions)
+    const systemContext = { env: { DB: context.env.DB }, assertions }
     const repository = new SystemDeliveryRepository(systemContext)
     const deadLetterId = context.req.valid("param").deadLetterId
     const deadLetter = await repository.findDeadLetter(deadLetterId)
+    if (PrepareSystemReadAuthorizationAdapter.isRejected(deadLetter))
+      throw new SystemForbiddenError()
     if (deadLetter instanceof Error) throw new SystemDeliveryUnavailableError(deadLetter)
     if (deadLetter === null) throw new SystemDeliveryNotFoundError()
     if (deadLetter.sourceType !== "inbox") {
@@ -57,6 +68,10 @@ export const POST = systemFactory.createHandlers(
       if (source.handlerKey !== null) throw new SystemForbiddenError()
     }
     if (deadLetter.requeuedJobId !== null) {
+      const checked = await repository.verifyRequeueAuthorization()
+      if (PrepareSystemReadAuthorizationAdapter.isRejected(checked))
+        throw new SystemForbiddenError()
+      if (checked instanceof Error) throw new SystemDeliveryUnavailableError(checked)
       return context.json({ job_id: deadLetter.requeuedJobId, replayed: true }, 200)
     }
     const body = context.req.valid("json")
@@ -110,6 +125,7 @@ export const POST = systemFactory.createHandlers(
       accountId.data,
       new SystemAuditEventRepository(systemContext).prepareAppend(event),
     )
+    if (PrepareSystemReadAuthorizationAdapter.isRejected(result)) throw new SystemForbiddenError()
     if (result instanceof Error) throw new SystemDeliveryUnavailableError(result)
     if (result === "not_found") throw new SystemDeliveryNotFoundError()
     if (result === "conflict") throw new SystemDeliveryConflictError()

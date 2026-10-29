@@ -71,7 +71,7 @@ export const POST = systemFactory.createHandlers(
     const assertions = await prepareSystemWriteAuthorization(context, {
       now,
       stepUpToken: context.req.header("x-system-step-up") ?? "",
-      requiredPermission: "iam:write",
+      requiredPermissions: ["iam:write"],
     })
     if (assertions === "forbidden") throw new SystemForbiddenError()
     if (assertions instanceof Error) throw new SystemPrincipalUnavailableError(assertions)
