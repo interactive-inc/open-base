@@ -11,7 +11,7 @@ export class SystemNotificationPublicationAuthorizationAdapter {
     Object.freeze(this)
   }
 
-  async prepare(authentication: SystemReadAuthentication, sessionFamilyId: string | null) {
+  async prepare(authentication: SystemReadAuthentication) {
     const authorization = await new PrepareSystemReadAuthorizationAdapter(this.c).prepare(
       authentication,
       this.c.var.now(),
@@ -23,22 +23,6 @@ export class SystemNotificationPublicationAuthorizationAdapter {
     )
       return null
 
-    return () => {
-      const at = this.c.var.now()
-      const assertions = authorization.assertions(at)
-      if (assertions instanceof Error || sessionFamilyId === null) return assertions
-      // Accountのtoken versionを変えないlogoutも、発行元familyの失効として拒否する。
-      return [
-        ...assertions,
-        this.c.env.DB.prepare(`SELECT CASE WHEN EXISTS (
-          SELECT 1 FROM system_sessions WHERE family_id=?1 AND account_id=?2
-            AND (revoked_at IS NULL OR revoked_at>max(?3,CAST((julianday('now')-2440587.5)*86400000 AS INTEGER)))
-          ) THEN 1 ELSE json_extract('{}','system_notification_sender_session_changed') END`).bind(
-          sessionFamilyId,
-          authentication.accountId,
-          at.getTime(),
-        ),
-      ]
-    }
+    return () => authorization.assertions(this.c.var.now())
   }
 }

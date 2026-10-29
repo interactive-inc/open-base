@@ -4,6 +4,8 @@ import { SystemAuditDisclosureValue } from "@system/domain/values/audit/system-a
 import { SystemAuditDisclosureError } from "@system/domain/errors"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { permissionKeySchema } from "@system/domain/values/iam/permission.value"
+import type { SystemReadAuthentication } from "@system/domain/definitions/system-read-authentication.definition"
+import { PrepareSystemReadAuthorizationAdapter } from "@system/infrastructure/adapters/iam/prepare-system-read-authorization.adapter"
 
 type Context = SystemD1Context
 export type PreparedSystemAuditDisclosure = Readonly<{
@@ -33,24 +35,38 @@ export class SystemAuditDisclosureReadAdapter {
 
   async prepare(
     input: Readonly<{
-      accountId: string
-      tokenVersion: number
+      authentication: SystemReadAuthentication
       permission: string
       purpose: string | null
       now: Date
     }>,
   ): Promise<PreparedSystemAuditDisclosure | SystemAuditDisclosureError> {
+    const authentication = input.authentication
     if (
-      !zAccountId.safeParse(input.accountId).success ||
+      !zAccountId.safeParse(authentication.accountId).success ||
       !permissionKeySchema.safeParse(input.permission).success ||
-      !Number.isSafeInteger(input.tokenVersion) ||
-      input.tokenVersion < 0 ||
+      !Number.isSafeInteger(authentication.tokenVersion) ||
+      authentication.tokenVersion < 0 ||
       !Number.isSafeInteger(input.now.getTime()) ||
       input.now.getTime() < 0
     )
       return new SystemAuditDisclosureError("forbidden")
-    const args = [input.accountId, input.tokenVersion, input.now.getTime(), input.permission]
+    const args = [
+      authentication.accountId,
+      authentication.tokenVersion,
+      input.now.getTime(),
+      input.permission,
+    ]
     try {
+      const bearer = await new PrepareSystemReadAuthorizationAdapter(this.c).prepare(
+        authentication,
+        input.now,
+      )
+      if (bearer instanceof Error) return new SystemAuditDisclosureError("unavailable", bearer)
+      if (bearer === null) return new SystemAuditDisclosureError("forbidden")
+      const actorAssertions = bearer.assertions(input.now)
+      if (actorAssertions instanceof Error)
+        return new SystemAuditDisclosureError("unavailable", actorAssertions)
       const batch = await this.c.env.DB.batch<{
         snapshot?: string
         epoch?: number
@@ -64,7 +80,7 @@ export class SystemAuditDisclosureReadAdapter {
         this.c.env.DB.prepare(`SELECT audit.after_json AS snapshot_json FROM system_audit_disclosure_policy_revisions policy
           JOIN system_audit_events audit ON audit.event_id = policy.audit_event_id
           WHERE policy.scope IN ('*', ?1) AND policy.revision = (SELECT MAX(revision) FROM system_audit_disclosure_policy_revisions latest WHERE latest.scope = policy.scope)`).bind(
-          input.accountId,
+          authentication.accountId,
         ),
       ])
       if (batch.length !== 3 || batch.some((result) => !result.success))
@@ -84,7 +100,7 @@ export class SystemAuditDisclosureReadAdapter {
       }
       const value = SystemAuditDisclosureValue.evaluate({
         policies,
-        accountId: input.accountId,
+        accountId: authentication.accountId,
         purpose: input.purpose,
         at: input.now,
       })
@@ -92,6 +108,7 @@ export class SystemAuditDisclosureReadAdapter {
       return Object.freeze({
         value,
         assertions: Object.freeze([
+          ...actorAssertions,
           this.c.env.DB.prepare(`SELECT CASE WHEN EXISTS (SELECT 1 FROM (${authorization}) actor WHERE actor.snapshot = ?5)
           THEN 1 ELSE json_extract('{}', 'system_audit_read_authorization_changed') END AS ok`).bind(
             ...args,

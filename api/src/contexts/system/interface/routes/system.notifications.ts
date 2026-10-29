@@ -125,7 +125,7 @@ export const POST = systemFactory.createHandlers(
     const publicationAuthorization = await new SystemNotificationPublicationAuthorizationAdapter({
       env: { DB: context.env.DB },
       var: { now: context.var.now },
-    }).prepare(authentication, context.var.systemAccessToken?.sid ?? null)
+    }).prepare(authentication)
     if (publicationAuthorization instanceof Error) throw new SystemNotificationUnavailableError()
     if (publicationAuthorization === null) throw new SystemForbiddenError()
     const body = context.req.valid("json")

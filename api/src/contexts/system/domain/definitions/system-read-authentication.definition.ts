@@ -8,4 +8,5 @@ export type SystemReadAuthentication = Readonly<{
   expiresAtMs: number
   machineCredentialId: string | null
   identityBindingId: string | null
+  sessionFamilyId: string | null
 }>

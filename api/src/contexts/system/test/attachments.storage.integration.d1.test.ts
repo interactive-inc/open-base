@@ -615,6 +615,7 @@ test("encrypted original is verified before atomic finalization and failed sourc
         expiresAtMs: now.getTime() + 3600000,
         machineCredentialId: null,
         identityBindingId: null,
+        sessionFamilyId: null,
       },
       at: now,
     })

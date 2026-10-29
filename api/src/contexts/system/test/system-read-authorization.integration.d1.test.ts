@@ -6,11 +6,95 @@ import { createSystemAttachmentTestDatabase } from "@system/test/create-system-a
 import { PrepareSystemReadAuthorizationAdapter } from "@system/infrastructure/adapters/iam/prepare-system-read-authorization.adapter"
 import type { SystemReadAuthentication } from "@system/domain/definitions/system-read-authentication.definition"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
+import { drizzle } from "drizzle-orm/d1"
+import {
+  systemAttachments,
+  type SystemAttachmentRow,
+} from "@system/infrastructure/schema/system-attachment"
+import { PrepareAttachmentReadGuardAdapter } from "@system/infrastructure/adapters/attachments/prepare-attachment-read-guard.adapter"
 
 // ローカルD1のtemplate作成とDBごとの往復を含むため、既定の5秒を超えることがある。
 setDefaultTimeout(30_000)
 
 const at = new Date("2035-01-01T00:00:00Z")
+
+test("session family is checked both before preparation and after logout", async () => {
+  const f = await fixture()
+  const sessionFamilyId = crypto.randomUUID()
+  await f.db
+    .prepare(`INSERT INTO system_sessions (id,account_id,family_id,token_hash,token_version,created_at,expires_at)
+    VALUES (?1,?2,?3,?4,0,?5,?6)`)
+    .bind(
+      crypto.randomUUID(),
+      f.authentication.accountId,
+      sessionFamilyId,
+      "a".repeat(64),
+      at.getTime() - 1000,
+      at.getTime() + 60000,
+    )
+    .run()
+  const authentication = { ...f.authentication, sessionFamilyId }
+  const prepared = await f.adapter.prepare(authentication, at)
+  if (prepared === null || prepared instanceof Error) throw new Error("authorization missing")
+  const assertions = prepared.assertions(at)
+  if (assertions instanceof Error) throw assertions
+  expect((await f.db.batch([...assertions])).every((row) => row.success)).toBe(true)
+  await f.db
+    .prepare("UPDATE system_sessions SET revoked_at=?2 WHERE family_id=?1")
+    .bind(sessionFamilyId, at.getTime())
+    .run()
+  expect(await f.db.batch([...assertions]).catch((error: unknown) => error)).toBeInstanceOf(Error)
+  const rejected = await f.adapter.prepare(authentication, at)
+  expect(rejected === null || rejected instanceof Error).toBe(true)
+})
+
+test("attachment disclosure guard rejects logout without changing attachment metadata", async () => {
+  const f = await fixture()
+  const sessionFamilyId = crypto.randomUUID()
+  await f.db
+    .prepare(`INSERT INTO system_sessions (id,account_id,family_id,token_hash,token_version,created_at,expires_at)
+    VALUES (?1,?2,?3,?4,0,?5,?6)`)
+    .bind(
+      crypto.randomUUID(),
+      f.authentication.accountId,
+      sessionFamilyId,
+      "a".repeat(64),
+      at.getTime() - 1000,
+      at.getTime() + 60000,
+    )
+    .run()
+  const attachment: SystemAttachmentRow = {
+    id: crypto.randomUUID(),
+    ownerAccountId: f.authentication.accountId,
+    objectKey: "att/example",
+    status: "pending",
+    contentType: "application/pdf",
+    byteSize: 1,
+    fileName: "example.pdf",
+    plaintextSha256: "a".repeat(64),
+    wrappedDek: "example-wrapped-key",
+    wrappedDekIv: "example-iv",
+    contentIv: "example-content-iv",
+    kekVersion: 1,
+    createdAt: new Date(at.getTime() - 1000),
+    linkedAt: null,
+    erasedAt: null,
+  }
+  await drizzle(f.db).insert(systemAttachments).values(attachment)
+  const assertions = new PrepareAttachmentReadGuardAdapter({ env: { DB: f.db } }).prepare({
+    authentication: { ...f.authentication, sessionFamilyId },
+    attachment,
+    at,
+  })
+  expect((await f.db.batch([...assertions])).every((row) => row.success)).toBe(true)
+  await f.db
+    .prepare("UPDATE system_sessions SET revoked_at=?2 WHERE family_id=?1")
+    .bind(sessionFamilyId, at.getTime())
+    .run()
+  const failure = await f.db.batch([...assertions]).catch((error: unknown) => error)
+  expect(failure).toBeInstanceOf(Error)
+  expect(PrepareAttachmentReadGuardAdapter.rejection(failure)).toBe("actor")
+})
 
 async function fixture(kind: "human" | "agent" | "service" | "connector" | "legacy" = "human") {
   const db = await createSystemAttachmentTestDatabase()
@@ -45,6 +129,7 @@ async function fixture(kind: "human" | "agent" | "service" | "connector" | "lega
     expiresAtMs: at.getTime() + 60000,
     machineCredentialId: machine ? "191cfb61-8651-48e7-ba07-a1d05b732365" : null,
     identityBindingId: null,
+    sessionFamilyId: null,
   }
   const adapter = new PrepareSystemReadAuthorizationAdapter({ env: { DB: db } })
   const prepare = () => adapter.prepare(authentication, at)

@@ -1,6 +1,7 @@
 import type { SystemD1Context } from "@system/configuration/system-context"
 import type { SystemReadAuthentication } from "@system/domain/definitions/system-read-authentication.definition"
 import type { SystemAttachmentRow } from "@system/infrastructure/schema/system-attachment"
+import { SystemSessionFamilyGuardAdapter } from "@system/infrastructure/adapters/auth/system-session-family-guard.adapter"
 
 type Context = SystemD1Context
 
@@ -21,6 +22,11 @@ export class PrepareAttachmentReadGuardAdapter {
     const authentication = input.authentication
 
     return [
+      ...new SystemSessionFamilyGuardAdapter(this.c).prepare({
+        authentication,
+        at: input.at,
+        rejection: "attachment_read_actor_changed",
+      }),
       this.c.env.DB.prepare(`SELECT CASE WHEN EXISTS (
         WITH evaluation AS (SELECT max(?5, CAST((julianday('now')-2440587.5)*86400000 AS INTEGER)) AS at)
         SELECT 1 FROM system_accounts account

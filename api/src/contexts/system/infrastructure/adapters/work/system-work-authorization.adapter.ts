@@ -8,6 +8,7 @@ import {
 } from "@system/domain/schemas/work/system-work-item.schema"
 import { SystemWorkItemError } from "@system/domain/errors"
 import { SystemPrincipalSecretService } from "@system/lib/auth/system-principal-secret-service"
+import { SystemSessionFamilyGuardAdapter } from "@system/infrastructure/adapters/auth/system-session-family-guard.adapter"
 
 type Context = SystemD1Context &
   SystemClockContext &
@@ -99,9 +100,17 @@ export class SystemWorkAuthorizationAdapter {
     }
     if (!validTime()) return new SystemWorkItemError("forbidden")
     try {
-      const snapshot = await this.c.env.DB.prepare(authorized)
-        .bind(...parameters(this.c.var.now()))
-        .first<Snapshot>()
+      const family = new SystemSessionFamilyGuardAdapter(this.c)
+      const prepared = await this.c.env.DB.batch<Snapshot>([
+        this.c.env.DB.prepare(authorized).bind(...parameters(this.c.var.now())),
+        ...family.prepare({
+          authentication: this.c.authentication,
+          at: this.c.var.now(),
+          rejection: "work_item_authorization_changed",
+        }),
+      ])
+      if (prepared.some((result) => !result.success)) return new SystemWorkItemError("unavailable")
+      const snapshot = prepared.at(0)?.results.at(0) ?? null
       if (snapshot === null) return new SystemWorkItemError("forbidden")
       const actor = systemWorkActorSchema.safeParse({
         accountId: this.c.authentication.accountId,
@@ -122,6 +131,11 @@ export class SystemWorkAuthorizationAdapter {
         assertions: () => {
           if (!validTime()) return new SystemWorkItemError("forbidden")
           return [
+            ...family.prepare({
+              authentication: this.c.authentication,
+              at: this.c.var.now(),
+              rejection: "work_item_authorization_changed",
+            }),
             this.c.env.DB.prepare(`SELECT CASE WHEN EXISTS (SELECT 1 FROM (${authorized}) current
             WHERE current.principal_id=?10 AND current.kind=?11 AND current.step_up_id IS ?12
               AND current.is_admin=?13 AND current.proof=?14)

@@ -117,6 +117,7 @@ export async function createSystemWorkTestFixture() {
         expiresAtMs: claims(account).exp * 1000,
         machineCredentialId: claims(account).machineCredentialId ?? null,
         identityBindingId,
+        sessionFamilyId: null,
       },
     })
   }

@@ -5,7 +5,7 @@ import type {
 import { SystemAuditDisclosureReadAdapter } from "@system/infrastructure/adapters/audit/system-audit-disclosure-read.adapter"
 import { SystemAuditEventEntity } from "@system/domain/entities/system-audit-event.entity"
 import { SystemAuditEventRepository } from "@system/infrastructure/repositories/audit/system-audit-event.repository"
-import { SystemAuditDisclosureHttpError } from "@system/interface/errors"
+import { SystemAuditDisclosureHttpError, SystemInvalidSessionError } from "@system/interface/errors"
 
 /** HTTPの読取目的と現在の資格を開示条件へ渡し、拒否も監査する。 */
 export async function prepareSystemAuditDisclosure(
@@ -18,9 +18,15 @@ export async function prepareSystemAuditDisclosure(
     targetId: string | null
   }>,
 ) {
+  const authentication = context.var.bearerReadAuthentication
+  if (
+    authentication === undefined ||
+    authentication.accountId !== context.var.userId ||
+    authentication.tokenVersion !== context.var.accountTokenVersion
+  )
+    throw new SystemInvalidSessionError()
   const proof = await new SystemAuditDisclosureReadAdapter(context).prepare({
-    accountId: context.var.userId,
-    tokenVersion: context.var.accountTokenVersion,
+    authentication,
     permission: input.permission,
     purpose: input.purpose,
     now: input.now,

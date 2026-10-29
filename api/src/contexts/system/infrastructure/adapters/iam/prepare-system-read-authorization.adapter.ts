@@ -2,6 +2,7 @@ import type { SystemD1Context } from "@system/configuration/system-context"
 import type { SystemReadAuthentication } from "@system/domain/definitions/system-read-authentication.definition"
 import { z } from "zod"
 import { SystemD1AuthorizationAdapter } from "@system/infrastructure/adapters/iam/system-authorization.adapter"
+import { SystemSessionFamilyGuardAdapter } from "@system/infrastructure/adapters/auth/system-session-family-guard.adapter"
 
 type Context = SystemD1Context
 
@@ -76,9 +77,11 @@ export class PrepareSystemReadAuthorizationAdapter {
     try {
       // 発行元の照合と付与の読取を同じ batch で読み、往復を 1 回にする。
       const authorization = new SystemD1AuthorizationAdapter(this.c)
+      const family = new SystemSessionFamilyGuardAdapter(this.c)
       const [current, grants] = await this.c.env.DB.batch<Record<string, unknown>>([
         this.c.env.DB.prepare(authorizationSql).bind(...parameters(at)),
         authorization.statementForAccount(authentication.accountId),
+        ...family.prepare({ authentication, at, rejection: "system_read_authorization_changed" }),
       ])
       const row = current?.results[0]
       if (row === undefined) return null
@@ -108,6 +111,11 @@ export class PrepareSystemReadAuthorizationAdapter {
               snapshot.proof,
               snapshot.permissions,
             ),
+            ...family.prepare({
+              authentication,
+              at: now,
+              rejection: "system_read_authorization_changed",
+            }),
           ]
         },
       }

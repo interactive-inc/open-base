@@ -37,8 +37,7 @@ export class PreparePreservedRecordDossierAuthorizationAdapter {
     if (human instanceof Error) return human
     if (human === "forbidden") return new PreservedRecordDisclosureDeniedError()
     const audit = await new SystemAuditDisclosureReadAdapter(this.c).prepare({
-      accountId: authentication.accountId,
-      tokenVersion: authentication.tokenVersion,
+      authentication,
       permission: SystemFeaturePermission.AUDIT_EXPORT.key,
       purpose: this.c.purpose,
       now: at,

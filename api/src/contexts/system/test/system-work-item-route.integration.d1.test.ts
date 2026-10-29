@@ -1,5 +1,6 @@
 import { execSql } from "@system/test/local-d1/exec-sql.test-support"
-import { expect, setDefaultTimeout, test } from "bun:test"
+import { expect, setDefaultTimeout, spyOn, test } from "bun:test"
+import { SystemWorkItemEntity } from "@system/domain/entities/system-work-item.entity"
 import { drizzle } from "drizzle-orm/d1"
 import { createSystemWorkTestFixture } from "@system/test/create-system-work-test-fixture.test-support"
 import { systemFactory } from "@system/interface/request-environment/system-factory"
@@ -30,7 +31,7 @@ import { createSystemAttachmentTestKekEnvironment } from "@system/test/create-sy
 // ローカルD1のtemplate作成とDBごとの往復を含むため、既定の5秒を超えることがある。
 setDefaultTimeout(30_000)
 
-async function fixture() {
+async function fixture(sessionBound = false) {
   const f = await createSystemWorkTestFixture()
   const database = drizzle(f.db)
   const bucket = new SystemAttachmentTestBucket()
@@ -69,10 +70,28 @@ async function fixture() {
     "28689052-c77f-42e5-8f85-1b461d9f5514",
     "282b84eb-787d-4655-a88b-c072960fc970",
   ]) {
+    const sessionFamilyId =
+      sessionBound && account !== "caf47224-b967-45fd-85b2-8d67e7bdd8c9"
+        ? crypto.randomUUID()
+        : null
+    if (sessionFamilyId !== null)
+      await f.db
+        .prepare(`INSERT INTO system_sessions (id,account_id,family_id,token_hash,token_version,created_at,expires_at)
+        VALUES (?1,?2,?3,?4,0,?5,?6)`)
+        .bind(
+          crypto.randomUUID(),
+          account,
+          sessionFamilyId,
+          crypto.randomUUID().replaceAll("-", ""),
+          f.claims(account).issuedAtMs,
+          f.clock.now.getTime() + 604800000,
+        )
+        .run()
     const token = await new AccessTokenService({ profile: SYSTEM_ACCESS_TOKEN_PROFILE }).create(
       {
         accountId: account,
         tokenVersion: 0,
+        ...(sessionFamilyId === null ? {} : { sessionFamilyId }),
         ...(account === "caf47224-b967-45fd-85b2-8d67e7bdd8c9"
           ? { machineCredentialId: "087f472e-41a4-42b5-a66f-c625597754b0" }
           : {}),
@@ -186,6 +205,34 @@ test("APIは同時再送を一件に集約し、別の内容・別のactor・旧
   ).toEqual({
     total: 2,
   })
+})
+
+test("作業の復元中のlogoutで本文を返さない", async () => {
+  const f = await fixture(true)
+  const created = await f.create()
+  const entity = SystemWorkItemEntity.restore(created)
+  if (entity instanceof Error) throw entity
+  const original = entity.verifyResult.bind(entity)
+  const verification = spyOn(SystemWorkItemEntity.prototype, "verifyResult").mockImplementation(
+    async () => {
+      const verified = await original()
+      await f.db
+        .prepare("UPDATE system_sessions SET revoked_at=?2 WHERE account_id=?1")
+        .bind("45712a13-6a79-4dff-b2b0-d518052d6101", Date.now())
+        .run()
+      return verified
+    },
+  )
+  try {
+    const response = await f.request(`/system/work-items/${f.command.id}`, {
+      headers: f.headers.get("45712a13-6a79-4dff-b2b0-d518052d6101"),
+    })
+    expect(verification).toHaveBeenCalledTimes(1)
+    expect(response.status).not.toBe(200)
+    expect(await response.text()).not.toContain(f.command.title)
+  } finally {
+    verification.mockRestore()
+  }
 })
 
 test("AI成果を独立した人が再認証して確認し、完了後は変更できない", async () => {
