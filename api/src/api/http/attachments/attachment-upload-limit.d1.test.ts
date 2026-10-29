@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, setDefaultTimeout, test } from "bun:test"
+import { afterAll, beforeAll, expect, setDefaultTimeout, spyOn, test } from "bun:test"
 import { Miniflare } from "miniflare"
 import { createAppBase } from "@/api/app-base"
 import { ATTACHMENT_MAX_BYTE_SIZE } from "@system/domain/catalogs/attachments/attachment-content.catalog"
@@ -7,6 +7,8 @@ import { createSystemAttachmentTestDatabase } from "@system/test/create-system-a
 import { createSystemAttachmentTestKekEnvironment } from "@system/test/create-system-attachment-test-kek-environment.test-support"
 import { SystemAccessTokenIssuer } from "@system/lib/auth/system-access-token-issuer"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
+import { AttachmentObjectAdapter } from "@system/infrastructure/adapters/attachments/attachment-object.adapter"
+import { SystemAttachmentError } from "@system/domain/errors"
 
 setDefaultTimeout(30_000)
 const runtime = new Miniflare({
@@ -132,3 +134,104 @@ for (const endpoint of [
     expect(response.status).toBe(413)
   })
 }
+
+for (const malformed of [
+  { contentType: "multipart/form-data", body: "example-invalid-body" },
+  { contentType: "multipart/form-data; boundary=example", body: "--other\r\ninvalid\r\n" },
+]) {
+  test(`不正multipartは内部エラーにせず400で拒否する: ${malformed.contentType}`, async () => {
+    const response = await app.request(
+      "https://api.example.com/system/attachments",
+      {
+        method: "POST",
+        body: malformed.body,
+        headers: {
+          authorization: `Bearer ${fixture.token}`,
+          "content-type": malformed.contentType,
+        },
+      },
+      environment(),
+    )
+    expect(response.status).toBe(400)
+    const body = await response.json()
+    expect(body).toMatchObject({ code: "attachment_body_invalid" })
+    expect(JSON.stringify(body)).not.toContain(malformed.body)
+  })
+}
+
+test("添付bodyの読取失敗は内部エラーにせず400で拒否する", async () => {
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      controller.error(new Error("example-private-body-failure"))
+    },
+  })
+  const response = await app.request(
+    "https://api.example.com/system/attachments",
+    {
+      method: "POST",
+      body,
+      headers: {
+        authorization: `Bearer ${fixture.token}`,
+        "content-type": "multipart/form-data; boundary=example",
+      },
+    },
+    environment(),
+  )
+  expect(response.status).toBe(400)
+  const rejected = await response.json()
+  expect(rejected).toMatchObject({ code: "attachment_body_invalid" })
+  expect(JSON.stringify(rejected)).not.toContain("example-private-body-failure")
+})
+
+test("Content-Length経路の本文読取失敗も400で拒否する", async () => {
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      controller.error(new Error("example-private-body-failure"))
+    },
+  })
+  const response = await app.request(
+    "https://api.example.com/system/attachments",
+    {
+      method: "POST",
+      body,
+      headers: {
+        authorization: `Bearer ${fixture.token}`,
+        "content-type": "multipart/form-data; boundary=example",
+        "content-length": "100",
+      },
+    },
+    environment(),
+  )
+  expect(response.status).toBe(400)
+  expect(await response.json()).toMatchObject({ code: "attachment_body_invalid" })
+})
+
+test("保管設定の不足は入力エラーへ変換せず503を維持する", async () => {
+  const body = new FormData()
+  body.set("file", new File(["example-content"], "example.pdf", { type: "application/pdf" }))
+  const response = await app.request(
+    "https://api.example.com/system/attachments",
+    {
+      method: "POST",
+      body,
+      headers: { authorization: `Bearer ${fixture.token}` },
+    },
+    { ...environment(), ATTACHMENTS: undefined },
+  )
+  expect(response.status).toBe(503)
+  expect(await response.json()).toMatchObject({ code: "attachment_storage_unconfigured" })
+})
+
+test("保管処理の障害は入力エラーへ変換せず500を維持する", async () => {
+  const unavailable = spyOn(AttachmentObjectAdapter.prototype, "put").mockResolvedValue(
+    new SystemAttachmentError("unexpected", "attachment_store_failed", "example-storage-failure"),
+  )
+  try {
+    const response = await upload(100)
+    expect(response.status).toBe(500)
+    expect(await response.json()).toMatchObject({ code: "attachment_store_failed" })
+    expect(unavailable).toHaveBeenCalledTimes(1)
+  } finally {
+    unavailable.mockRestore()
+  }
+})

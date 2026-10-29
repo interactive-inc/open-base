@@ -17,7 +17,12 @@ export const POST = systemFactory.createHandlers(
   authenticateSystemAccessToken,
   limitSystemAttachmentUploadBody,
   async (context) => {
-    const form = await context.req.parseBody()
+    const form = await context.req.parseBody().catch(() => {
+      throw new SystemAttachmentValidationError({
+        code: "attachment_body_invalid",
+        detail: "添付の要求bodyを解析できません",
+      })
+    })
 
     const file = form.file
 
