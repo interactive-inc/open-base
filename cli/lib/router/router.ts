@@ -1,3 +1,4 @@
+import { UsageError } from "@/lib/errors"
 import { parseFlag } from "@/lib/router/parse-flag"
 
 /**
@@ -39,6 +40,8 @@ export function toRequest(args: string[]) {
       }
       continue
     }
+    if (arg === "" || arg === "." || arg === "..")
+      throw new UsageError("空文字・単独の . と .. は位置引数に指定できません")
     segments.push(encodeURIComponent(arg))
     i++
   }

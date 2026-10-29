@@ -69,3 +69,35 @@ describe("toRequest", () => {
     }
   })
 })
+
+test("dot segmentと空文字は位置に関係なくURL構築前に拒否する", () => {
+  for (const value of ["", ".", ".."]) {
+    for (const args of [[value], ["notifications", value], ["notifications", "show", value]]) {
+      expect(() => toRequest(args)).toThrow(UsageError)
+    }
+  }
+})
+
+test("flagのdot値と空文字はbodyに保持する", () => {
+  expect(toRequest(["example", "--data", ".", "--name=..", "--reason="]).body).toEqual({
+    data: ".",
+    name: "..",
+    reason: "",
+  })
+})
+
+test("dotを含む通常の識別子とencoded文字列は一つのsegmentとして保持する", () => {
+  for (const value of [
+    "example.delivery",
+    "...",
+    "../example",
+    "%2e%2e",
+    "研究/開発?#%",
+    "back\\slash",
+  ]) {
+    const request = toRequest(["notifications", "show", value])
+    expect(new URL(request.url).pathname).toBe("/notifications/show/" + encodeURIComponent(value))
+    expect(new URL(request.url).search).toBe("")
+    expect(new URL(request.url).hash).toBe("")
+  }
+})
