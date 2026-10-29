@@ -100,16 +100,37 @@ export class PrepareSystemReadAuthorizationAdapter {
         return null
       return {
         permissionKeys: keys,
-        assertions: (now: Date): ReadonlyArray<D1PreparedStatement> | Error => {
+        assertions: (
+          now: Date,
+          principalRename?: Readonly<{
+            principalId: string
+            revision: number
+            updatedAtMs: number
+          }>,
+        ): ReadonlyArray<D1PreparedStatement> | Error => {
           if (!Number.isSafeInteger(now.getTime()) || now.getTime() < at.getTime())
             return new Error("read authorization time changed")
+          if (
+            principalRename !== undefined &&
+            (!Number.isSafeInteger(principalRename.revision) ||
+              principalRename.revision < 1 ||
+              !Number.isSafeInteger(principalRename.updatedAtMs) ||
+              principalRename.updatedAtMs < 0)
+          )
+            return new Error("principal rename transition is invalid")
           return [
             this.c.env.DB.prepare(`SELECT CASE WHEN EXISTS (
-            SELECT 1 FROM (${authorizationSql}) current WHERE current.proof = ?8 AND current.permissions = ?9
+            SELECT 1 FROM (${authorizationSql}) current WHERE
+              (current.proof = ?8 OR (?10 IS NOT NULL AND json_extract(?8,'$[1]')=?10
+                AND current.proof=json_set(?8,'$[3]',CAST(?11 AS INTEGER),'$[5]',CAST(?12 AS INTEGER))))
+              AND current.permissions = ?9
           ) THEN 1 ELSE json_extract('{}','system_read_authorization_changed') END`).bind(
               ...parameters(now),
               snapshot.proof,
               snapshot.permissions,
+              principalRename?.principalId ?? null,
+              principalRename?.revision ?? null,
+              principalRename?.updatedAtMs ?? null,
             ),
             ...family.prepare({
               authentication,

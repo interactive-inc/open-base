@@ -1,3 +1,5 @@
+import { prepareSystemIamWriteAuthorization } from "@system/interface/authorization/prepare-system-iam-write-authorization"
+import { PrepareSystemReadAuthorizationAdapter } from "@system/infrastructure/adapters/iam/prepare-system-read-authorization.adapter"
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
 import { SystemAuditEventEntity } from "@system/domain/entities/system-audit-event.entity"
 import { StableSystemAuditJsonValue } from "@system/domain/values/audit/stable-system-audit-json.value"
@@ -58,6 +60,7 @@ export const PATCH = systemFactory.createHandlers(
     if (!authorizeSystemOperation(context.var.permissions, "iam:write", now)) {
       throw new SystemForbiddenError()
     }
+
     const body = context.req.valid("json")
     const repository = new SystemPrincipalRepository({ env: { DB: context.env.DB } })
     const current = await repository.find({ principalId: context.req.valid("param").principalId })
@@ -66,6 +69,18 @@ export const PATCH = systemFactory.createHandlers(
     if (current.revision !== body.expected_revision) throw new SystemPrincipalConflictError()
     const changed = current.withName(body.name, now)
     if (changed instanceof Error) throw new SystemPrincipalInvalidError(changed)
+    const assertions = await prepareSystemIamWriteAuthorization(context, {
+      now,
+      stepUpToken: context.req.header("x-system-step-up") ?? "",
+      principalRename: {
+        principalId: changed.id,
+        revision: changed.revision,
+        updatedAtMs: changed.updatedAt.getTime(),
+      },
+    })
+    if (assertions === "forbidden") throw new SystemForbiddenError()
+    if (assertions instanceof Error) throw new SystemPrincipalUnavailableError(assertions)
+
     const before = StableSystemAuditJsonValue.create(systemPrincipalResponse(current))
     const after = StableSystemAuditJsonValue.create(systemPrincipalResponse(changed))
     if (before === null || after === null || before instanceof Error || after instanceof Error) {
@@ -87,12 +102,13 @@ export const PATCH = systemFactory.createHandlers(
       occurredAt: now,
     })
     if (event instanceof Error) throw new SystemPrincipalUnavailableError(event)
-    const systemContext = { env: { DB: context.env.DB } }
+    const systemContext = { env: { DB: context.env.DB }, assertions }
     const update = await new SystemPrincipalRepository(systemContext).update(
       changed,
       body.expected_revision,
       new SystemAuditEventRepository(systemContext).prepareAppend(event),
     )
+    if (PrepareSystemReadAuthorizationAdapter.isRejected(update)) throw new SystemForbiddenError()
     if (update instanceof Error) throw new SystemPrincipalUnavailableError(update)
     if (update === "not_found") throw new SystemPrincipalNotFoundError()
     if (update === "conflict") throw new SystemPrincipalConflictError()

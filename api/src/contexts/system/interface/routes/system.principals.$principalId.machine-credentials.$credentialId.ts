@@ -1,3 +1,5 @@
+import { prepareSystemIamWriteAuthorization } from "@system/interface/authorization/prepare-system-iam-write-authorization"
+import { PrepareSystemReadAuthorizationAdapter } from "@system/infrastructure/adapters/iam/prepare-system-read-authorization.adapter"
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
 import { SystemAuditEventEntity } from "@system/domain/entities/system-audit-event.entity"
 import { StableSystemAuditJsonValue } from "@system/domain/values/audit/stable-system-audit-json.value"
@@ -33,6 +35,13 @@ export const DELETE = systemFactory.createHandlers(
     if (!authorizeSystemOperation(context.var.permissions, "iam:write", now)) {
       throw new SystemForbiddenError()
     }
+    const assertions = await prepareSystemIamWriteAuthorization(context, {
+      now,
+      stepUpToken: context.req.header("x-system-step-up") ?? "",
+    })
+    if (assertions === "forbidden") throw new SystemForbiddenError()
+    if (assertions instanceof Error) throw new SystemPrincipalUnavailableError(assertions)
+
     const identifiers = context.req.valid("param")
     const metadata = StableSystemAuditJsonValue.create({ status: "revoked" })
     if (metadata === null || metadata instanceof Error) {
@@ -52,13 +61,14 @@ export const DELETE = systemFactory.createHandlers(
       occurredAt: now,
     })
     if (event instanceof Error) throw new SystemPrincipalUnavailableError(event)
-    const systemContext = { env: { DB: context.env.DB } }
+    const systemContext = { env: { DB: context.env.DB }, assertions }
     const result = await new SystemMachineCredentialRepository(systemContext).revoke(
       identifiers.principalId,
       identifiers.credentialId,
       now,
       new SystemAuditEventRepository(systemContext).prepareAppend(event),
     )
+    if (PrepareSystemReadAuthorizationAdapter.isRejected(result)) throw new SystemForbiddenError()
     if (result instanceof Error) throw new SystemPrincipalUnavailableError(result)
     if (result === "not_found") throw new SystemPrincipalNotFoundError()
 

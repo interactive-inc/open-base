@@ -12,7 +12,7 @@ type PrincipalRow = Readonly<{
   updated_at: number
 }>
 
-type Context = SystemD1Context
+type Context = SystemD1Context & Readonly<{ assertions?: ReadonlyArray<D1PreparedStatement> }>
 
 export type FindSystemPrincipalProps =
   | Readonly<{ principalId: string; accountId?: never }>
@@ -84,6 +84,7 @@ export class SystemPrincipalRepository {
   ): Promise<"created" | "conflict" | Error> {
     try {
       const statements = [
+        ...(this.c.assertions ?? []),
         this.c.env.DB.prepare(
           `INSERT INTO system_accounts (id, status, token_version, created_at, updated_at)
            VALUES (?1, 'active', 0, ?2, ?2)`,
@@ -110,6 +111,7 @@ export class SystemPrincipalRepository {
           "SELECT CASE WHEN changes() = 1 THEN 1 ELSE abs(-9223372036854775808) END AS ok",
         ),
         ...auditStatements,
+        ...(this.c.assertions ?? []),
       ]
       const results = await this.c.env.DB.batch(statements)
       if (results.length !== statements.length || results.some((result) => !result.success)) {
@@ -136,6 +138,7 @@ export class SystemPrincipalRepository {
 
     try {
       const statements = [
+        ...(this.c.assertions ?? []),
         this.c.env.DB.prepare(
           `UPDATE system_principals
            SET name = ?2, revision = ?3, updated_at = ?4
@@ -151,6 +154,7 @@ export class SystemPrincipalRepository {
           "SELECT CASE WHEN changes() = 1 THEN 1 ELSE abs(-9223372036854775808) END AS ok",
         ),
         ...auditStatements,
+        ...(this.c.assertions ?? []),
       ]
       const results = await this.c.env.DB.batch(statements)
       if (results.length !== statements.length || results.some((result) => !result.success)) {

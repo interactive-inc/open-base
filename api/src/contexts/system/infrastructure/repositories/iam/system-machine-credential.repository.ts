@@ -33,7 +33,7 @@ export type SystemMachineAuthentication =
     }>
   | Readonly<{ kind: "rejected" }>
 
-type Context = SystemD1Context
+type Context = SystemD1Context & Readonly<{ assertions?: ReadonlyArray<D1PreparedStatement> }>
 
 /** raw secretを保存せず、機械Principalのcredential lifecycleを原子的に保存する。 */
 export class SystemMachineCredentialRepository {
@@ -76,6 +76,7 @@ export class SystemMachineCredentialRepository {
   ): Promise<"created" | "conflict" | Error> {
     try {
       const statements = [
+        ...(this.c.assertions ?? []),
         this.c.env.DB.prepare(
           `INSERT INTO system_machine_credentials
              (id, principal_id, name, secret_hash, status, created_at, updated_at,
@@ -94,6 +95,7 @@ export class SystemMachineCredentialRepository {
           credential.revokedAt?.getTime() ?? null,
         ),
         ...auditStatements,
+        ...(this.c.assertions ?? []),
       ]
       const results = await this.c.env.DB.batch(statements)
       if (results.length !== statements.length || results.some((result) => !result.success)) {
@@ -219,9 +221,18 @@ export class SystemMachineCredentialRepository {
       if (credential instanceof Error) return credential
       const revoked = credential.revoke(now)
       if (revoked instanceof Error) return revoked
-      if (revoked === credential) return "unchanged"
+      if (revoked === credential) {
+        const assertions = this.c.assertions ?? []
+        if (assertions.length > 0) {
+          const checked = await this.c.env.DB.batch([...assertions])
+          if (checked.length !== assertions.length || checked.some((result) => !result.success))
+            return new Error("credential authorization failed")
+        }
+        return "unchanged"
+      }
 
       const statements = [
+        ...(this.c.assertions ?? []),
         this.c.env.DB.prepare(
           `UPDATE system_machine_credentials
            SET status = 'revoked', updated_at = ?2, revoked_at = ?2
@@ -231,6 +242,7 @@ export class SystemMachineCredentialRepository {
           "SELECT CASE WHEN changes() = 1 THEN 1 ELSE abs(-9223372036854775808) END AS ok",
         ),
         ...auditStatements,
+        ...(this.c.assertions ?? []),
       ]
       const results = await this.c.env.DB.batch(statements)
       if (results.length !== statements.length || results.some((result) => !result.success)) {

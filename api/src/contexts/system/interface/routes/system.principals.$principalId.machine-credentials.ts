@@ -1,3 +1,5 @@
+import { prepareSystemIamWriteAuthorization } from "@system/interface/authorization/prepare-system-iam-write-authorization"
+import { PrepareSystemReadAuthorizationAdapter } from "@system/infrastructure/adapters/iam/prepare-system-read-authorization.adapter"
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
 import { SystemAuditEventEntity } from "@system/domain/entities/system-audit-event.entity"
 import { SystemMachineCredentialEntity } from "@system/domain/entities/system-machine-credential.entity"
@@ -66,6 +68,13 @@ export const POST = systemFactory.createHandlers(
     if (!authorizeSystemOperation(context.var.permissions, "iam:write", now)) {
       throw new SystemForbiddenError()
     }
+    const assertions = await prepareSystemIamWriteAuthorization(context, {
+      now,
+      stepUpToken: context.req.header("x-system-step-up") ?? "",
+    })
+    if (assertions === "forbidden") throw new SystemForbiddenError()
+    if (assertions instanceof Error) throw new SystemPrincipalUnavailableError(assertions)
+
     const principalId = context.req.valid("param").principalId
     const principal = await new SystemPrincipalRepository({
       env: { DB: context.env.DB },
@@ -110,11 +119,12 @@ export const POST = systemFactory.createHandlers(
       occurredAt: now,
     })
     if (event instanceof Error) throw new SystemPrincipalUnavailableError(event)
-    const systemContext = { env: { DB: context.env.DB } }
+    const systemContext = { env: { DB: context.env.DB }, assertions }
     const creation = await new SystemMachineCredentialRepository(systemContext).create(
       credential,
       new SystemAuditEventRepository(systemContext).prepareAppend(event),
     )
+    if (PrepareSystemReadAuthorizationAdapter.isRejected(creation)) throw new SystemForbiddenError()
     if (creation instanceof Error) throw new SystemPrincipalUnavailableError(creation)
     if (creation === "conflict") throw new SystemPrincipalConflictError()
 
