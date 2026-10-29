@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod"
 import { entityIdSegment } from "@/lib/entity-id.ts"
+import { applicationDecisionTarget } from "@/lib/application-decision-target"
 import { toFoundationPath } from "@/lib/to-foundation-path"
 import { apiRequest } from "@/lib/api-client.ts"
 import { uploadAttachment } from "@/lib/upload-attachment.ts"
@@ -89,12 +90,13 @@ server.tool(
   "Approve an application request that is waiting for my approval.",
   {
     application_id: entityIdSegment.describe("The application request ID"),
-    comment: z.string().optional().describe("Optional approval comment"),
+    decision_target: applicationDecisionTarget,
+    comment: z.string().max(3_000).optional().describe("Optional approval comment"),
   },
   async (args) => {
     const data = await apiRequest(`/company/application-requests/${args.application_id}/approve`, {
       method: "POST",
-      json: { comment: args.comment ?? null },
+      json: { decision_target: args.decision_target, comment: args.comment ?? null },
     })
 
     return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] }
@@ -106,12 +108,13 @@ server.tool(
   "Reject an application request that is waiting for my approval. A comment explaining the reason is required.",
   {
     application_id: entityIdSegment.describe("The application request ID"),
-    comment: z.string().min(1).describe("Reason for rejection (required)"),
+    decision_target: applicationDecisionTarget,
+    comment: z.string().min(1).max(3_000).describe("Reason for rejection (required)"),
   },
   async (args) => {
     const data = await apiRequest(`/company/application-requests/${args.application_id}/reject`, {
       method: "POST",
-      json: { comment: args.comment },
+      json: { decision_target: args.decision_target, comment: args.comment },
     })
 
     return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] }
