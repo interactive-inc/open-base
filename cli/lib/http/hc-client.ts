@@ -10,7 +10,11 @@ import { rotateTokens } from "@/lib/http/rotate-tokens"
  * エントリを読み書きするため、--base-url 指定時に別エンドポイントのトークンを触らない。
  * 更新後のtokenをclient内で維持し、再試行は要求ごとに一回に制限する。
  */
-function toFetchOrThrow(baseUrl: string, initialToken: string | null): typeof fetch {
+function toFetchOrThrow(
+  baseUrl: string,
+  initialToken: string | null,
+  canRefreshSession = true,
+): typeof fetch {
   const authentication = { token: initialToken }
 
   const handleFetch = async (
@@ -33,7 +37,7 @@ function toFetchOrThrow(baseUrl: string, initialToken: string | null): typeof fe
       return responses.current
     }
 
-    if (responses.current.status === 401 && usesStoredAuthentication) {
+    if (responses.current.status === 401 && usesStoredAuthentication && canRefreshSession) {
       const refreshed = await new SettingsFile().refreshTokens(
         baseUrl,
         headers.get("Authorization")?.replace(/^Bearer /, "") ?? null,
@@ -55,8 +59,15 @@ function toFetchOrThrow(baseUrl: string, initialToken: string | null): typeof fe
   return Object.assign(handleFetch, { preconnect: fetch.preconnect })
 }
 
-export async function createClient(baseUrlOverride?: string | null) {
+export async function createClient(
+  baseUrlOverride?: string | null,
+  options: Readonly<{ authentication?: "stored-session" | "none" }> = {},
+) {
   const baseUrl = resolveBaseUrl(baseUrlOverride)
+
+  // 資格情報によるsession作成は、既存のsessionを読まず、401でもrotationしない。
+  if (options.authentication === "none")
+    return hc<AppType>(baseUrl, { fetch: toFetchOrThrow(baseUrl, null, false) })
 
   const tokens = await new SettingsFile().tokensFor(baseUrl)
 

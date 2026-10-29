@@ -34,7 +34,7 @@ export default factory.createHandlers(
 
     const baseUrl = resolveBaseUrl(query["base-url"])
 
-    const client = await createClient(baseUrl)
+    const client = await createClient(baseUrl, { authentication: "none" })
 
     // createClient の fetch ラッパーが 4xx/5xx を ApiError として throw するため、
     // ここに来た時点で response は必ず成功。手動の ok チェックは不要。
@@ -67,7 +67,7 @@ export default factory.createHandlers(
  */
 async function fetchName(baseUrl: string, accessToken: string): Promise<string> {
   try {
-    const client = await createClient(baseUrl)
+    const client = await createClient(baseUrl, { authentication: "none" })
 
     const response = await client.company["current-profile"].$get(
       {},

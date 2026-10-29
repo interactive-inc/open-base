@@ -57,7 +57,7 @@ export default factory.createHandlers(
       .safeParse(await readJsonObjectFile(input["company-data"]))
     if (!declaration.success) throw new InputError("確認済み会社JSONの形式が不正です")
     const baseUrl = resolveBaseUrl(input["base-url"])
-    const client = await createClient(baseUrl)
+    const client = await createClient(baseUrl, { authentication: "none" })
     try {
       await client.system.bootstrap.$post({
         json: { token, email: input.email, password: input.password },
