@@ -107,8 +107,13 @@ const systemAuthorizationMiddleware = factory.createMiddleware(async (c, next) =
 
 const globalBodyLimit = bodyLimit({ maxSize: 1_000_000 })
 
-const globalBodyLimitExceptAuditExport = factory.createMiddleware(async (c, next) => {
+const globalBodyLimitForDefaultRoutes = factory.createMiddleware(async (c, next) => {
   if (c.req.path === "/company/audit-event-exports") {
+    await next()
+    return
+  }
+
+  if (c.req.method === "POST" && c.req.path === "/system/attachments") {
     await next()
     return
   }
@@ -230,7 +235,7 @@ export function createAppBase() {
           exposeHeaders: ["X-Request-ID", "Content-Disposition"],
         }),
       )
-      .use("*", globalBodyLimitExceptAuditExport)
+      .use("*", globalBodyLimitForDefaultRoutes)
       .use("*", rateLimitMiddleware)
       // nosniff / HSTS / X-Frame-Options 等のセキュリティヘッダを付与する。
       // COOP/CORP は別オリジンの正規クライアント（web/cli）からの利用を阻害しうるため無効化する
