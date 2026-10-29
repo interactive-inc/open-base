@@ -66,6 +66,8 @@ MCPは標準入出力で起動します。`.mcp.json` の接続設定も使用�
 
 MCPの `foundation_request` では、`headers` に `x-company-organization-id`、`if-match`、`x-system-step-up` を指定できます。Companyの対象会社・更新する版・Systemの再認証tokenをAPIが要求する場合に渡してください。冪等性keyは既存の `idempotency_key` を使います。Bearerは保存済みの認証情報から設定します。
 
+`path` は `/system` または `/company` から始まるURI pathです。ID内の `/`、`?`、`#`、`%` はURI符号化してください。例えば `person:example` は `person%3Aexample` と指定でき、コロンやUnicodeのIDも扱えます。query parameterはpathへ連結せず `query` に指定します。
+
 ## 検証とDB
 
 ```sh

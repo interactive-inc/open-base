@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod"
 import { entityIdSegment } from "@/lib/entity-id.ts"
+import { toFoundationPath } from "@/lib/to-foundation-path"
 import { apiRequest } from "@/lib/api-client.ts"
 import { uploadAttachment } from "@/lib/upload-attachment.ts"
 
@@ -141,8 +142,18 @@ server.tool(
   {
     path: z
       .string()
-      .regex(/^\/(system|company)(?:\/[A-Za-z0-9._~-]+)*$/)
-      .refine((path) => !path.split("/").some((segment) => segment === "." || segment === "..")),
+      .transform((path, context) => {
+        const canonical = toFoundationPath(path)
+        if (canonical !== null) return canonical
+        context.addIssue({
+          code: "custom",
+          message: "path must contain valid URI segments within /system or /company",
+        })
+        return z.NEVER
+      })
+      .describe(
+        "Absolute API path under /system or /company. Percent-encode separators and reserved characters within IDs; pass query parameters separately.",
+      ),
     method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]).default("GET"),
     query: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
     body: z.record(z.string(), z.unknown()).optional(),
