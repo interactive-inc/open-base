@@ -1,3 +1,4 @@
+import { revisionFlag } from "@/lib/input/revision-flag"
 import { factory } from "@/factory"
 import { UsageError } from "@/lib/errors"
 import { createClient } from "@/lib/http/hc-client"
@@ -17,9 +18,9 @@ export default factory.createHandlers(
       "action-id": z.string().uuid().optional(),
       payload: z.string().optional(),
       reason: z.string().min(1).max(2000).optional(),
-      "company-revision": z.coerce.number().int().nonnegative().optional(),
-      "employee-revision": z.coerce.number().int().nonnegative().optional(),
-      "organization-revision": z.coerce.number().int().nonnegative().optional(),
+      "company-revision": revisionFlag.optional(),
+      "employee-revision": revisionFlag.optional(),
+      "organization-revision": revisionFlag.optional(),
       "idempotency-key": z.string().min(1).max(200).optional(),
     }),
   ),

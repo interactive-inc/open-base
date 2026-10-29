@@ -1,3 +1,4 @@
+import { revisionFlag } from "@/lib/input/revision-flag"
 import { encodePathParams } from "@base/http/encode-path-params"
 import { zValidator } from "@hono/zod-validator"
 import { z } from "zod"
@@ -20,8 +21,8 @@ export default factory.createHandlers(
         .string()
         .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/)
         .optional(),
-      "company-revision": z.coerce.number().int().nonnegative().optional(),
-      "person-revision": z.coerce.number().int().positive().optional(),
+      "company-revision": revisionFlag.optional(),
+      "person-revision": revisionFlag.pipe(z.number().positive()).optional(),
       "effective-on": z.string().date().optional(),
       "idempotency-key": z.string().uuid().optional(),
       reason: z.string().trim().min(1).max(1500).optional(),

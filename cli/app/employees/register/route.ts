@@ -1,3 +1,4 @@
+import { revisionFlag } from "@/lib/input/revision-flag"
 import { zValidator } from "@hono/zod-validator"
 import { z } from "zod"
 import { createClient } from "@/lib/http/hc-client"
@@ -15,7 +16,7 @@ export default factory.createHandlers(
     "json",
     z.object({
       help: z.string().optional(),
-      "company-revision": z.coerce.number().int().nonnegative().optional(),
+      "company-revision": revisionFlag.optional(),
       code: z.string().optional(),
       name: z.string().optional(),
       email: z.string().optional(),
