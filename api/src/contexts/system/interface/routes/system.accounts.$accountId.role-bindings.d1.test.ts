@@ -1,3 +1,5 @@
+import { PATCH as rolePATCH } from "@system/interface/routes/system.roles.$roleId"
+import { SystemD1AuthorizationAdapter } from "@system/infrastructure/adapters/iam/system-authorization.adapter"
 import { SystemRoleBindingRepository } from "@system/infrastructure/repositories/iam/system-role-binding.repository"
 import { z } from "zod"
 import { testAccountId } from "@system/test/system-test-id.test-support"
@@ -159,7 +161,7 @@ describe("System Role Binding HTTP", () => {
   })
 })
 
-async function bindingMutationFixture(shortStepUp = false) {
+async function bindingMutationFixture(shortStepUp = false, limitedActor = false) {
   const fixture = await SystemSessionTestContext.create()
   const at = new Date()
   const seedAt = new Date(at.getTime() - 600_000)
@@ -194,12 +196,30 @@ async function bindingMutationFixture(shortStepUp = false) {
                 ('af285551-000d-4320-8ea0-bbfbc6c96a81', 'system:admin'),
                 ('04635707-bd54-47ea-81d4-38426e3ce8a2', 'example:read')`)
     .run()
-  await fixture.database
-    .prepare(`INSERT INTO system_role_bindings
+  if (!limitedActor) {
+    await fixture.database
+      .prepare(`INSERT INTO system_role_bindings
            (id, account_id, role_id, resource_type, resource_id, created_at, revoked_at)
          VALUES ('f16b950f-c6db-4760-8994-95cc8065169d', ?1, 'af285551-000d-4320-8ea0-bbfbc6c96a81', NULL, NULL, ?2, NULL)`)
-    .bind(rootAccountId, seedAt.getTime())
-    .run()
+      .bind(rootAccountId, seedAt.getTime())
+      .run()
+  } else {
+    await fixture.database.batch([
+      fixture.database
+        .prepare(
+          "INSERT INTO system_iam_roles(id,key,kind,name,created_at,updated_at) VALUES ('9b0c38c9-d229-4da5-a7be-e695e31a9456','example:delegator','custom','Delegator',?1,?1)",
+        )
+        .bind(seedAt.getTime()),
+      fixture.database.prepare(
+        "INSERT INTO system_iam_role_permissions(role_id,permission_key) VALUES ('9b0c38c9-d229-4da5-a7be-e695e31a9456','iam:write'),('9b0c38c9-d229-4da5-a7be-e695e31a9456','example:read')",
+      ),
+      fixture.database
+        .prepare(
+          "INSERT INTO system_role_bindings(id,account_id,role_id,resource_type,resource_id,created_at) VALUES ('f16b950f-c6db-4760-8994-95cc8065169d',?1,'9b0c38c9-d229-4da5-a7be-e695e31a9456',NULL,NULL,?2)",
+        )
+        .bind(rootAccountId, seedAt.getTime()),
+    ])
+  }
 
   const applications = createSystemSessionApplications({
     context: fixture.context,
@@ -223,7 +243,11 @@ async function bindingMutationFixture(shortStepUp = false) {
     })
     .post("/system/accounts/:accountId/role-bindings", ...POST)
     .delete("/system/accounts/:accountId/role-bindings/:bindingId", ...DELETE)
-  const request = (method: string, id: string | null = null) =>
+  const request = (
+    method: string,
+    id: string | null = null,
+    resource: Readonly<{ type: string; id: string }> | null = null,
+  ) =>
     app.request(
       `/system/accounts/${targetAccountId}/role-bindings${id === null ? "" : `/${id}`}`,
       {
@@ -237,7 +261,7 @@ async function bindingMutationFixture(shortStepUp = false) {
           ? {
               body: JSON.stringify({
                 role_id: "04635707-bd54-47ea-81d4-38426e3ce8a2",
-                resource: null,
+                resource,
               }),
             }
           : {}),
@@ -344,3 +368,190 @@ for (const operation of ["create", "revoke"]) {
     expect(await f.snapshot()).toEqual(before)
   })
 }
+
+test("付与中にRoleへactor未保有のpermissionが追加されたらbindingを保存しない", async () => {
+  const f = await bindingMutationFixture(false, true)
+  const admin = zAccountId.parse(testAccountId("role-update-administrator"))
+  const at = new Date()
+  await f.database.batch([
+    f.database
+      .prepare(
+        "INSERT INTO system_accounts(id,status,token_version,created_at,updated_at) VALUES (?1,'active',0,?2,?2)",
+      )
+      .bind(admin, at.getTime()),
+    f.database
+      .prepare(
+        "INSERT INTO system_identity_bindings(id,account_id,provider,subject,created_at,activated_at) VALUES (?1,?2,'password','operator@example.com',?3,?3)",
+      )
+      .bind(crypto.randomUUID(), admin, at.getTime()),
+    f.database
+      .prepare(
+        "INSERT INTO system_role_bindings(id,account_id,role_id,resource_type,resource_id,created_at) VALUES (?1,?2,'af285551-000d-4320-8ea0-bbfbc6c96a81',NULL,NULL,?3)",
+      )
+      .bind(crypto.randomUUID(), admin, at.getTime()),
+  ])
+  const applications = createSystemSessionApplications({
+    context: { env: { DB: f.database } },
+    jwtSecret: "system-session-test-jwt-secret",
+    sessionTtlMilliseconds: 604_800_000,
+  })
+  if (applications instanceof Error) throw applications
+  const session = await applications.issue.execute({
+    accountId: admin,
+    tokenVersion: 0,
+    now: new Date(),
+    auditContext: { authorizationJson: null, metadataJson: null },
+  })
+  if (session instanceof Error || session.kind === "rejected")
+    throw new Error("administrator session issuance failed")
+  const stepUp = await seedSystemStepUpGrant({ database: f.database }, admin, at)
+  const adminApp = systemFactory
+    .createApp()
+    .use("*", async (c, next) => {
+      c.set("now", () => new Date())
+      await next()
+    })
+    .patch("/system/roles/:roleId", ...rolePATCH)
+  const actor = await new SystemD1AuthorizationAdapter({
+    env: { DB: f.database },
+  }).resolveForAccount({ accountId: rootAccountId, resource: null, at: new Date() })
+  if (actor instanceof Error || actor === null) throw new Error("actor authorization unavailable")
+  expect(actor.permissionKeys.has("iam:write")).toBe(true)
+  expect(actor.permissionKeys.has("example:read")).toBe(true)
+  expect(actor.permissionKeys.has("batch:view")).toBe(false)
+  expect(actor.permissionKeys.has("system:admin")).toBe(false)
+  const create = spyOn(SystemRoleBindingRepository.prototype, "create")
+  const original = create.getMockImplementation()
+  if (!original) throw new Error("missing original binding creation")
+  create.mockImplementation(async function (this: SystemRoleBindingRepository, ...args) {
+    const changed = await adminApp.request(
+      "/system/roles/04635707-bd54-47ea-81d4-38426e3ce8a2",
+      {
+        method: "PATCH",
+        headers: {
+          authorization: `Bearer ${session.accessToken}`,
+          "x-system-step-up": stepUp,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          name: "Updated reader",
+          description: null,
+          permission_keys: ["batch:view", "example:read"],
+        }),
+      },
+      { DB: f.database, JWT_SECRET: "system-session-test-jwt-secret" },
+    )
+    expect(changed.status).toBe(200)
+    return original.call(this, ...args)
+  })
+  try {
+    const response = await f.request("POST")
+    const target = await new SystemD1AuthorizationAdapter({
+      env: { DB: f.database },
+    }).resolveForAccount({ accountId: targetAccountId, resource: null, at: new Date() })
+    if (target instanceof Error || target === null)
+      throw new Error("target authorization unavailable")
+    const version = await f.database
+      .prepare("SELECT token_version FROM system_accounts WHERE id=?1")
+      .bind(targetAccountId)
+      .first<number>("token_version")
+    expect({
+      status: response.status,
+      unexpectedPermission: target.permissionKeys.has("batch:view"),
+      version,
+    }).toEqual({ status: 409, unexpectedPermission: false, version: 0 })
+  } finally {
+    create.mockRestore()
+  }
+})
+
+for (const operation of ["create", "revoke"]) {
+  test(`Role Binding ${operation} transaction中のpermission変更は対象認証版と成功監査も巻き戻す`, async () => {
+    const f = await bindingMutationFixture()
+    const binding =
+      operation === "revoke"
+        ? z.object({ id: z.string() }).parse(await (await f.request("POST")).json()).id
+        : null
+    const before = await f.snapshot()
+    const trigger = operation === "create" ? "INSERT" : "UPDATE OF revoked_at"
+    await f.database
+      .prepare(
+        `CREATE TRIGGER change_binding_role AFTER ${trigger} ON system_role_bindings BEGIN INSERT INTO system_iam_role_permissions(role_id,permission_key) VALUES ('04635707-bd54-47ea-81d4-38426e3ce8a2','batch:view'); END`,
+      )
+      .run()
+    expect((await f.request(operation === "create" ? "POST" : "DELETE", binding)).status).toBe(409)
+    expect(await f.snapshot()).toEqual(before)
+    expect(
+      await f.database
+        .prepare(
+          "SELECT count(*) AS count FROM system_iam_role_permissions WHERE role_id='04635707-bd54-47ea-81d4-38426e3ce8a2' AND permission_key='batch:view'",
+        )
+        .first<number>("count"),
+    ).toBe(0)
+  })
+}
+
+test("permissionが空のRoleも付与と失効を行える", async () => {
+  const f = await bindingMutationFixture()
+  await f.database
+    .prepare(
+      "DELETE FROM system_iam_role_permissions WHERE role_id='04635707-bd54-47ea-81d4-38426e3ce8a2'",
+    )
+    .run()
+  const created = await f.request("POST")
+  expect(created.status).toBe(201)
+  const binding = z.object({ id: z.string() }).parse(await created.json()).id
+  const target = await new SystemD1AuthorizationAdapter({
+    env: { DB: f.database },
+  }).resolveForAccount({ accountId: targetAccountId, resource: null, at: new Date() })
+  if (target instanceof Error || target === null)
+    throw new Error("target authorization unavailable")
+  expect(target.permissionKeys.size).toBe(0)
+  expect((await f.request("DELETE", binding)).status).toBe(204)
+})
+
+test("範囲付きRoleも付与と失効を行える", async () => {
+  const f = await bindingMutationFixture()
+  await f.database
+    .prepare(
+      "UPDATE system_iam_roles SET resource_type='system:connector' WHERE id='04635707-bd54-47ea-81d4-38426e3ce8a2'",
+    )
+    .run()
+  const resource = { type: "system:connector", id: "example-connector" }
+  const created = await f.request("POST", null, resource)
+  expect(created.status).toBe(201)
+  const binding = z.object({ id: z.string() }).parse(await created.json()).id
+  const stored = await f.database
+    .prepare(
+      "SELECT resource_type AS type, resource_id AS id FROM system_role_bindings WHERE id=?1",
+    )
+    .bind(binding)
+    .first()
+  expect(stored).toEqual(resource)
+  expect((await f.request("DELETE", binding)).status).toBe(204)
+})
+
+test("付与対象Roleが保存前に消失したら競合として拒否する", async () => {
+  const f = await bindingMutationFixture()
+  const before = await f.snapshot()
+  const create = spyOn(SystemRoleBindingRepository.prototype, "create")
+  const original = create.getMockImplementation()
+  if (!original) throw new Error("missing original binding creation")
+  create.mockImplementation(async function (this: SystemRoleBindingRepository, ...args) {
+    await f.database.batch([
+      f.database.prepare(
+        "DELETE FROM system_iam_role_permissions WHERE role_id='04635707-bd54-47ea-81d4-38426e3ce8a2'",
+      ),
+      f.database.prepare(
+        "DELETE FROM system_iam_roles WHERE id='04635707-bd54-47ea-81d4-38426e3ce8a2'",
+      ),
+    ])
+    return original.call(this, ...args)
+  })
+  try {
+    expect((await f.request("POST")).status).toBe(409)
+    expect(await f.snapshot()).toEqual(before)
+  } finally {
+    create.mockRestore()
+  }
+})

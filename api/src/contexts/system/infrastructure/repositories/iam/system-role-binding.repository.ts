@@ -85,6 +85,7 @@ export class SystemRoleBindingRepository {
     try {
       const statements = [
         ...(this.c.assertions ?? []),
+        this.prepareRoleSnapshotGuard(role),
         this.prepareActorRoleGuard(actorAccountId, role.permissionKeys),
         this.c.env.DB.prepare(
           `INSERT INTO system_role_bindings
@@ -112,6 +113,7 @@ export class SystemRoleBindingRepository {
           "SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('', '$') END AS ok",
         ),
         ...auditStatements,
+        this.prepareRoleSnapshotGuard(role),
         ...(this.c.assertions ?? []),
       ]
       const executions = await this.c.env.DB.batch(statements)
@@ -121,6 +123,7 @@ export class SystemRoleBindingRepository {
 
       return "created"
     } catch (caught) {
+      if (this.roleChanged(caught)) return "conflict"
       if (caught instanceof Error && caught.message.includes("integer overflow")) {
         return "forbidden"
       }
@@ -151,6 +154,7 @@ export class SystemRoleBindingRepository {
     try {
       const statements = [
         ...(this.c.assertions ?? []),
+        this.prepareRoleSnapshotGuard(role),
         this.prepareActorRoleGuard(actorAccountId, role.permissionKeys),
         this.c.env.DB.prepare(
           `UPDATE system_role_bindings
@@ -171,6 +175,7 @@ export class SystemRoleBindingRepository {
         ),
         this.prepareLastRootGuard(),
         ...auditStatements,
+        this.prepareRoleSnapshotGuard(role),
         ...(this.c.assertions ?? []),
       ]
       const executions = await this.c.env.DB.batch(statements)
@@ -180,6 +185,7 @@ export class SystemRoleBindingRepository {
 
       return "revoked"
     } catch (caught) {
+      if (this.roleChanged(caught)) return "conflict"
       if (caught instanceof Error && caught.message.includes("integer overflow")) {
         return "forbidden"
       }
@@ -197,6 +203,39 @@ export class SystemRoleBindingRepository {
 
       return caught instanceof Error ? caught : new Error("failed to revoke System role binding")
     }
+  }
+
+  /** 判断したRoleの版とpermission集合を同じ保存transactionの前後で固定する。 */
+  private prepareRoleSnapshotGuard(role: IamRoleEntity): D1PreparedStatement {
+    return this.c.env.DB.prepare(`SELECT CASE WHEN EXISTS (
+      SELECT 1 FROM system_iam_roles role WHERE role.id=?1 AND role.key=?2 AND role.kind=?3
+        AND role.resource_type IS ?4 AND role.created_at=?5 AND role.updated_at=?6
+        AND (SELECT json_group_array(permission_key) FROM (
+          SELECT permission_key FROM system_iam_role_permissions WHERE role_id=role.id ORDER BY permission_key
+        ))=?7
+    ) THEN 1 ELSE json_extract('{}','system_role_binding_role_changed') END`).bind(
+      role.id,
+      role.key,
+      role.kind,
+      role.resourceType,
+      role.createdAt.getTime(),
+      role.updatedAt.getTime(),
+      JSON.stringify(role.permissionKeys),
+    )
+  }
+
+  private roleChanged(cause: unknown): boolean {
+    const visited = new Set<Error>()
+    for (let error = cause; error instanceof Error && !visited.has(error); error = error.cause) {
+      if (
+        /(?:bad JSON path:|JSON path error near)\s*['"]system_role_binding_role_changed['"]/i.test(
+          error.message,
+        )
+      )
+        return true
+      visited.add(error)
+    }
+    return false
   }
 
   private prepareActorRoleGuard(

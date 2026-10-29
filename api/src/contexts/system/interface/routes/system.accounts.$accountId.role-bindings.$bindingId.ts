@@ -7,6 +7,7 @@ import {
   SystemInvalidSessionError,
   SystemLastRootBindingError,
   SystemRoleBindingNotFoundError,
+  SystemRoleBindingConflictError,
 } from "@system/interface/errors"
 /** /system/accounts/:accountId/role-bindings/:bindingId */
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
@@ -118,6 +119,7 @@ export const DELETE = systemFactory.createHandlers(
     if (revocation === "not_found") {
       throw new SystemRoleBindingNotFoundError()
     }
+    if (revocation === "conflict") throw new SystemRoleBindingConflictError()
     if (revocation === "last_root") {
       throw new SystemLastRootBindingError()
     }
