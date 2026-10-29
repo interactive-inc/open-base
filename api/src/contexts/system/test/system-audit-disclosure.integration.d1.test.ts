@@ -384,35 +384,38 @@ test("読取後の設定変更では成功監査も応答本文も返さない",
   }
 })
 
-test("読取中にsession familyが失効した場合は本文と成功監査を返さない", async () => {
-  const f = await fixture()
-  const adapter = new SystemAuditEventQueryAdapter({ env: { DB: f.db } })
-  const original = adapter.list.bind(adapter)
-  const lookup = spyOn(SystemAuditEventQueryAdapter.prototype, "list").mockImplementation(
-    async (...args) => {
-      const page = await original(...args)
-      await f.db
-        .prepare("UPDATE system_sessions SET revoked_at=?2 WHERE account_id=?1")
-        .bind("f43d89f4-ac52-411f-828b-78838556ce92", Date.now())
-        .run()
-      return page
-    },
-  )
-  try {
-    const response = await f.read()
-    expect(response.status).not.toBe(200)
-    expect(await response.text()).not.toContain("private-")
-    expect(
-      await f.db
-        .prepare(
-          "SELECT count(*) AS total FROM system_audit_events WHERE action='system.audit.list' AND outcome='succeeded'",
-        )
-        .first<number>("total"),
-    ).toBe(0)
-  } finally {
-    lookup.mockRestore()
-  }
-})
+test.each([0, 60_000])(
+  "読取中のsession失効はwriter clockが%s ms先でも本文と成功監査を返さない",
+  async (clockOffset) => {
+    const f = await fixture()
+    const adapter = new SystemAuditEventQueryAdapter({ env: { DB: f.db } })
+    const original = adapter.list.bind(adapter)
+    const lookup = spyOn(SystemAuditEventQueryAdapter.prototype, "list").mockImplementation(
+      async (...args) => {
+        const page = await original(...args)
+        await f.db
+          .prepare("UPDATE system_sessions SET revoked_at=?2 WHERE account_id=?1")
+          .bind("f43d89f4-ac52-411f-828b-78838556ce92", Date.now() + clockOffset)
+          .run()
+        return page
+      },
+    )
+    try {
+      const response = await f.read()
+      expect(response.status).not.toBe(200)
+      expect(await response.text()).not.toContain("private-")
+      expect(
+        await f.db
+          .prepare(
+            "SELECT count(*) AS total FROM system_audit_events WHERE action='system.audit.list' AND outcome='succeeded'",
+          )
+          .first<number>("total"),
+      ).toBe(0)
+    } finally {
+      lookup.mockRestore()
+    }
+  },
+)
 
 test("読取資格のsnapshotは付与元・Account変更をtransactionで再検査する", async () => {
   const f = await fixture()

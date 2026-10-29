@@ -18,35 +18,38 @@ setDefaultTimeout(30_000)
 
 const at = new Date("2035-01-01T00:00:00Z")
 
-test("session family is checked both before preparation and after logout", async () => {
-  const f = await fixture()
-  const sessionFamilyId = crypto.randomUUID()
-  await f.db
-    .prepare(`INSERT INTO system_sessions (id,account_id,family_id,token_hash,token_version,created_at,expires_at)
+test.each([0, 1000])(
+  "session family is checked after logout with writer clock ahead by %s ms",
+  async (clockOffset) => {
+    const f = await fixture()
+    const sessionFamilyId = crypto.randomUUID()
+    await f.db
+      .prepare(`INSERT INTO system_sessions (id,account_id,family_id,token_hash,token_version,created_at,expires_at)
     VALUES (?1,?2,?3,?4,0,?5,?6)`)
-    .bind(
-      crypto.randomUUID(),
-      f.authentication.accountId,
-      sessionFamilyId,
-      "a".repeat(64),
-      at.getTime() - 1000,
-      at.getTime() + 60000,
-    )
-    .run()
-  const authentication = { ...f.authentication, sessionFamilyId }
-  const prepared = await f.adapter.prepare(authentication, at)
-  if (prepared === null || prepared instanceof Error) throw new Error("authorization missing")
-  const assertions = prepared.assertions(at)
-  if (assertions instanceof Error) throw assertions
-  expect((await f.db.batch([...assertions])).every((row) => row.success)).toBe(true)
-  await f.db
-    .prepare("UPDATE system_sessions SET revoked_at=?2 WHERE family_id=?1")
-    .bind(sessionFamilyId, at.getTime())
-    .run()
-  expect(await f.db.batch([...assertions]).catch((error: unknown) => error)).toBeInstanceOf(Error)
-  const rejected = await f.adapter.prepare(authentication, at)
-  expect(rejected === null || rejected instanceof Error).toBe(true)
-})
+      .bind(
+        crypto.randomUUID(),
+        f.authentication.accountId,
+        sessionFamilyId,
+        "a".repeat(64),
+        at.getTime() - 1000,
+        at.getTime() + 60000,
+      )
+      .run()
+    const authentication = { ...f.authentication, sessionFamilyId }
+    const prepared = await f.adapter.prepare(authentication, at)
+    if (prepared === null || prepared instanceof Error) throw new Error("authorization missing")
+    const assertions = prepared.assertions(at)
+    if (assertions instanceof Error) throw assertions
+    expect((await f.db.batch([...assertions])).every((row) => row.success)).toBe(true)
+    await f.db
+      .prepare("UPDATE system_sessions SET revoked_at=?2 WHERE family_id=?1")
+      .bind(sessionFamilyId, at.getTime() + clockOffset)
+      .run()
+    expect(await f.db.batch([...assertions]).catch((error: unknown) => error)).toBeInstanceOf(Error)
+    const rejected = await f.adapter.prepare(authentication, at)
+    expect(rejected === null || rejected instanceof Error).toBe(true)
+  },
+)
 
 test("attachment disclosure guard rejects logout without changing attachment metadata", async () => {
   const f = await fixture()

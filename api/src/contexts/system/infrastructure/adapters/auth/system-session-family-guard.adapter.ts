@@ -3,7 +3,7 @@ import type { SystemReadAuthentication } from "@system/domain/definitions/system
 
 type Context = SystemD1Context
 
-/** family付きBearerのlogoutを、保存・開示と同じtransactionで再照合する。 */
+/** family付きBearerのlogoutを再照合する。永続済みの失効は時計差にかかわらず拒否する。 */
 export class SystemSessionFamilyGuardAdapter {
   constructor(private readonly c: Context) {
     Object.freeze(this)
@@ -24,11 +24,10 @@ export class SystemSessionFamilyGuardAdapter {
     return [
       this.c.env.DB.prepare(`SELECT CASE WHEN EXISTS (
       SELECT 1 FROM system_sessions WHERE family_id=?1 AND account_id=?2
-        AND (revoked_at IS NULL OR revoked_at>max(?3,CAST((julianday('now')-2440587.5)*86400000 AS INTEGER)))
-      ) THEN 1 ELSE json_extract('{}',?4) END`).bind(
+        AND revoked_at IS NULL
+      ) THEN 1 ELSE json_extract('{}',?3) END`).bind(
         input.authentication.sessionFamilyId,
         input.authentication.accountId,
-        input.at.getTime(),
         input.rejection,
       ),
     ]

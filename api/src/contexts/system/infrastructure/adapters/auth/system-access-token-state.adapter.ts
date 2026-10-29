@@ -76,7 +76,7 @@ export class SystemAccessTokenStateAdapter {
                   SELECT 1 FROM system_sessions AS session
                   WHERE session.family_id = ${input.sessionFamilyId}
                     AND session.account_id = ${systemAccounts.id}
-                    AND (session.revoked_at IS NULL OR session.revoked_at > ${input.at.getTime()})
+                    AND session.revoked_at IS NULL
                 )`,
         })
         .from(systemAccounts)

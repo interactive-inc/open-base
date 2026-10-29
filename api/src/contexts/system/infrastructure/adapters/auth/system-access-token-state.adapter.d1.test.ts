@@ -135,3 +135,29 @@ describe("SystemAccessTokenStateAdapter", () => {
     ).toBeInstanceOf(Error)
   })
 })
+
+test.each([0, 1000])(
+  "current Bearer rejects a persisted revocation with writer clock ahead by %s ms",
+  async (clockOffset) => {
+    const f = await createFixture()
+    await f.database.prepare("UPDATE system_principals SET kind='human',revision=revision+1").run()
+    const familyId = crypto.randomUUID()
+    await f.database
+      .prepare(`INSERT INTO system_sessions (id,account_id,family_id,token_hash,token_version,created_at,expires_at)
+    VALUES (?1,?2,?3,?4,0,1000,3000)`)
+      .bind(crypto.randomUUID(), input.accountId, familyId, "c".repeat(64))
+      .run()
+    const adapter = new SystemAccessTokenStateAdapter({ database: f.context.env.DB })
+    expect(await adapter.resolve({ ...input, sessionFamilyId: familyId })).toMatchObject({
+      kind: "accepted",
+    })
+    await f.database
+      .prepare("UPDATE system_sessions SET revoked_at=?1 WHERE family_id=?2")
+      .bind(1000 + clockOffset, familyId)
+      .run()
+    expect(await adapter.resolve({ ...input, sessionFamilyId: familyId })).toEqual({
+      kind: "rejected",
+      reason: "session_revoked",
+    })
+  },
+)
