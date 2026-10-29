@@ -1,9 +1,11 @@
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises"
+import { readFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { AuthenticationState } from "@/lib/authentication-state"
 import { SessionRefreshCoordinator } from "@/lib/session-refresh-coordinator"
 import { refreshCurrentToken } from "@/lib/refresh-current-token"
+import { AuthFileLock } from "@base/client-auth/auth-file-lock"
+import { writePrivateJson } from "@base/client-auth/write-private-json"
 
 type EndpointTokens = {
   token: string | null
@@ -128,12 +130,15 @@ async function writeTokens(
     if (raw.trim() !== "") {
       const parsed = JSON.parse(raw)
 
-      if (typeof parsed === "object" && parsed !== null) {
-        root = { ...parsed }
-      }
+      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
+        throw new Error("authentication settings are invalid")
+      root = { ...parsed }
     }
-  } catch {
-    // File missing or corrupt — start fresh with endpoints only.
+  } catch (error) {
+    if (
+      !(typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT")
+    )
+      throw new Error("authentication settings could not be preserved")
   }
 
   const endpoints =
@@ -154,10 +159,7 @@ async function writeTokens(
 
   root.endpoints = endpoints
 
-  await mkdir(dir, { recursive: true, mode: 0o700 })
-  await writeFile(file, `${JSON.stringify(root, null, 2)}\n`, { mode: 0o600 })
-  await chmod(dir, 0o700)
-  await chmod(file, 0o600)
+  await writePrivateJson({ directory: dir, file, value: root })
 }
 
 type RequestOptions = {
@@ -171,15 +173,17 @@ const authentication = new AuthenticationState({ resolveBaseUrl, readTokens })
 const consumedRefreshTokens = new Map<string, string>()
 const sessionRefreshes = new SessionRefreshCoordinator({
   refresh: (baseUrl, failedToken) =>
-    refreshCurrentToken({
-      baseUrl,
-      failedToken,
-      consumedRefreshTokens,
-      readTokens,
-      rotate: tryRefresh,
-      saveTokens: writeTokens,
-      updateToken: (token) => authentication.updateToken(token),
-    }),
+    new AuthFileLock({ directory: configDir() }).run(() =>
+      refreshCurrentToken({
+        baseUrl,
+        failedToken,
+        consumedRefreshTokens,
+        readTokens,
+        rotate: tryRefresh,
+        saveTokens: writeTokens,
+        updateToken: (token) => authentication.updateToken(token),
+      }),
+    ),
 })
 
 export async function ensureAuth(): Promise<{ baseUrl: string; token: string | null }> {

@@ -3,30 +3,7 @@ import { hc } from "hono/client"
 import { resolveBaseUrl } from "@/lib/config/resolve-base-url"
 import { SettingsFile } from "@/lib/config/settings-file"
 import { toApiError } from "@/lib/http/to-api-error"
-
-async function tryRefresh(
-  baseUrl: string,
-  refreshToken: string,
-): Promise<{ access_token: string; refresh_token: string | null } | null> {
-  try {
-    const url = new URL("/system/sessions", baseUrl)
-
-    const res = await fetch(url, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ refresh_token: refreshToken }),
-      signal: AbortSignal.timeout(15_000),
-    })
-
-    if (res.ok === false) {
-      return null
-    }
-
-    return (await res.json()) as { access_token: string; refresh_token: string | null }
-  } catch {
-    return null
-  }
-}
+import { rotateTokens } from "@/lib/http/rotate-tokens"
 
 /**
  * 解決済み baseUrl を閉じ込めた fetch ラッパーを作る。401 時の refresh は必ずこの baseUrl の
@@ -57,20 +34,16 @@ function toFetchOrThrow(baseUrl: string, initialToken: string | null): typeof fe
     }
 
     if (responses.current.status === 401) {
-      const tokens = await new SettingsFile().tokensFor(baseUrl)
+      const refreshed = await new SettingsFile().refreshTokens(
+        baseUrl,
+        headers.get("Authorization")?.replace(/^Bearer /, "") ?? null,
+        (refreshToken) => rotateTokens(baseUrl, refreshToken),
+      )
 
-      if (tokens.refresh_token !== null) {
-        const refreshed = await tryRefresh(baseUrl, tokens.refresh_token)
-
-        if (refreshed !== null) {
-          await new SettingsFile().saveTokens(baseUrl, {
-            token: refreshed.access_token,
-            refresh_token: refreshed.refresh_token,
-          })
-          authentication.token = refreshed.access_token
-          headers.set("Authorization", `Bearer ${refreshed.access_token}`)
-          responses.current = await fetch(input, outgoing)
-        }
+      if (refreshed !== null && refreshed.token !== null) {
+        authentication.token = refreshed.token
+        headers.set("Authorization", `Bearer ${refreshed.token}`)
+        responses.current = await fetch(input, outgoing)
       }
     }
 

@@ -1,7 +1,9 @@
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises"
+import { readFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { z } from "zod"
+import { AuthFileLock } from "@base/client-auth/auth-file-lock"
+import { writePrivateJson } from "@base/client-auth/write-private-json"
 
 export type EndpointTokens = {
   token: string | null
@@ -78,14 +80,35 @@ export class SettingsFile {
     email: string,
     name: string,
   ): Promise<void> {
-    await this.write(baseUrl, tokens, { email, name })
+    await new AuthFileLock({ directory: this.dir }).run(() =>
+      this.write(baseUrl, tokens, { email, name }),
+    )
   }
 
   /**
    * トークンのみ更新（refresh 後）。既存エントリの email / name は温存し、無ければ "" で作る。
    */
   async saveTokens(baseUrl: string, tokens: EndpointTokens): Promise<void> {
-    await this.write(baseUrl, tokens, null)
+    await new AuthFileLock({ directory: this.dir }).run(() => this.write(baseUrl, tokens, null))
+  }
+
+  /** 読み直し・rotation・保存を一つのlockに置き、他プロセスの後継を再利用する。 */
+  async refreshTokens(
+    baseUrl: string,
+    failedToken: string | null,
+    rotate: (refreshToken: string) => Promise<EndpointTokens | null>,
+  ): Promise<EndpointTokens | null> {
+    return new AuthFileLock({ directory: this.dir }).run(async () => {
+      const current = await this.tokensFor(baseUrl)
+      if (current.token !== null && current.token !== failedToken) return current
+      if (current.refresh_token === null) return null
+
+      const rotated = await rotate(current.refresh_token)
+      if (rotated === null) return null
+      await this.write(baseUrl, rotated, null)
+
+      return rotated
+    })
   }
 
   private async write(
@@ -124,18 +147,7 @@ export class SettingsFile {
 
     const merged: Root = { ...root, endpoints: { ...root.endpoints, [baseUrl]: entry } }
 
-    // 初回ログイン時にディレクトリが無いと ENOENT になるため先に作成する（dir は 0700）。
-    await mkdir(this.dir, { recursive: true, mode: 0o700 })
-
-    // トークンを含むため作成時点から所有者のみ読み書き可（0600）にする。
-    // Bun.write + 後追い chmod だと作成〜chmod の間に world-readable な TOCTOU 窓があった。
-    await writeFile(this.file, `${JSON.stringify(merged, null, 2)}\n`, { mode: 0o600 })
-
-    // writeFile / mkdir の mode は新規作成時のみ有効で、既存の権限は据え置かれる。
-    // 緩い権限で先に存在していたケースでも確実に締めるため、書き込み後に明示的に chmod する
-    // （排他書き込み直後なので新たな TOCTOU リスクはない）。
-    await chmod(this.dir, 0o700)
-    await chmod(this.file, 0o600)
+    await writePrivateJson({ directory: this.dir, file: this.file, value: merged })
   }
 
   private async read(): Promise<Root | Error> {
