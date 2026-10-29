@@ -6,6 +6,7 @@ import { SessionRefreshCoordinator } from "@/lib/session-refresh-coordinator"
 import { refreshCurrentToken } from "@/lib/refresh-current-token"
 import { AuthFileLock } from "@base/client-auth/auth-file-lock"
 import { writePrivateJson } from "@base/client-auth/write-private-json"
+import { toApiError } from "@/lib/to-api-error"
 
 type EndpointTokens = {
   token: string | null
@@ -247,11 +248,9 @@ export async function apiRequest<T = unknown>(
 
   if (res.ok === false) {
     const contentType = res.headers.get("content-type") ?? ""
-    const body = contentType.includes("application/json")
-      ? JSON.stringify(await res.json())
-      : await res.text()
+    const body = await res.text()
 
-    throw new Error(`API ${res.status}: ${body}`)
+    throw toApiError(res.status, body, contentType)
   }
 
   const contentType = res.headers.get("content-type") ?? ""
