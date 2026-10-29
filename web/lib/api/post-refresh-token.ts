@@ -1,6 +1,12 @@
 import type { AppType } from "api/app"
 import { hc } from "hono/client"
 import { apiFetch } from "@/lib/api/api-fetch"
+import { z } from "zod"
+
+const sessionSchema = z.object({
+  access_token: z.string().min(1),
+  refresh_token: z.string().min(1).nullable().default(null),
+})
 
 /**
  * PATCH /system/sessions を refresh_token で呼び、新しい access_token を取得する。
@@ -12,22 +18,21 @@ export async function postRefreshToken(refreshToken: string) {
 
   const client = hc<AppType>(baseUrl, { fetch: apiFetch })
 
-  const response = await client.system.sessions.$patch({
-    json: { refresh_token: refreshToken },
-  })
+  try {
+    const response = await client.system.sessions.$patch(
+      { json: { refresh_token: refreshToken } },
+      { init: { signal: AbortSignal.timeout(10_000) } },
+    )
 
-  if (response.status >= 400) {
+    if (response.status >= 400) return new Error("failed to refresh token")
+
+    const session = sessionSchema.safeParse(await response.json())
+
+    if (session.success) return session.data
+  } catch {
+    // 更新失敗もmiddlewareのbackoffへ渡し、画面の回復導線を保つ。
     return new Error("failed to refresh token")
   }
 
-  const result = await response.json()
-
-  if ("access_token" in result === false) {
-    return new Error("failed to refresh token")
-  }
-
-  return {
-    access_token: result.access_token,
-    refresh_token: result.refresh_token ?? null,
-  }
+  return new Error("failed to refresh token")
 }

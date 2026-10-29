@@ -1,6 +1,7 @@
 import { ApiError } from "@/lib/errors"
 import { loadConfig } from "@/lib/config/load-config"
 import { SettingsFile } from "@/lib/config/settings-file"
+import { toApiError } from "@/lib/http/to-api-error"
 
 type RequestOptions = {
   method?: "GET" | "POST" | "PUT" | "DELETE"
@@ -95,15 +96,9 @@ async function request<T = unknown>(
   })
 
   if (res.ok === false) {
-    let message: string
+    const body = await res.text()
 
-    try {
-      message = JSON.stringify(await res.json())
-    } catch {
-      message = await res.text()
-    }
-
-    throw new ApiError(res.status, `ERR ${res.status} ${message}`)
+    throw toApiError(res.status, body)
   }
 
   const contentType = res.headers.get("content-type") ?? ""

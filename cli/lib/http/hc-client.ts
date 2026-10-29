@@ -2,7 +2,7 @@ import type { AppType } from "api/app"
 import { hc } from "hono/client"
 import { resolveBaseUrl } from "@/lib/config/resolve-base-url"
 import { SettingsFile } from "@/lib/config/settings-file"
-import { ApiError } from "@/lib/errors"
+import { toApiError } from "@/lib/http/to-api-error"
 
 async function tryRefresh(
   baseUrl: string,
@@ -31,24 +31,32 @@ async function tryRefresh(
 /**
  * 解決済み baseUrl を閉じ込めた fetch ラッパーを作る。401 時の refresh は必ずこの baseUrl の
  * エントリを読み書きするため、--base-url 指定時に別エンドポイントのトークンを触らない。
- * refreshAttempted はクライアント毎に持ち、モジュール状態を共有しない。
+ * 更新後のtokenをclient内で維持し、再試行は要求ごとに一回に制限する。
  */
-function toFetchOrThrow(baseUrl: string): typeof fetch {
-  let refreshAttempted = false
+function toFetchOrThrow(baseUrl: string, initialToken: string | null): typeof fetch {
+  const authentication = { token: initialToken }
 
   const handleFetch = async (
     input: Parameters<typeof fetch>[0],
     init?: Parameters<typeof fetch>[1],
   ): Promise<Response> => {
-    const response = await fetch(input, init)
+    const headers = new Headers(init?.headers)
 
-    if (response.ok) {
-      return response
+    if (
+      headers.get("Authorization") === (initialToken === null ? null : `Bearer ${initialToken}`)
+    ) {
+      if (authentication.token !== null)
+        headers.set("Authorization", `Bearer ${authentication.token}`)
     }
 
-    if (response.status === 401 && refreshAttempted === false) {
-      refreshAttempted = true
+    const outgoing = { ...init, headers }
+    const responses = { current: await fetch(input, outgoing) }
 
+    if (responses.current.ok) {
+      return responses.current
+    }
+
+    if (responses.current.status === 401) {
       const tokens = await new SettingsFile().tokensFor(baseUrl)
 
       if (tokens.refresh_token !== null) {
@@ -59,34 +67,16 @@ function toFetchOrThrow(baseUrl: string): typeof fetch {
             token: refreshed.access_token,
             refresh_token: refreshed.refresh_token,
           })
-
-          const retryInit = init !== undefined ? { ...init } : {}
-
-          const retryHeaders = new Headers(retryInit.headers)
-
-          retryHeaders.set("Authorization", `Bearer ${refreshed.access_token}`)
-
-          retryInit.headers = retryHeaders
-
-          return await fetch(input, retryInit)
+          authentication.token = refreshed.access_token
+          headers.set("Authorization", `Bearer ${refreshed.access_token}`)
+          responses.current = await fetch(input, outgoing)
         }
       }
     }
 
-    const raw = await response.text()
+    if (responses.current.ok) return responses.current
 
-    let detail: string
-
-    try {
-      detail = JSON.stringify(JSON.parse(raw))
-    } catch {
-      detail = raw
-    }
-
-    throw new ApiError(
-      response.status,
-      detail === "" ? `ERR ${response.status}` : `ERR ${response.status} ${detail}`,
-    )
+    throw toApiError(responses.current.status, await responses.current.text())
   }
 
   return Object.assign(handleFetch, { preconnect: fetch.preconnect })
@@ -103,7 +93,7 @@ export async function createClient(baseUrlOverride?: string | null) {
     headers.Authorization = `Bearer ${tokens.token}`
   }
 
-  return hc<AppType>(baseUrl, { headers, fetch: toFetchOrThrow(baseUrl) })
+  return hc<AppType>(baseUrl, { headers, fetch: toFetchOrThrow(baseUrl, tokens.token) })
 }
 
 export type Client = Awaited<ReturnType<typeof createClient>>
