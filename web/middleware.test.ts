@@ -75,6 +75,12 @@ describe("session refresh middleware", () => {
     expect(response.headers.get("x-middleware-request-cookie")).toContain("session=")
     expect(response.cookies.get("session")?.value).toContain("eyJhbGciOiJIUzI1NiJ9")
     expect(response.cookies.get("refresh_token")?.value).toBe("rotated-refresh-token")
+    expect(response.headers.get("x-middleware-request-cookie")).toContain(
+      "refresh_token=rotated-refresh-token",
+    )
+    expect(response.headers.get("x-middleware-request-cookie")).not.toContain(
+      "refresh_token=fixture",
+    )
   })
 
   test("never hands one user's refreshed session to a concurrent request holding another token", async () => {
@@ -198,4 +204,14 @@ describe("nonce-based CSP", () => {
       vi.unstubAllEnvs()
     }
   })
+})
+
+test("refreshのない後継sessionに古いrefresh cookieを残さない", async () => {
+  mocks.postRefreshToken.mockResolvedValue({ access_token: "example-access", refresh_token: null })
+  const request = new NextRequest("https://app.base.localhost/employees")
+  request.cookies.set("refresh_token", "example-old-refresh")
+  const response = await middleware(request)
+  expect(response.headers.get("x-middleware-request-cookie")).toContain("session=example-access")
+  expect(response.headers.get("x-middleware-request-cookie")).not.toContain("refresh_token=")
+  expect(response.cookies.get("refresh_token")).toMatchObject({ value: "", maxAge: 0, path: "/" })
 })

@@ -24,6 +24,7 @@ const REFRESH_TOKEN_MAX_AGE = 7 * 24 * 60 * 60
 /**
  * ログイン・リフレッシュ共通の cookie 書き込み。Server Action（`cookies()`）と
  * Middleware（`NextResponse.cookies`）はどちらも `ResponseCookies` 互換の `set()` を持つ。
+ * refreshTokenがnullのときは、以前の認証へ戻らないよう旧cookieを明示的に失効させる。
  */
 export function setSessionCookies(props: Props): void {
   props.cookieStore.set("session", props.accessToken, {
@@ -34,13 +35,11 @@ export function setSessionCookies(props: Props): void {
     maxAge: sessionMaxAge(props.accessToken),
   })
 
-  if (props.refreshToken !== null) {
-    props.cookieStore.set("refresh_token", props.refreshToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "lax",
-      path: "/",
-      maxAge: REFRESH_TOKEN_MAX_AGE,
-    })
-  }
+  props.cookieStore.set("refresh_token", props.refreshToken ?? "", {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: props.refreshToken === null ? 0 : REFRESH_TOKEN_MAX_AGE,
+  })
 }

@@ -137,6 +137,8 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   }
 
   request.cookies.set("session", refreshed.access_token)
+  if (refreshed.refresh_token === null) request.cookies.delete("refresh_token")
+  else request.cookies.set("refresh_token", refreshed.refresh_token)
 
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set("x-nonce", nonce)
