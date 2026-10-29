@@ -35,7 +35,7 @@ function bindingIdOf(id: string): string {
   return (bindingIds[id] ??= crypto.randomUUID())
 }
 
-async function fixture() {
+async function fixture(stepUpTtlMilliseconds = 300_000) {
   const db = await createSystemAttachmentTestDatabase()
   const database = drizzle(db)
   const clock = { now: at }
@@ -116,7 +116,13 @@ async function fixture() {
       .prepare(
         "INSERT INTO system_step_up_grants (id, account_id, token_hash, method, issued_at, expires_at) VALUES (?1, ?2, ?3, 'password', ?4, ?5)",
       )
-      .bind(crypto.randomUUID(), id, hash, at.getTime(), at.getTime() + 300000)
+      .bind(
+        crypto.randomUUID(),
+        id,
+        hash,
+        clock.now.getTime(),
+        Math.max(clock.now.getTime(), Date.now()) + stepUpTtlMilliseconds,
+      )
       .run()
     return {
       authorization: `Bearer ${session.accessToken}`,
@@ -148,7 +154,7 @@ async function fixture() {
     })
   const read = (query = "", actor = reader) =>
     request(`/system/audit-events?action=records.updated${query}`, { headers: actor })
-  return { db, clock, admin, reader, other, command, request, publish, read }
+  return { db, clock, admin, reader, other, command, request, publish, read, headers }
 }
 
 for (const operation of ["read-policy", "publish-policy"]) {
@@ -234,6 +240,49 @@ test("開示設定の再送も途中logoutで既存結果を開示しない", as
   } finally {
     read.mockRestore()
   }
+})
+
+test("開示設定の保存中に再認証期限を過ぎたら設定を公開しない", async () => {
+  const f = await fixture(1000)
+  f.clock.now = new Date()
+  const before = await f.db
+    .prepare("SELECT count(*) AS count FROM system_audit_events")
+    .first<number>("count")
+  const append = spyOn(SystemAuditDisclosurePolicyRepository.prototype, "append")
+  const original = append.getMockImplementation()
+  if (original === undefined) throw new Error("missing original policy append")
+  append.mockImplementation(async function (this: SystemAuditDisclosurePolicyRepository, ...args) {
+    const expiry = await f.db
+      .prepare("SELECT max(expires_at) AS expiry FROM system_step_up_grants")
+      .first<number>("expiry")
+    if (expiry === null) throw new Error("missing step-up expiry")
+    expect(Date.now()).toBeLessThan(expiry)
+    await Bun.sleep(Math.max(0, expiry - Date.now()) + 50)
+    expect(Date.now()).toBeGreaterThanOrEqual(expiry)
+    return original.call(this, ...args)
+  })
+  try {
+    const response = await f.publish()
+    const count = await f.db
+      .prepare("SELECT count(*) AS count FROM system_audit_disclosure_policy_revisions")
+      .first<number>("count")
+    expect({ status: response.status, count }).toEqual({ status: 403, count: 0 })
+    expect(
+      await f.db
+        .prepare("SELECT count(*) AS count FROM system_audit_events")
+        .first<number>("count"),
+    ).toBe(before)
+  } finally {
+    append.mockRestore()
+  }
+})
+
+test("要求時刻がD1の現在より先でも有効な再認証で開示設定を公開できる", async () => {
+  const f = await fixture()
+  f.clock.now = new Date(Date.now() + 60_000)
+  expect(
+    (await f.publish(f.command, await f.headers("282b84eb-787d-4655-a88b-c072960fc970"))).status,
+  ).toBe(201)
 })
 
 test.each([false, true])(

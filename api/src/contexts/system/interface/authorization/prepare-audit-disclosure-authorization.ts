@@ -20,9 +20,12 @@ export async function prepareAuditDisclosureAuthorization(
   if (hash instanceof Error) return hash
   return [
     ...proof.assertions,
-    context.env.DB.prepare(`SELECT CASE WHEN EXISTS (
+    context.env.DB.prepare(`WITH evaluation AS (
+      SELECT max(?3, CAST((julianday('now')-2440587.5)*86400000 AS INTEGER)) AS at
+    ) SELECT CASE WHEN EXISTS (
     SELECT 1 FROM system_step_up_grants WHERE account_id = ?1 AND token_hash = ?2
-      AND issued_at <= ?3 AND expires_at > ?3 AND revoked_at IS NULL AND last_used_at <= ?3
+      AND issued_at <= (SELECT at FROM evaluation) AND expires_at > (SELECT at FROM evaluation)
+      AND revoked_at IS NULL AND last_used_at <= (SELECT at FROM evaluation)
     ) THEN 1 ELSE json_extract('{}', 'system_human_authorization_changed') END`).bind(
       context.var.userId,
       hash,

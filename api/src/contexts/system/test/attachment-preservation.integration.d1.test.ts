@@ -31,7 +31,7 @@ async function responseJson(response: Response): Promise<unknown> {
   return response.json()
 }
 
-async function fixture() {
+async function fixture(stepUpTtlMilliseconds = 300_000) {
   const db = await createSystemAttachmentTestDatabase()
   const database = drizzle(db)
   const clock = { now: at }
@@ -119,7 +119,13 @@ async function fixture() {
       .prepare(
         "INSERT INTO system_step_up_grants (id, account_id, token_hash, method, issued_at, expires_at) VALUES (?1, ?2, ?3, 'password', ?4, ?5)",
       )
-      .bind(crypto.randomUUID(), id, hash, clock.now.getTime(), clock.now.getTime() + 300_000)
+      .bind(
+        crypto.randomUUID(),
+        id,
+        hash,
+        clock.now.getTime(),
+        Math.max(clock.now.getTime(), Date.now()) + stepUpTtlMilliseconds,
+      )
       .run()
     return {
       authorization: `Bearer ${issuance.accessToken}`,
@@ -275,6 +281,71 @@ test("保全の再送も途中logoutで既存結果を開示しない", async ()
   } finally {
     read.mockRestore()
   }
+})
+
+for (const operation of ["create", "release"]) {
+  test(`保全の${operation}保存中に再認証期限を過ぎたら変更しない`, async () => {
+    const c = await fixture(1000)
+    c.clock.now = new Date()
+    const command = c.command()
+    if (operation === "release") expect((await c.create(command)).status).toBe(201)
+    const headers = await c.headers()
+    const before = await c.db
+      .prepare("SELECT count(*) AS count FROM system_audit_events")
+      .first<number>("count")
+    const write = spyOn(AttachmentPreservationRepository.prototype, "write")
+    const original = write.getMockImplementation()
+    if (original === undefined) throw new Error("missing original preservation write")
+    write.mockImplementation(async function (this: AttachmentPreservationRepository, ...args) {
+      const expiry = await c.db
+        .prepare("SELECT max(expires_at) AS expiry FROM system_step_up_grants")
+        .first<number>("expiry")
+      if (expiry === null) throw new Error("missing step-up expiry")
+      expect(Date.now()).toBeLessThan(expiry)
+      await Bun.sleep(Math.max(0, expiry - Date.now()) + 50)
+      expect(Date.now()).toBeGreaterThanOrEqual(expiry)
+      return original.call(this, ...args)
+    })
+    try {
+      const response = await c.request(
+        operation === "create" ? c.endpoint : `${c.endpoint}/${command.id}/release`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify(
+            operation === "create"
+              ? command
+              : {
+                  operationId: crypto.randomUUID(),
+                  expectedRevision: 1,
+                  reason: "Review completed",
+                },
+          ),
+        },
+      )
+      const revision = await c.db
+        .prepare("SELECT revision FROM system_attachment_preservations WHERE id=?1")
+        .bind(command.id)
+        .first<number>("revision")
+      expect({ status: response.status, revision }).toEqual({
+        status: 403,
+        revision: operation === "create" ? null : 1,
+      })
+      expect(
+        await c.db
+          .prepare("SELECT count(*) AS count FROM system_audit_events")
+          .first<number>("count"),
+      ).toBe(before)
+    } finally {
+      write.mockRestore()
+    }
+  })
+}
+
+test("要求時刻がD1の現在より先でも有効な再認証で保全を作成できる", async () => {
+  const c = await fixture()
+  c.clock.now = new Date(Date.now() + 60_000)
+  expect((await c.create(c.command())).status).toBe(201)
 })
 
 test("複数の削除停止を個別に解除し、最後の保全がなくなるまで本体を残す", async () => {
