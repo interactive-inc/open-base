@@ -15,6 +15,7 @@ const maximumPublicationPayloadBytes = 1_000_000
 
 type Props = Readonly<{
   context: SystemD1Context
+  publicationAuthorization?: () => ReadonlyArray<D1PreparedStatement> | Error
 }>
 
 type DeliveryPayload = Readonly<{
@@ -80,19 +81,30 @@ export class SystemNotificationRepository {
     const payload = toDeliveryPayload(deliveries)
     if (payload instanceof Error) return payload
     const database = this.c.context.env.DB
-    return [
+    return this.authorizePublication([
       prepareMessageInsert(database, message),
       ...(message.resourceScope === null ? [] : [prepareResourceScopeInsert(database, message)]),
       prepareDeliveryFanOut(database, message, payload),
       preparePublicationInvariant(database, message, payload),
-    ]
+    ])
   }
 
-  /** 複数Messageのfan-outを件数に依存しない4文で他の業務statementと同時に確定する。 */
+  /** 複数Messageのfan-out本体を件数に依存しない4文で準備し、指定された認可条件で挟む。 */
   preparePublishBatch(
     publications: ReadonlyArray<SystemNotificationPublication>,
   ): ReadonlyArray<D1PreparedStatement> | Error {
-    return prepareSystemNotificationPublicationBatch(this.c.context.env.DB, publications)
+    return this.authorizePublication(
+      prepareSystemNotificationPublicationBatch(this.c.context.env.DB, publications),
+    )
+  }
+
+  private authorizePublication(
+    statements: ReadonlyArray<D1PreparedStatement> | Error,
+  ): ReadonlyArray<D1PreparedStatement> | Error {
+    if (statements instanceof Error) return statements
+    const assertions = this.c.publicationAuthorization?.()
+    if (assertions instanceof Error) return assertions
+    return assertions === undefined ? statements : [...assertions, ...statements, ...assertions]
   }
 
   async listExistingPublicationKeys(

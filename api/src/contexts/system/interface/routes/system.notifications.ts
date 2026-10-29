@@ -14,6 +14,7 @@ import { NotificationDeliveryBatchValue } from "@system/domain/values/notificati
 import { NotificationDeliveryEntity } from "@system/domain/entities/notification-delivery.entity"
 import { NotificationMessageEntity } from "@system/domain/entities/notification-message.entity"
 import { SystemActiveAccountAdapter } from "@system/infrastructure/adapters/auth/system-active-account.adapter"
+import { SystemNotificationPublicationAuthorizationAdapter } from "@system/infrastructure/adapters/notifications/system-notification-publication-authorization.adapter"
 import { SystemNotificationRepository } from "@system/infrastructure/repositories/notifications/system-notification.repository"
 import { authenticateSystemAccessToken } from "@system/interface/middlewares/authenticate-system-access-token"
 import { systemFactory } from "@system/interface/request-environment/system-factory"
@@ -119,6 +120,14 @@ export const POST = systemFactory.createHandlers(
     if (!Number.isSafeInteger(now.getTime())) {
       throw new SystemNotificationUnavailableError()
     }
+    const authentication = context.var.bearerReadAuthentication
+    if (authentication === undefined) throw new SystemInvalidSessionError()
+    const publicationAuthorization = await new SystemNotificationPublicationAuthorizationAdapter({
+      env: { DB: context.env.DB },
+      var: { now: context.var.now },
+    }).prepare(authentication, context.var.systemAccessToken?.sid ?? null)
+    if (publicationAuthorization instanceof Error) throw new SystemNotificationUnavailableError()
+    if (publicationAuthorization === null) throw new SystemForbiddenError()
     const body = context.req.valid("json")
     const recipientsAreActive = await new SystemActiveAccountAdapter({
       env: { DB: context.env.DB },
@@ -165,6 +174,7 @@ export const POST = systemFactory.createHandlers(
     const publication = await new PublishSystemNotification({
       notificationRepository: new SystemNotificationRepository({
         context: { env: { DB: context.env.DB } },
+        publicationAuthorization,
       }),
     }).execute({ message, deliveries: deliveryBatch })
     if (publication instanceof Error) {
