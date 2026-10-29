@@ -67,6 +67,7 @@ async function request<T = unknown>(
     headers,
     body: options.json !== undefined ? JSON.stringify(options.json) : undefined,
     signal: AbortSignal.timeout(15_000),
+    redirect: "error",
   })
 
   if (res.ok === false) {

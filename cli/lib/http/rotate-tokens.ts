@@ -17,6 +17,7 @@ export async function rotateTokens(
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ refresh_token: refreshToken }),
       signal: AbortSignal.timeout(15_000),
+      redirect: "error",
     })
     if (!response.ok) return null
 

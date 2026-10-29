@@ -33,8 +33,9 @@ function toFetchOrThrow(
 
     const firstAttempt = new AbortController()
     const callerSignal = init?.signal ?? null
-    const outgoing = {
+    const outgoing: RequestInit = {
       ...init,
+      redirect: "error",
       headers,
       signal:
         callerSignal === null
@@ -66,7 +67,7 @@ function toFetchOrThrow(
         void responses.current.body?.cancel().catch(() => undefined)
         authentication.token = refreshed.token
         headers.set("Authorization", `Bearer ${refreshed.token}`)
-        responses.current = await fetch(input, { ...init, headers })
+        responses.current = await fetch(input, { ...init, redirect: "error", headers })
       }
     }
 

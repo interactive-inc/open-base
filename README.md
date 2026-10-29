@@ -54,7 +54,7 @@ COMMAND_IDはUUIDを使用します。初期化後はBOOTSTRAP_TOKENを設定か
 
 ## CLIとMCP
 
-CLIは `base` コマンド、`BASE_API` などの環境変数を使用します。API接続先ごとに認証情報を分けて保存します。
+CLIは `base` コマンド、`BASE_API` などの環境変数を使用します。API接続先ごとに認証情報を分けて保存します。CLIとMCPはAPIのHTTP redirectを自動追従せず、通信失敗として扱います。認証情報や要求bodyの転送を防ぐため、接続先にはredirect後の最終API URLを明示してください。
 
 ```sh
 bun cli/index.ts --help

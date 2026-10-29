@@ -84,6 +84,7 @@ async function tryRefresh(
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ refresh_token: refreshToken }),
       signal: AbortSignal.timeout(15_000),
+      redirect: "error",
     })
 
     if (res.ok === false) {
@@ -205,6 +206,7 @@ export async function authenticatedFetch(path: string | URL, options: Props): Pr
   const firstAttempt = new AbortController()
   const response = await fetch(url, {
     ...options,
+    redirect: "error",
     headers,
     signal: AbortSignal.any([options.signal ?? AbortSignal.timeout(15_000), firstAttempt.signal]),
   })
@@ -227,7 +229,12 @@ export async function authenticatedFetch(path: string | URL, options: Props): Pr
   void response.body?.cancel().catch(() => undefined)
   headers.set("Authorization", `Bearer ${token}`)
 
-  return fetch(url, { ...options, headers, signal: options.signal ?? AbortSignal.timeout(15_000) })
+  return fetch(url, {
+    ...options,
+    redirect: "error",
+    headers,
+    signal: options.signal ?? AbortSignal.timeout(15_000),
+  })
 }
 
 export async function apiRequest<T = unknown>(
