@@ -1,3 +1,4 @@
+import { assertNoRedirect } from "@/lib/http/assert-no-redirect"
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 
 /** Web の Worker から API の Worker を呼ぶ service binding の名前。 */
@@ -33,13 +34,16 @@ function resolveApiServiceBinding(): ServiceBinding | null {
  * サーバー側から API を呼ぶ fetch。service binding があれば公開ネットワークを経由せずに
  * API の Worker を直接呼び、無ければ通常の fetch で `NEXT_PUBLIC_API_URL` へ送る。
  * URL・method・header・body はどちらの経路でも同じものを渡す。
+ * 資格情報を別の接続先へ転送しないよう、HTTP redirectは追従しない。
  */
-export const apiFetch: typeof fetch = (input, init) => {
+export const apiFetch: typeof fetch = async (input, init) => {
   const binding = resolveApiServiceBinding()
+  const options: RequestInit = { ...init, redirect: "manual" }
 
-  if (binding === null) {
-    return fetch(input, init)
-  }
-
-  return binding.fetch(new Request(input, init))
+  const response =
+    binding === null
+      ? await fetch(input, options)
+      : await binding.fetch(new Request(input, options))
+  assertNoRedirect(response)
+  return response
 }

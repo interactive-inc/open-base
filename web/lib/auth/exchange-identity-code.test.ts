@@ -24,6 +24,7 @@ describe("exchangeIdentityCode", () => {
       expect.objectContaining({
         method: "POST",
         cache: "no-store",
+        redirect: "manual",
         body: new URLSearchParams({
           grant_type: "authorization_code",
           code: "one-time-code",

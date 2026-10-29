@@ -1,3 +1,4 @@
+import { assertNoRedirect } from "@/lib/http/assert-no-redirect"
 import { z } from "zod"
 import { isSecureIdentityIssuer } from "@/lib/auth/is-secure-identity-issuer"
 
@@ -32,8 +33,10 @@ export async function exchangeIdentityCode(props: Props): Promise<string | Error
         code_verifier: props.codeVerifier,
       }),
       cache: "no-store",
+      redirect: "manual",
       signal: AbortSignal.timeout(10_000),
     })
+    assertNoRedirect(response)
     if (response.ok === false) {
       return new Error("identity code exchange failed")
     }

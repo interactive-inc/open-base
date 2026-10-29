@@ -52,9 +52,11 @@ bun cli/index.ts bootstrap --email you@example.com --password "$INITIAL_PASSWORD
 
 COMMAND_IDはUUIDを使用します。初期化後はBOOTSTRAP_TOKENを設定から除去してAPIを再起動します。Web UIで登録したメールアドレスとパスワードを使ってログインできます。外部IdPも環境変数で設定できます。
 
+CLI・MCP・WebのAPI通信と、Webの外部認証code交換は、HTTP redirectを自動追従せず失敗として扱います。認証情報や要求bodyの転送を防ぐため、APIと外部認証の接続先には最終URLを明示してください。
+
 ## CLIとMCP
 
-CLIは `base` コマンド、`BASE_API` などの環境変数を使用します。API接続先ごとに認証情報を分けて保存します。CLIとMCPはAPIのHTTP redirectを自動追従せず、通信失敗として扱います。認証情報や要求bodyの転送を防ぐため、接続先にはredirect後の最終API URLを明示してください。
+CLIは `base` コマンド、`BASE_API` などの環境変数を使用します。API接続先ごとに認証情報を分けて保存します。
 
 ```sh
 bun cli/index.ts --help

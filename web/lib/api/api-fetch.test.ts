@@ -20,7 +20,9 @@ describe("apiFetch", () => {
 
     await apiFetch("https://api.example.com/system/health")
 
-    expect(fetchMock).toHaveBeenCalledWith("https://api.example.com/system/health", undefined)
+    expect(fetchMock).toHaveBeenCalledWith("https://api.example.com/system/health", {
+      redirect: "manual",
+    })
   })
 
   test("service binding が無ければ公開 URL へ fetch する", async () => {
@@ -49,6 +51,7 @@ describe("apiFetch", () => {
     const request = binding.fetch.mock.calls[0]?.[0] as Request
     expect(request.url).toBe("https://api.example.com/system/sessions")
     expect(request.method).toBe("PATCH")
+    expect(request.redirect).toBe("manual")
     expect(request.headers.get("Authorization")).toBe("Bearer fixture")
     expect(await request.json()).toEqual({ refresh_token: "fixture" })
   })
