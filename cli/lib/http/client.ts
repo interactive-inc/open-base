@@ -1,3 +1,4 @@
+import { readResponseErrorBody } from "@base/http/read-response-error-body"
 import { ApiError } from "@/lib/errors"
 import { loadConfig } from "@/lib/config/load-config"
 import { SettingsFile } from "@/lib/config/settings-file"
@@ -69,7 +70,7 @@ async function request<T = unknown>(
   })
 
   if (res.ok === false) {
-    const body = await res.text()
+    const body = await readResponseErrorBody(res)
 
     throw toApiError(res.status, body)
   }

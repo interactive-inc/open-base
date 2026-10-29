@@ -1,3 +1,4 @@
+import { readResponseErrorBody } from "@base/http/read-response-error-body"
 import type { AppType } from "api/app"
 import { hc } from "hono/client"
 import { resolveBaseUrl } from "@/lib/config/resolve-base-url"
@@ -71,7 +72,10 @@ function toFetchOrThrow(
 
     if (responses.current.ok) return responses.current
 
-    throw toApiError(responses.current.status, await responses.current.text())
+    throw toApiError(
+      responses.current.status,
+      await readResponseErrorBody(responses.current, callerSignal),
+    )
   }
 
   return Object.assign(handleFetch, { preconnect: fetch.preconnect })

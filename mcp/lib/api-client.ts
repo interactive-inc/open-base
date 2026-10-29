@@ -1,3 +1,4 @@
+import { readResponseErrorBody } from "@base/http/read-response-error-body"
 import { readFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
@@ -261,7 +262,7 @@ export async function apiRequest<T = unknown>(
 
   if (res.ok === false) {
     const contentType = res.headers.get("content-type") ?? ""
-    const body = await res.text()
+    const body = await readResponseErrorBody(res)
 
     throw toApiError(res.status, body, contentType)
   }

@@ -2,11 +2,13 @@ import { afterAll, beforeAll, expect, test } from "bun:test"
 import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { createUnreadableErrorResponse } from "@base/http/create-unreadable-error-response.test-support"
 import { apiRequest, authenticatedFetch } from "@/lib/api-client"
 
 let directory = ""
 let server: ReturnType<typeof Bun.serve> | undefined
 const presented: string[] = []
+const unreadable = { status: 0, finish: (): void => undefined }
 const streaming = { first: false, released: Promise.withResolvers<void>() }
 
 beforeAll(async () => {
@@ -33,6 +35,11 @@ beforeAll(async () => {
           }),
           { status: 401 },
         )
+      }
+      if (url.pathname === "/unreadable" && unreadable.status !== 0) {
+        const broken = createUnreadableErrorResponse(unreadable.status)
+        unreadable.finish = broken.finish
+        return broken.response
       }
       if (request.headers.get("authorization") !== "Bearer fresh-access")
         return Response.json({ error: "unauthorized" }, { status: 401 })
@@ -264,3 +271,30 @@ test("更新結果を保存できない場合も最初の401通信を解放す�
     await writeFile(file, original)
   }
 })
+
+for (const status of [429, 503]) {
+  test(`本文の読取失敗でもAPI ${status}を保持する`, async () => {
+    unreadable.status = status
+    const originalFetch = globalThis.fetch
+    const intercepted = async (
+      input: Parameters<typeof fetch>[0],
+      init?: Parameters<typeof fetch>[1],
+    ): Promise<Response> => {
+      const response = await originalFetch(input, init)
+      if (new URL(input instanceof Request ? input.url : input).pathname === "/unreadable")
+        unreadable.finish()
+      return response
+    }
+    globalThis.fetch = Object.assign(intercepted, { preconnect: originalFetch.preconnect })
+    try {
+      const failure = await apiRequest("/unreadable").catch((error: unknown) => error)
+      expect(failure).toBeInstanceOf(Error)
+      if (!(failure instanceof Error)) throw new Error("expected API error")
+      expect(failure.message).toBe(`API ${status}: 応答本文を読み取れませんでした`)
+      expect(failure.message).not.toContain("example-unreadable-body")
+    } finally {
+      globalThis.fetch = originalFetch
+      unreadable.status = 0
+    }
+  })
+}

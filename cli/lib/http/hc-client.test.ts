@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeEach, expect, test } from "bun:test"
 import { mkdtemp, rm, mkdir } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { createUnreadableErrorResponse } from "@base/http/create-unreadable-error-response.test-support"
 import { SettingsFile } from "@/lib/config/settings-file"
 import { createClient } from "@/lib/http/hc-client"
 import { ApiError } from "@/lib/errors"
@@ -13,6 +14,8 @@ const fixture = {
   denied: false,
   headers: new Array<string | null>(),
   streaming: false,
+  unreadable: false,
+  finish: (): void => undefined,
   released: Promise.withResolvers<void>(),
   controllers: new Array<ReadableStreamDefaultController<Uint8Array>>(),
 }
@@ -27,7 +30,14 @@ const server = Bun.serve({
       })
     }
     fixture.headers.push(request.headers.get("authorization"))
-    if (fixture.denied) return Response.json({ error: "forbidden" }, { status: 403 })
+    if (fixture.denied) {
+      if (fixture.unreadable) {
+        const broken = createUnreadableErrorResponse(403)
+        fixture.finish = broken.finish
+        return broken.response
+      }
+      return Response.json({ error: "forbidden" }, { status: 403 })
+    }
     if (request.headers.get("authorization") === `Bearer example-access-${fixture.generation}`) {
       return Response.json({ workItems: [], nextCursor: null })
     }
@@ -54,6 +64,7 @@ beforeEach(async () => {
   fixture.denied = false
   fixture.headers.length = 0
   fixture.streaming = false
+  fixture.unreadable = false
   fixture.released = Promise.withResolvers<void>()
   fixture.controllers.length = 0
   process.env.BASE_CONFIG_DIR = fixture.directory
@@ -295,4 +306,61 @@ test("refresh persistence failures also release the first streaming response", a
       Bun.sleep(250).then(() => false),
     ]),
   ).toBe(true)
+})
+
+for (const afterRefresh of [false, true]) {
+  test(`keeps HTTP 403 with an unreadable body (afterRefresh=${afterRefresh})`, async () => {
+    fixture.denied = !afterRefresh
+    fixture.unreadable = true
+    const client = await createClient()
+    const originalFetch = globalThis.fetch
+    const intercepted = async (
+      input: Parameters<typeof fetch>[0],
+      init?: Parameters<typeof fetch>[1],
+    ): Promise<Response> => {
+      const response = await originalFetch(input, init)
+      if (init?.method === "PATCH") fixture.denied = true
+      if (response.status === 403) fixture.finish()
+      return response
+    }
+    globalThis.fetch = Object.assign(intercepted, { preconnect: originalFetch.preconnect })
+    try {
+      const failure = await client.system["work-items"]
+        .$get({ query: {} })
+        .catch((error: unknown) => error)
+      expect(failure).toBeInstanceOf(ApiError)
+      if (!(failure instanceof ApiError)) throw new Error("expected ApiError")
+      expect(failure.status).toBe(403)
+      expect(failure.message).toContain("応答本文を読み取れませんでした")
+      expect(failure.message).not.toContain("example-unreadable-body")
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+}
+
+test("a caller abort during an error body remains a caller abort", async () => {
+  fixture.denied = true
+  fixture.unreadable = true
+  const client = await createClient()
+  const caller = new AbortController()
+  const originalFetch = globalThis.fetch
+  const intercepted = async (
+    input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1],
+  ): Promise<Response> => {
+    const response = await originalFetch(input, init)
+    if (response.status === 403) caller.abort()
+    return response
+  }
+  globalThis.fetch = Object.assign(intercepted, { preconnect: originalFetch.preconnect })
+  try {
+    const failure = await client.system["work-items"]
+      .$get({ query: {} }, { init: { signal: caller.signal } })
+      .catch((error: unknown) => error)
+    expect(failure).toMatchObject({ name: "AbortError" })
+    expect(fixture.generation).toBe(1)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
 })
