@@ -4,28 +4,31 @@ import { zValidator } from "@hono/zod-validator"
 import { createClient } from "@/lib/http/hc-client"
 import { factory } from "@/factory"
 import { UsageError } from "@/lib/errors"
+import { resolveNotificationId } from "@/app/notifications/lib/resolve-notification-id"
 
-export const help = `base notifications delete --id <notification-id>`
+export const help = `base notifications delete <notification-id>
+base notifications delete --id <notification-id>`
 
 export default factory.createHandlers(
   zValidator("json", z.object({ help: z.string().optional(), id: z.string().optional() })),
+  zValidator("param", z.object({ notification_id: z.string().optional() })),
   async (c) => {
     const query = c.req.valid("json")
 
     if (query.help) return c.text(help)
 
-    if (!query.id) throw new UsageError("--id が必要です")
+    const id = resolveNotificationId(c.req.valid("param").notification_id, query.id)
 
     const client = await createClient()
 
     const response = await client.system.notifications[":id"].$delete({
-      param: encodePathParams({ id: query.id }),
+      param: encodePathParams({ id }),
     })
 
     if (response.status !== 204) {
       throw new UsageError("通知の削除に失敗しました")
     }
 
-    return c.json({ id: query.id, status: "deleted" })
+    return c.json({ id, status: "deleted" })
   },
 )
