@@ -64,4 +64,7 @@ commands:
 options:
   --help, -h                  ヘルプを表示
 
+値を取るflagは --flag value または --flag=value で指定します。
+-で始まる値は --flag=value を使ってください。
+
 詳細: base <command> --help`

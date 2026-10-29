@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { toRequest } from "@/lib/router/router"
+import { toRequestOrExit } from "@/lib/router/to-request-or-exit"
 import { helpText } from "@/lib/help-text"
 import { app } from "@/app"
 
@@ -10,18 +10,18 @@ if (args.length === 0) {
   process.exit(0)
 }
 
-const { path, url, body } = toRequest(args)
+const request = toRequestOrExit(args)
 
 // ルート直下の help はトップヘルプを返す
-if (body.help !== undefined && path === "/") {
+if (request.body.help !== undefined && request.path === "/") {
   process.stdout.write(`${helpText}\n`)
   process.exit(0)
 }
 
-const res = await app.request(url, {
+const res = await app.request(request.url, {
   method: "POST",
   headers: { "content-type": "application/json" },
-  body: JSON.stringify(body),
+  body: JSON.stringify(request.body),
 })
 
 /**
@@ -32,7 +32,7 @@ const res = await app.request(url, {
 const isHandlerError = res.headers.get("x-base-handler-error") === "1"
 
 if (!res.ok && res.status === 404 && !isHandlerError) {
-  const segments = path.split("/").filter(Boolean)
+  const segments = request.path.split("/").filter(Boolean)
   for (let depth = segments.length - 1; depth >= 1; depth--) {
     const parentPath = `/${segments.slice(0, depth).join("/")}`
     const helpRes = await app.request(`http://localhost${parentPath}`, {
