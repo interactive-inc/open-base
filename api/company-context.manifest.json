@@ -651,6 +651,7 @@
     "src/contexts/company/test/company-governance-reference-periods.integration.d1.test.ts",
     "src/contexts/company/test/company-grade-assignment.integration.d1.test.ts",
     "src/contexts/company/test/company-grade-assignment.test-support.ts",
+    "src/contexts/company/test/company-notification-publication.integration.d1.test.ts",
     "src/contexts/company/test/company-organization-revision-guard.integration.d1.test.ts",
     "src/contexts/company/test/company-organization-snapshot-revision.api.d1.test.ts",
     "src/contexts/company/test/company-personal-governance-employment.integration.d1.test.ts",

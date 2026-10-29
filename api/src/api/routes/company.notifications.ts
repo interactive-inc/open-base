@@ -1,3 +1,4 @@
+import { EmployeeNotificationAuthorizationAdapter } from "@/api/http/notifications/employee-notification-authorization.adapter"
 import { PublishEmployeeNotification } from "@/api/http/notifications/publish-employee-notification"
 import { companyNotificationKindSchema } from "@/api/http/notifications/notification-kind.definition"
 import { ApplicationError } from "@/lib/errors"
@@ -34,7 +35,14 @@ export const POST = factory.createHandlers(
       throw new UnauthorizedError()
     }
 
+    const authorization = await new EmployeeNotificationAuthorizationAdapter(c).prepare({
+      session,
+      recipientEmployeeCode: body.recipient_employee_code,
+    })
+    if (authorization instanceof ApplicationError) throw toHttpException(authorization)
+
     const result = await new PublishEmployeeNotification(c).run({
+      authorization,
       session: session,
       recipientEmployeeCode: body.recipient_employee_code,
       kind: body.kind,

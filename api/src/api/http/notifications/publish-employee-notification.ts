@@ -10,6 +10,7 @@ import type { ApplicationError } from "@/lib/errors"
 
 export type Command = {
   session: CompanySessionValue
+  authorization: () => ReadonlyArray<D1PreparedStatement> | Error
   recipientEmployeeCode: string
   kind: CompanyNotificationKind
   title: string
@@ -47,15 +48,18 @@ export class PublishEmployeeNotification {
       return new NotFoundError("recipient not found", "recipient_not_found")
     }
 
-    const created = await new EmployeeNotificationAdapter(this.c).create({
-      recipientEmployeeId: recipient.id,
-      kind: command.kind,
-      title: command.title,
-      body: command.body,
-      sourceDomain: command.sourceDomain,
-      sourceId: command.sourceId,
-      createdAt: command.createdAt,
-    })
+    const created = await new EmployeeNotificationAdapter(this.c).create(
+      {
+        recipientEmployeeId: recipient.id,
+        kind: command.kind,
+        title: command.title,
+        body: command.body,
+        sourceDomain: command.sourceDomain,
+        sourceId: command.sourceId,
+        createdAt: command.createdAt,
+      },
+      { guards: command.authorization },
+    )
 
     if (created instanceof Error) {
       return new UnexpectedError("failed to create notification", { cause: created })

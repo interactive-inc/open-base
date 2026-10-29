@@ -34,12 +34,16 @@ export class EmployeeNotificationAdapter {
   constructor(private readonly c: Context) {}
 
   /**
-   * `guards` は通知と同じbatchで先に評価する条件文。業務の書込み停止などで条件が失敗すると、
+   * `guards` は通知と同じbatchで保存前後に評価する条件文。業務の書込み停止などで条件が失敗すると、
    * 通知と配送は一つも保存されない。
    */
   async create(
     props: EmployeeNotification,
-    options: Readonly<{ guards?: ReadonlyArray<D1PreparedStatement> }> = {},
+    options: Readonly<{
+      guards?:
+        | ReadonlyArray<D1PreparedStatement>
+        | (() => ReadonlyArray<D1PreparedStatement> | Error)
+    }> = {},
   ): Promise<PublishedEmployeeNotification | Error> {
     const resolved = await resolveCompanyAccountEmployeeLink(
       this.c,
@@ -96,7 +100,9 @@ export class EmployeeNotificationAdapter {
       ],
     })
     if (statements instanceof Error) return statements
-    const batch = [...(options.guards ?? []), ...statements]
+    const guards = typeof options.guards === "function" ? options.guards() : (options.guards ?? [])
+    if (guards instanceof Error) return guards
+    const batch = [...guards, ...statements, ...guards]
 
     try {
       const results = await this.c.env.DB.batch(batch)

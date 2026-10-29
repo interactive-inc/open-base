@@ -1,7 +1,7 @@
 {
   "version": 1,
   "files": {
-    "company-context.manifest.json": "20ae981a0b45cadc5c61532d53c414cf347bdbdc5003f3451db748b9ae54621e",
+    "company-context.manifest.json": "32fe1bf26029ec268e0313dae875eda699e828b0f4c695d26bf8ae9e866b7b79",
     "src/contexts/company/AGENTS.md": "3d0dc1a9f6b424d37b4565cfc2c23bea199349e9840d61596adbdb1f060d3e6d",
     "src/contexts/company/application/account-employee-links/create-account-employee-links.ts": "ca3b3ebfa9f6389facba7baf9f43f1300807f7b548d4fda164fc3fd1edd4447a",
     "src/contexts/company/application/account-employee-links/delete-account-employee-links.ts": "4b692c21c8788265f45a99ecb3181dde96291902815ea8b248821a727eb451af",
@@ -651,6 +651,7 @@
     "src/contexts/company/test/company-governance-reference-periods.integration.d1.test.ts": "94f01e99e685b3b1ea131acfcce7602f19a2980bcf1b791bb18eacb3228e1a04",
     "src/contexts/company/test/company-grade-assignment.integration.d1.test.ts": "dee1f46232eebe8b82d18cd9cfdad64aa5e15f114c7612274b23272c50e842a1",
     "src/contexts/company/test/company-grade-assignment.test-support.ts": "1fb6162b4bdd9db003cec909726d3e8ffc0ea3c8c6a5869639ed38f0e695c01a",
+    "src/contexts/company/test/company-notification-publication.integration.d1.test.ts": "9859742fc8aac20f77e559f4b06abbcb9efe34d13d154f35fce44df2713f096b",
     "src/contexts/company/test/company-organization-revision-guard.integration.d1.test.ts": "73d8f0e598370b9bcab0897f376536b4886377982fdceebaa57caed498948bef",
     "src/contexts/company/test/company-organization-snapshot-revision.api.d1.test.ts": "31470c219e3ddd90227e87c04dd5652228e075f0e184df8a2ea11d40634d7a12",
     "src/contexts/company/test/company-personal-governance-employment.integration.d1.test.ts": "86157d4b18356f92b28ce233ca6d10bf1d7d2a032a979b4a8cba02b316d546e0",
