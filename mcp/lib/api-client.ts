@@ -201,20 +201,29 @@ export async function authenticatedFetch(path: string | URL, options: Props): Pr
   if (session.token !== null) headers.set("Authorization", `Bearer ${session.token}`)
 
   const url = new URL(path, session.baseUrl)
+  const firstAttempt = new AbortController()
   const response = await fetch(url, {
     ...options,
     headers,
-    signal: options.signal ?? AbortSignal.timeout(15_000),
+    signal: AbortSignal.any([options.signal ?? AbortSignal.timeout(15_000), firstAttempt.signal]),
   })
   if (response.status !== 401) return response
 
-  const token = await sessionRefreshes.refresh({
-    baseUrl: session.baseUrl,
-    failedToken: session.token,
-  })
+  const token = await sessionRefreshes
+    .refresh({
+      baseUrl: session.baseUrl,
+      failedToken: session.token,
+    })
+    .catch((error: unknown) => {
+      firstAttempt.abort()
+      void response.body?.cancel().catch(() => undefined)
+      throw error
+    })
   if (token === null) return response
 
-  await response.body?.cancel()
+  // Bunの通信も解放する。cleanupの失敗や停止で再送を止めない。
+  firstAttempt.abort()
+  void response.body?.cancel().catch(() => undefined)
   headers.set("Authorization", `Bearer ${token}`)
 
   return fetch(url, { ...options, headers, signal: options.signal ?? AbortSignal.timeout(15_000) })

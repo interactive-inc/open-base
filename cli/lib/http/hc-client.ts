@@ -30,7 +30,16 @@ function toFetchOrThrow(
         headers.set("Authorization", `Bearer ${authentication.token}`)
     }
 
-    const outgoing = { ...init, headers }
+    const firstAttempt = new AbortController()
+    const callerSignal = init?.signal ?? null
+    const outgoing = {
+      ...init,
+      headers,
+      signal:
+        callerSignal === null
+          ? firstAttempt.signal
+          : AbortSignal.any([callerSignal, firstAttempt.signal]),
+    }
     const responses = { current: await fetch(input, outgoing) }
 
     if (responses.current.ok) {
@@ -38,16 +47,25 @@ function toFetchOrThrow(
     }
 
     if (responses.current.status === 401 && usesStoredAuthentication && canRefreshSession) {
-      const refreshed = await new SettingsFile().refreshTokens(
-        baseUrl,
-        headers.get("Authorization")?.replace(/^Bearer /, "") ?? null,
-        (refreshToken) => rotateTokens(baseUrl, refreshToken),
-      )
+      const refreshed = await new SettingsFile()
+        .refreshTokens(
+          baseUrl,
+          headers.get("Authorization")?.replace(/^Bearer /, "") ?? null,
+          (refreshToken) => rotateTokens(baseUrl, refreshToken),
+        )
+        .catch((error: unknown) => {
+          firstAttempt.abort()
+          void responses.current.body?.cancel().catch(() => undefined)
+          throw error
+        })
 
       if (refreshed !== null && refreshed.token !== null) {
+        // Bunの通信も解放する。cleanupの失敗や停止で再送を止めない。
+        firstAttempt.abort()
+        void responses.current.body?.cancel().catch(() => undefined)
         authentication.token = refreshed.token
         headers.set("Authorization", `Bearer ${refreshed.token}`)
-        responses.current = await fetch(input, outgoing)
+        responses.current = await fetch(input, { ...init, headers })
       }
     }
 

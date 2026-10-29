@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeEach, expect, test } from "bun:test"
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdtemp, rm, mkdir } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { SettingsFile } from "@/lib/config/settings-file"
@@ -7,7 +7,15 @@ import { createClient } from "@/lib/http/hc-client"
 import { ApiError } from "@/lib/errors"
 
 const previous = { directory: process.env.BASE_CONFIG_DIR, api: process.env.BASE_API }
-const fixture = { directory: "", generation: 0, denied: false, headers: new Array<string | null>() }
+const fixture = {
+  directory: "",
+  generation: 0,
+  denied: false,
+  headers: new Array<string | null>(),
+  streaming: false,
+  released: Promise.withResolvers<void>(),
+  controllers: new Array<ReadableStreamDefaultController<Uint8Array>>(),
+}
 const server = Bun.serve({
   port: 0,
   fetch(request) {
@@ -21,8 +29,21 @@ const server = Bun.serve({
     fixture.headers.push(request.headers.get("authorization"))
     if (fixture.denied) return Response.json({ error: "forbidden" }, { status: 403 })
     if (request.headers.get("authorization") === `Bearer example-access-${fixture.generation}`) {
-      return Response.json({ ok: true })
+      return Response.json({ workItems: [], nextCursor: null })
     }
+    if (fixture.streaming)
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            fixture.controllers.push(controller)
+            controller.enqueue(new TextEncoder().encode("expired"))
+          },
+          cancel() {
+            fixture.released.resolve()
+          },
+        }),
+        { status: 401 },
+      )
     return Response.json({ error: "expired" }, { status: 401 })
   },
 })
@@ -32,6 +53,9 @@ beforeEach(async () => {
   fixture.generation = 1
   fixture.denied = false
   fixture.headers.length = 0
+  fixture.streaming = false
+  fixture.released = Promise.withResolvers<void>()
+  fixture.controllers.length = 0
   process.env.BASE_CONFIG_DIR = fixture.directory
   process.env.BASE_API = `http://127.0.0.1:${server.port}`
   await new SettingsFile().saveTokens(process.env.BASE_API, {
@@ -41,6 +65,13 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  for (const controller of fixture.controllers) {
+    try {
+      controller.close()
+    } catch {
+      continue
+    }
+  }
   if (previous.directory === undefined) delete process.env.BASE_CONFIG_DIR
   else process.env.BASE_CONFIG_DIR = previous.directory
   if (previous.api === undefined) delete process.env.BASE_API
@@ -125,4 +156,143 @@ test("an accepted explicit bearer is preserved without replacing the saved sessi
     token: "example-access-0",
     refresh_token: "example-refresh-0",
   })
+})
+
+test("a refreshed request releases the first streaming 401 body", async () => {
+  fixture.streaming = true
+  const client = await createClient()
+  const response = await client.system["work-items"].$get({ query: {} })
+  expect(await response.json()).toEqual({ workItems: [], nextCursor: null })
+  expect(
+    await Promise.race([
+      fixture.released.promise.then(() => true),
+      Bun.sleep(250).then(() => false),
+    ]),
+  ).toBe(true)
+  expect(fixture.headers).toEqual(["Bearer example-access-0", "Bearer example-access-2"])
+})
+
+test("a failed first-body cancellation does not discard a successful refresh", async () => {
+  const client = await createClient()
+  const originalFetch = globalThis.fetch
+  const intercepted = async (
+    input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1],
+  ): Promise<Response> => {
+    const response = await originalFetch(input, init)
+    if (response.status !== 401) return response
+    await response.body?.cancel()
+    return new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.error(new Error("example-initial-body-error"))
+        },
+      }),
+      { status: 401 },
+    )
+  }
+  globalThis.fetch = Object.assign(intercepted, { preconnect: originalFetch.preconnect })
+  try {
+    const response = await client.system["work-items"].$get({ query: {} })
+    expect(await response.json()).toEqual({ workItems: [], nextCursor: null })
+    expect(fixture.headers).toEqual(["Bearer example-access-0", "Bearer example-access-2"])
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("a stalled first-body cancellation does not hold the authenticated retry", async () => {
+  const client = await createClient()
+  const originalFetch = globalThis.fetch
+  const release = Promise.withResolvers<void>()
+  const lifecycle = { cancellations: 0 }
+  const intercepted = async (
+    input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1],
+  ): Promise<Response> => {
+    const response = await originalFetch(input, init)
+    if (response.status !== 401) return response
+    await response.body?.cancel()
+    return new Response(
+      new ReadableStream({
+        cancel() {
+          lifecycle.cancellations += 1
+          return release.promise
+        },
+      }),
+      { status: 401 },
+    )
+  }
+  globalThis.fetch = Object.assign(intercepted, { preconnect: originalFetch.preconnect })
+  const completion = client.system["work-items"].$get({ query: {} })
+  try {
+    expect(
+      await Promise.race([completion.then(() => true), Bun.sleep(500).then(() => false)]),
+    ).toBe(true)
+    expect(await (await completion).json()).toEqual({ workItems: [], nextCursor: null })
+    expect(lifecycle.cancellations).toBe(1)
+    expect(fixture.headers).toEqual(["Bearer example-access-0", "Bearer example-access-2"])
+  } finally {
+    release.resolve()
+    await completion.catch(() => undefined)
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("releasing the first request preserves the caller signal for the retry", async () => {
+  const client = await createClient()
+  const caller = new AbortController()
+  const originalFetch = globalThis.fetch
+  const signals = new Array<AbortSignal | null | undefined>()
+  const intercepted = async (
+    input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1],
+  ): Promise<Response> => {
+    if (init?.method !== "PATCH") signals.push(init?.signal)
+    return originalFetch(input, init)
+  }
+  globalThis.fetch = Object.assign(intercepted, { preconnect: originalFetch.preconnect })
+  try {
+    const response = await client.system["work-items"].$get(
+      { query: {} },
+      { init: { signal: caller.signal } },
+    )
+    expect(await response.json()).toEqual({ workItems: [], nextCursor: null })
+    expect(signals).toHaveLength(2)
+    expect(signals[0]?.aborted).toBe(true)
+    expect(signals[1]).toBe(caller.signal)
+    expect(caller.signal.aborted).toBe(false)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("a caller-aborted request does not refresh or retry", async () => {
+  const client = await createClient()
+  const caller = new AbortController()
+  caller.abort()
+  const failure = await client.system["work-items"]
+    .$get({ query: {} }, { init: { signal: caller.signal } })
+    .catch((error: unknown) => error)
+  expect(failure).toMatchObject({ name: "AbortError" })
+  expect(fixture.generation).toBe(1)
+  expect(fixture.headers).toEqual([])
+})
+
+test("refresh persistence failures also release the first streaming response", async () => {
+  const client = await createClient()
+  await rm(join(fixture.directory, "settings.json"))
+  await mkdir(join(fixture.directory, "settings.json"))
+  fixture.streaming = true
+  const failure = await client.system["work-items"]
+    .$get({ query: {} })
+    .catch((error: unknown) => error)
+  expect(failure).toBeInstanceOf(Error)
+  expect(fixture.generation).toBe(1)
+  expect(
+    await Promise.race([
+      fixture.released.promise.then(() => true),
+      Bun.sleep(250).then(() => false),
+    ]),
+  ).toBe(true)
 })
