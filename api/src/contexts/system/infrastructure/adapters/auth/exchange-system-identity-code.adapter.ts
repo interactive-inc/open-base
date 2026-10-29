@@ -32,9 +32,11 @@ export class ExchangeSystemIdentityCodeAdapter {
           redirect_uri: props.redirectUri,
           code_verifier: props.codeVerifier,
         }),
+        redirect: "manual",
         signal: AbortSignal.timeout(10_000),
       })
       if (response.ok === false) {
+        void response.body?.cancel().catch(() => undefined)
         return new Error("identity code exchange failed")
       }
 
