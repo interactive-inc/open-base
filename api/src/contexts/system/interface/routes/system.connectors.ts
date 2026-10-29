@@ -1,3 +1,5 @@
+import { prepareSystemWriteAuthorization } from "@system/interface/authorization/prepare-system-write-authorization"
+import { PrepareSystemReadAuthorizationAdapter } from "@system/infrastructure/adapters/iam/prepare-system-read-authorization.adapter"
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
 /** /system/connectors */
 import { CreateSystemConnector } from "@system/application/integration/create-system-connector"
@@ -76,7 +78,14 @@ export const POST = systemFactory.createHandlers(
       occurredAt: now,
     })
     if (event instanceof Error) throw new SystemIntegrationUnavailableError(event)
-    const systemContext = { env: { DB: context.env.DB } }
+    const assertions = await prepareSystemWriteAuthorization(context, {
+      now,
+      requiredPermission: "integration:write",
+      stepUpToken: context.req.header("x-system-step-up") ?? "",
+    })
+    if (assertions === "forbidden") throw new SystemForbiddenError()
+    if (assertions instanceof Error) throw new SystemIntegrationUnavailableError(assertions)
+    const systemContext = { env: { DB: context.env.DB }, assertions }
     const repository = new SystemConnectorRepository(systemContext)
     const auditStatements = new SystemAuditEventRepository(systemContext).prepareAppend(event)
     const result = await new CreateSystemConnector({
@@ -93,6 +102,11 @@ export const POST = systemFactory.createHandlers(
       updatedAt: now,
     })
     if (result instanceof Error) throw new SystemIntegrationInvalidError(result)
+    if (
+      result.kind === "unavailable" &&
+      PrepareSystemReadAuthorizationAdapter.isRejected(result.cause)
+    )
+      throw new SystemForbiddenError()
     if (result.kind === "conflict") throw new SystemIntegrationConflictError()
     if (result.kind === "unavailable") throw new SystemIntegrationUnavailableError(result.cause)
     return context.json(

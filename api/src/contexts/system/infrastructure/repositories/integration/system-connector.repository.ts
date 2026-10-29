@@ -1,3 +1,4 @@
+import { PrepareSystemReadAuthorizationAdapter } from "@system/infrastructure/adapters/iam/prepare-system-read-authorization.adapter"
 import type { SystemD1Context } from "@system/configuration/system-context"
 import { SystemConnectorEntity } from "@system/domain/entities/system-connector.entity"
 
@@ -8,7 +9,7 @@ export type SystemConnectorWriteResult =
   | Readonly<{ kind: "unavailable"; cause: unknown }>
 
 type ConnectorRow = Readonly<Record<string, unknown>>
-type Context = SystemD1Context
+type Context = SystemD1Context & Readonly<{ assertions?: ReadonlyArray<D1PreparedStatement> }>
 
 /** Connector定義のD1永続化。 */
 export class SystemConnectorRepository {
@@ -40,6 +41,7 @@ export class SystemConnectorRepository {
   ): Promise<SystemConnectorWriteResult> {
     try {
       const statements = [
+        ...(this.c.assertions ?? []),
         this.c.env.DB.prepare(
           `INSERT INTO system_connectors
              (id, key, name, direction, transport, status, revision, created_at, updated_at)
@@ -56,6 +58,7 @@ export class SystemConnectorRepository {
           connector.updatedAt.getTime(),
         ),
         ...auditStatements,
+        ...(this.c.assertions ?? []),
       ]
       const results = await this.c.env.DB.batch(statements)
       if (results.length !== statements.length || results.some((result) => !result.success)) {
@@ -63,8 +66,10 @@ export class SystemConnectorRepository {
       }
       return { kind: "created", connector }
     } catch (cause) {
+      if (PrepareSystemReadAuthorizationAdapter.isRejected(cause))
+        return { kind: "unavailable", cause }
       const existing = await this.findByKey(connector.key)
-      if (existing instanceof Error) return { kind: "unavailable", cause }
+      if (existing instanceof Error) return { kind: "unavailable", cause: existing }
       if (existing === null) return { kind: "unavailable", cause }
       return sameConnector(existing, connector)
         ? { kind: "replayed", connector: existing }
@@ -97,6 +102,7 @@ export class SystemConnectorRepository {
     if (current.revision !== expectedRevision) return "conflict"
     try {
       const statements = [
+        ...(this.c.assertions ?? []),
         this.c.env.DB.prepare(
           `UPDATE system_connectors
            SET name = ?2, status = ?3, revision = ?4, updated_at = ?5
@@ -113,6 +119,7 @@ export class SystemConnectorRepository {
           "SELECT CASE WHEN changes() = 1 THEN 1 ELSE abs(-9223372036854775808) END AS ok",
         ),
         ...auditStatements,
+        ...(this.c.assertions ?? []),
       ]
       const results = await this.c.env.DB.batch(statements)
       if (results.length !== statements.length || results.some((result) => !result.success)) {
@@ -127,12 +134,19 @@ export class SystemConnectorRepository {
 
   private async findByKey(key: string): Promise<SystemConnectorEntity | null | Error> {
     try {
-      const row = await this.c.env.DB.prepare(
+      const statement = this.c.env.DB.prepare(
         `SELECT id, key, name, direction, transport, status, revision, created_at, updated_at
          FROM system_connectors WHERE key = ?1 LIMIT 1`,
-      )
-        .bind(key)
-        .first<ConnectorRow>()
+      ).bind(key)
+      const assertions = this.c.assertions ?? []
+      const checked = await this.c.env.DB.batch<ConnectorRow>([
+        ...assertions,
+        statement,
+        ...assertions,
+      ])
+      if (checked.length !== assertions.length * 2 + 1 || checked.some((result) => !result.success))
+        return new Error("connector replay authorization failed")
+      const row = checked[assertions.length]?.results.at(0) ?? null
       return row === null ? null : toConnector(row)
     } catch (cause) {
       return cause instanceof Error ? cause : new Error("failed to find System Connector")

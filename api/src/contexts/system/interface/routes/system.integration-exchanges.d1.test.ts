@@ -1,3 +1,4 @@
+import { SystemConnectorRepository } from "@system/infrastructure/repositories/integration/system-connector.repository"
 import { execSql } from "@system/test/local-d1/exec-sql.test-support"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { SystemPrincipalSecretService } from "@system/lib/auth/system-principal-secret-service"
@@ -23,7 +24,7 @@ import {
 import { createSystemSessionApplications } from "@system/test/create-system-session-applications.test-support"
 import { SystemSessionTestContext } from "@system/test/system-session-test-context.test-support"
 import { seedSystemStepUpGrant } from "@system/test/seed-system-step-up-grant.test-support"
-import { describe, expect, setDefaultTimeout, test } from "bun:test"
+import { describe, expect, setDefaultTimeout, spyOn, test } from "bun:test"
 import { hc } from "hono/client"
 
 // ローカルD1のtemplate作成とDBごとの往復を含むため、既定の5秒を超えることがある。
@@ -308,3 +309,234 @@ async function seedConnectorMachine(
     .run()
   return { credential_id: "d186abc8-6d6e-4835-aaa8-55bbc51dcd41", secret }
 }
+
+async function connectorMutationFixture(shortStepUp = false) {
+  const fixture = await SystemSessionTestContext.create()
+  const now = new Date()
+  await seedAuthorization(fixture, now)
+  const stepUp = await seedSystemStepUpGrant(
+    fixture,
+    accountId,
+    shortStepUp ? new Date(now.getTime() - 299_000) : now,
+  )
+  const session = await issueSession(fixture, accountId)
+  if (session instanceof Error || session.kind === "rejected")
+    throw new Error("test session issuance failed")
+  const app = systemFactory
+    .createApp()
+    .use("*", async (c, next) => {
+      c.set("now", () => now)
+      await next()
+    })
+    .post("/system/connectors", ...connectorsPOST)
+    .patch("/system/connectors/:connectorId", ...connectorPATCH)
+  const headers = {
+    authorization: `Bearer ${session.accessToken}`,
+    "x-system-step-up": stepUp,
+    "content-type": "application/json",
+  }
+  const request = (path: string, method: string, body: unknown, actor = headers) =>
+    app.request(
+      path,
+      { method, headers: actor, body: JSON.stringify(body) },
+      { DB: fixture.database, JWT_SECRET: "system-session-test-jwt-secret" },
+    )
+  expect((await request("/system/connectors", "POST", connectorInput())).status).toBe(201)
+  const snapshot = () =>
+    fixture.database
+      .prepare(`SELECT group_concat(id || ':' || name || ':' || status || ':' || revision) AS connectors,
+    (SELECT count(*) FROM system_audit_events) AS audits FROM system_connectors`)
+      .first<Record<string, unknown>>()
+  return { fixture, database: fixture.database, request, snapshot, now }
+}
+
+type ConnectorMutationCase = Readonly<{
+  operation: "create" | "update" | "replay"
+  change: "logout" | "authority" | "step-up" | "version" | "expiry"
+}>
+const connectorMutationCases: ReadonlyArray<ConnectorMutationCase> = [
+  { operation: "create", change: "logout" },
+  { operation: "update", change: "logout" },
+  { operation: "replay", change: "logout" },
+  { operation: "create", change: "authority" },
+  { operation: "create", change: "step-up" },
+  { operation: "create", change: "version" },
+  { operation: "create", change: "expiry" },
+]
+for (const scenario of connectorMutationCases) {
+  const operation = scenario.operation
+  test(`Connector ${operation}保存前の${scenario.change}で状態と成功監査を返さない`, async () => {
+    const f = await connectorMutationFixture(scenario.change === "expiry")
+    const before = await f.snapshot()
+    const write = spyOn(SystemConnectorRepository.prototype, "write")
+    const update = spyOn(SystemConnectorRepository.prototype, "update")
+    const originalWrite = write.getMockImplementation()
+    const originalUpdate = update.getMockImplementation()
+    if (!originalWrite || !originalUpdate) throw new Error("missing original Connector methods")
+    const revoke = async () => {
+      if (scenario.change === "authority") {
+        await f.database
+          .prepare("UPDATE system_role_bindings SET revoked_at=?1")
+          .bind(f.now.getTime())
+          .run()
+        return
+      }
+      if (scenario.change === "step-up") {
+        await f.database
+          .prepare("UPDATE system_step_up_grants SET revoked_at=?1")
+          .bind(Date.now())
+          .run()
+        return
+      }
+      if (scenario.change === "version") {
+        await f.database
+          .prepare("UPDATE system_accounts SET token_version=token_version+1 WHERE id=?1")
+          .bind(accountId)
+          .run()
+        return
+      }
+      if (scenario.change === "expiry") {
+        const expiry = await f.database
+          .prepare("SELECT max(expires_at) AS expiry FROM system_step_up_grants")
+          .first<number>("expiry")
+        if (expiry === null) throw new Error("missing step-up expiry")
+        expect(Date.now()).toBeLessThan(expiry)
+        await Bun.sleep(Math.max(0, expiry - Date.now()) + 50)
+        return
+      }
+      await f.database.prepare("UPDATE system_sessions SET revoked_at=?1").bind(Date.now()).run()
+    }
+    write.mockImplementation(async function (this: SystemConnectorRepository, ...args) {
+      if (operation !== "update") await revoke()
+      return originalWrite.call(this, ...args)
+    })
+    update.mockImplementation(async function (this: SystemConnectorRepository, ...args) {
+      if (operation === "update") await revoke()
+      return originalUpdate.call(this, ...args)
+    })
+    try {
+      const response =
+        operation === "update"
+          ? await f.request("/system/connectors/connector:1", "PATCH", {
+              name: "Changed connector",
+              status: "disabled",
+              expected_revision: 1,
+              reason: "Test update",
+            })
+          : await f.request(
+              "/system/connectors",
+              "POST",
+              operation === "replay"
+                ? connectorInput()
+                : { ...connectorInput(), id: "connector:2", key: "extra" },
+            )
+      expect({ status: response.status, snapshot: await f.snapshot() }).toEqual({
+        status: 403,
+        snapshot: before,
+      })
+    } finally {
+      write.mockRestore()
+      update.mockRestore()
+    }
+  })
+}
+
+for (const operation of ["create", "update"]) {
+  test(`Connector ${operation} transaction内のlogoutは設定と監査を巻き戻す`, async () => {
+    const f = await connectorMutationFixture()
+    const before = await f.snapshot()
+    const trigger = operation === "create" ? "INSERT" : "UPDATE"
+    await f.database
+      .prepare(
+        `CREATE TRIGGER revoke_connector_session AFTER ${trigger} ON system_connectors BEGIN UPDATE system_sessions SET revoked_at=${Date.now()}; END`,
+      )
+      .run()
+    const response =
+      operation === "create"
+        ? await f.request("/system/connectors", "POST", {
+            ...connectorInput(),
+            id: "connector:2",
+            key: "extra",
+          })
+        : await f.request("/system/connectors/connector:1", "PATCH", {
+            name: "Changed connector",
+            status: "disabled",
+            expected_revision: 1,
+            reason: "Test update",
+          })
+    expect(response.status).toBe(403)
+    expect(await f.snapshot()).toEqual(before)
+  })
+}
+
+for (const revoked of [false, true]) {
+  test(`Connector単位の権限を他のConnectorへ広げず、途中失権を拒否する: ${revoked}`, async () => {
+    const f = await connectorMutationFixture()
+    expect(
+      (
+        await f.request("/system/connectors", "POST", {
+          ...connectorInput(),
+          id: "connector:2",
+          key: "extra",
+        })
+      ).status,
+    ).toBe(201)
+    const raw = await seedSystemStepUpGrant(f.fixture, scopedAccountId, f.now)
+    const session = await issueSession(f.fixture, scopedAccountId)
+    if (session instanceof Error || session.kind === "rejected")
+      throw new Error("scoped session issuance failed")
+    const headers = {
+      authorization: `Bearer ${session.accessToken}`,
+      "x-system-step-up": raw,
+      "content-type": "application/json",
+    }
+    const command = {
+      name: "Scoped connector",
+      status: "disabled",
+      expected_revision: 1,
+      reason: "Test update",
+    }
+    expect(
+      (await f.request("/system/connectors/connector:2", "PATCH", command, headers)).status,
+    ).toBe(403)
+    expect(
+      (
+        await f.request(
+          "/system/connectors",
+          "POST",
+          { ...connectorInput(), id: "connector:3", key: "third" },
+          headers,
+        )
+      ).status,
+    ).toBe(403)
+    const update = spyOn(SystemConnectorRepository.prototype, "update")
+    const original = update.getMockImplementation()
+    if (!original) throw new Error("missing original Connector update")
+    update.mockImplementation(async function (this: SystemConnectorRepository, ...args) {
+      if (revoked)
+        await f.database
+          .prepare("UPDATE system_role_bindings SET revoked_at=?1 WHERE account_id=?2")
+          .bind(f.now.getTime(), scopedAccountId)
+          .run()
+      return original.call(this, ...args)
+    })
+    try {
+      expect(
+        (await f.request("/system/connectors/connector:1", "PATCH", command, headers)).status,
+      ).toBe(revoked ? 403 : 200)
+    } finally {
+      update.mockRestore()
+    }
+  })
+}
+
+test("現在の資格ならConnectorの同一再送を受け付け内容の異なる再送は競合にする", async () => {
+  const f = await connectorMutationFixture()
+  const before = await f.snapshot()
+  expect((await f.request("/system/connectors", "POST", connectorInput())).status).toBe(200)
+  expect(
+    (await f.request("/system/connectors", "POST", { ...connectorInput(), name: "Other name" }))
+      .status,
+  ).toBe(409)
+  expect(await f.snapshot()).toEqual(before)
+})

@@ -100,6 +100,7 @@ export class PrepareSystemReadAuthorizationAdapter {
         return null
       return {
         permissionKeys: keys,
+        scopedPermissionKeys: canonical.scopedPermissionKeys,
         assertions: (
           now: Date,
           principalRename?: Readonly<{

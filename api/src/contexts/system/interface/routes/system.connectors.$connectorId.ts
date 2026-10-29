@@ -1,3 +1,5 @@
+import { prepareSystemWriteAuthorization } from "@system/interface/authorization/prepare-system-write-authorization"
+import { PrepareSystemReadAuthorizationAdapter } from "@system/infrastructure/adapters/iam/prepare-system-read-authorization.adapter"
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
 import { SystemAuditEventEntity } from "@system/domain/entities/system-audit-event.entity"
 import { StableSystemAuditJsonValue } from "@system/domain/values/audit/stable-system-audit-json.value"
@@ -45,7 +47,15 @@ export const PATCH = systemFactory.createHandlers(
     ) {
       throw new SystemForbiddenError()
     }
-    const systemContext = { env: { DB: context.env.DB } }
+    const assertions = await prepareSystemWriteAuthorization(context, {
+      now,
+      requiredPermission: "integration:write",
+      stepUpToken: context.req.header("x-system-step-up") ?? "",
+      resource: { type: "system:connector", id: connectorId },
+    })
+    if (assertions === "forbidden") throw new SystemForbiddenError()
+    if (assertions instanceof Error) throw new SystemIntegrationUnavailableError(assertions)
+    const systemContext = { env: { DB: context.env.DB }, assertions }
     const repository = new SystemConnectorRepository(systemContext)
     const current = await repository.find(connectorId)
     if (current instanceof Error) throw new SystemIntegrationUnavailableError(current)
@@ -80,6 +90,7 @@ export const PATCH = systemFactory.createHandlers(
       body.expected_revision,
       new SystemAuditEventRepository(systemContext).prepareAppend(event),
     )
+    if (PrepareSystemReadAuthorizationAdapter.isRejected(update)) throw new SystemForbiddenError()
     if (update instanceof Error) throw new SystemIntegrationUnavailableError(update)
     if (update === "not_found") throw new SystemIntegrationNotFoundError()
     if (update === "conflict") throw new SystemIntegrationConflictError()

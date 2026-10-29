@@ -1,4 +1,4 @@
-import { prepareSystemIamWriteAuthorization } from "@system/interface/authorization/prepare-system-iam-write-authorization"
+import { prepareSystemWriteAuthorization } from "@system/interface/authorization/prepare-system-write-authorization"
 import { PrepareSystemReadAuthorizationAdapter } from "@system/infrastructure/adapters/iam/prepare-system-read-authorization.adapter"
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
 import { SystemAuditEventEntity } from "@system/domain/entities/system-audit-event.entity"
@@ -69,9 +69,10 @@ export const PATCH = systemFactory.createHandlers(
     if (current.revision !== body.expected_revision) throw new SystemPrincipalConflictError()
     const changed = current.withName(body.name, now)
     if (changed instanceof Error) throw new SystemPrincipalInvalidError(changed)
-    const assertions = await prepareSystemIamWriteAuthorization(context, {
+    const assertions = await prepareSystemWriteAuthorization(context, {
       now,
       stepUpToken: context.req.header("x-system-step-up") ?? "",
+      requiredPermission: "iam:write",
       principalRename: {
         principalId: changed.id,
         revision: changed.revision,

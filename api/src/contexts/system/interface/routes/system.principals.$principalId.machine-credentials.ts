@@ -1,4 +1,4 @@
-import { prepareSystemIamWriteAuthorization } from "@system/interface/authorization/prepare-system-iam-write-authorization"
+import { prepareSystemWriteAuthorization } from "@system/interface/authorization/prepare-system-write-authorization"
 import { PrepareSystemReadAuthorizationAdapter } from "@system/infrastructure/adapters/iam/prepare-system-read-authorization.adapter"
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
 import { SystemAuditEventEntity } from "@system/domain/entities/system-audit-event.entity"
@@ -68,9 +68,10 @@ export const POST = systemFactory.createHandlers(
     if (!authorizeSystemOperation(context.var.permissions, "iam:write", now)) {
       throw new SystemForbiddenError()
     }
-    const assertions = await prepareSystemIamWriteAuthorization(context, {
+    const assertions = await prepareSystemWriteAuthorization(context, {
       now,
       stepUpToken: context.req.header("x-system-step-up") ?? "",
+      requiredPermission: "iam:write",
     })
     if (assertions === "forbidden") throw new SystemForbiddenError()
     if (assertions instanceof Error) throw new SystemPrincipalUnavailableError(assertions)

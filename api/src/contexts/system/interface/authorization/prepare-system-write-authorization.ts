@@ -1,3 +1,4 @@
+import type { RoleBindingResource } from "@system/domain/schemas/iam/role-binding.schema"
 import type {
   SystemAuthorizationContext,
   SystemD1Context,
@@ -6,12 +7,14 @@ import { PrepareSystemReadAuthorizationAdapter } from "@system/infrastructure/ad
 import { SystemPrincipalSecretService } from "@system/lib/auth/system-principal-secret-service"
 import { authorizeSystemOperation } from "@system/interface/authorization/authorize-system-operation"
 
-/** IAM変更を要求の現在のBearer・global権限・利用済み再認証grantへ束縛する。 */
-export async function prepareSystemIamWriteAuthorization(
+/** Systemの変更を現在のBearer・対象資源の権限・利用済み再認証grantへ束縛する。 */
+export async function prepareSystemWriteAuthorization(
   context: SystemD1Context & SystemAuthorizationContext,
   input: Readonly<{
     now: Date
     stepUpToken: string
+    requiredPermission: string
+    resource?: RoleBindingResource | null
     principalRename?: Readonly<{ principalId: string; revision: number; updatedAtMs: number }>
   }>,
 ): Promise<ReadonlyArray<D1PreparedStatement> | "forbidden" | Error> {
@@ -30,7 +33,13 @@ export async function prepareSystemIamWriteAuthorization(
   )
   if (proof === null || PrepareSystemReadAuthorizationAdapter.isRejected(proof)) return "forbidden"
   if (proof instanceof Error) return proof
-  if (!authorizeSystemOperation(proof.permissionKeys, "iam:write", now)) return "forbidden"
+  if (
+    !authorizeSystemOperation(proof.permissionKeys, input.requiredPermission, now, {
+      scopedPermissionKeys: proof.scopedPermissionKeys,
+      resource: input.resource ?? null,
+    })
+  )
+    return "forbidden"
   const assertions = proof.assertions(now, input.principalRename)
   if (assertions instanceof Error) return assertions
   const hash = await new SystemPrincipalSecretService().hashRawSecret(input.stepUpToken)
