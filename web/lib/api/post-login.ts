@@ -1,3 +1,4 @@
+import { sessionResponseSchema } from "@/lib/api/session-response-schema"
 import { createClient } from "@/lib/api/hc-client"
 import type { LoginRequest } from "@/lib/api/types/auth-types"
 
@@ -16,14 +17,11 @@ export async function postLogin(body: LoginRequest) {
     return new Error("failed to login")
   }
 
-  const loginResult = await response.json()
+  const session = sessionResponseSchema.safeParse(await response.json().catch(() => null))
 
-  if ("access_token" in loginResult === false) {
+  if (!session.success) {
     return new Error("failed to login")
   }
 
-  return {
-    access_token: loginResult.access_token,
-    refresh_token: loginResult.refresh_token ?? null,
-  }
+  return session.data
 }

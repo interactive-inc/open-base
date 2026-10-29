@@ -1,3 +1,4 @@
+import { sessionResponseSchema } from "@/lib/http/session-response-schema"
 import { zValidator } from "@hono/zod-validator"
 import { z } from "zod"
 import { resolveBaseUrl } from "@/lib/config/resolve-base-url"
@@ -68,12 +69,8 @@ export default factory.createHandlers(
     const sessionResponse = await client.system.sessions.$post({
       json: { subject: input.email, password: input.password },
     })
-    const session = z
-      .object({
-        account_id: z.string(),
-        access_token: z.string(),
-        refresh_token: z.string().nullable(),
-      })
+    const session = sessionResponseSchema
+      .extend({ account_id: z.string() })
       .parse(await sessionResponse.json())
     const companyResponse = await client.company.bootstrap.$post(
       { header: { "idempotency-key": input["idempotency-key"] }, json: declaration.data },

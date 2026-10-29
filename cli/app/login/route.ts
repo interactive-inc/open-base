@@ -1,5 +1,6 @@
 import { zValidator } from "@hono/zod-validator"
 import { z } from "zod"
+import { sessionResponseSchema } from "@/lib/http/session-response-schema"
 import { resolveBaseUrl } from "@/lib/config/resolve-base-url"
 import { SettingsFile } from "@/lib/config/settings-file"
 import { createClient } from "@/lib/http/hc-client"
@@ -42,12 +43,7 @@ export default factory.createHandlers(
       json: { subject: query.email, password: query.password },
     })
 
-    const result = z
-      .object({
-        access_token: z.string(),
-        refresh_token: z.string().nullable(),
-      })
-      .parse(await response.json())
+    const result = sessionResponseSchema.parse(await response.json())
 
     const name = await fetchName(baseUrl, result.access_token)
 

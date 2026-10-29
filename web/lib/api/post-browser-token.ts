@@ -1,10 +1,5 @@
-import { z } from "zod"
+import { sessionResponseSchema } from "@/lib/api/session-response-schema"
 import { createClient } from "@/lib/api/hc-client"
-
-const browserTokenResponseSchema = z.object({
-  access_token: z.string(),
-  refresh_token: z.string().nullable().optional(),
-})
 
 /**
  * POST /system/browser-sessions。認証済みの CLI が発行した one-time code を
@@ -19,14 +14,11 @@ export async function postBrowserToken(body: { code: string }) {
     return new Error("failed to login")
   }
 
-  const parsed = browserTokenResponseSchema.safeParse(await response.json())
+  const parsed = sessionResponseSchema.safeParse(await response.json().catch(() => null))
 
   if (parsed.success === false) {
     return new Error("failed to login")
   }
 
-  return {
-    access_token: parsed.data.access_token,
-    refresh_token: parsed.data.refresh_token ?? null,
-  }
+  return parsed.data
 }

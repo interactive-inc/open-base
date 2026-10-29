@@ -1,10 +1,5 @@
-import { z } from "zod"
+import { sessionResponseSchema } from "@/lib/http/session-response-schema"
 import type { EndpointTokens } from "@/lib/config/settings-file"
-
-const rotatedSessionSchema = z.object({
-  access_token: z.string().min(1),
-  refresh_token: z.string().min(1).nullable(),
-})
 
 /** tokenのshapeを検証し、HTTP失敗と通信失敗は認証更新の失敗として返す。 */
 export async function rotateTokens(
@@ -21,7 +16,7 @@ export async function rotateTokens(
     })
     if (!response.ok) return null
 
-    const session = rotatedSessionSchema.safeParse(await response.json())
+    const session = sessionResponseSchema.safeParse(await response.json())
     if (!session.success) return null
 
     return { token: session.data.access_token, refresh_token: session.data.refresh_token }

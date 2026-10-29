@@ -1,12 +1,7 @@
 import type { AppType } from "api/app"
 import { hc } from "hono/client"
 import { apiFetch } from "@/lib/api/api-fetch"
-import { z } from "zod"
-
-const sessionSchema = z.object({
-  access_token: z.string().min(1),
-  refresh_token: z.string().min(1).nullable().default(null),
-})
+import { sessionResponseSchema } from "@/lib/api/session-response-schema"
 
 /**
  * PATCH /system/sessions を refresh_token で呼び、新しい access_token を取得する。
@@ -26,7 +21,7 @@ export async function postRefreshToken(refreshToken: string) {
 
     if (response.status >= 400) return new Error("failed to refresh token")
 
-    const session = sessionSchema.safeParse(await response.json())
+    const session = sessionResponseSchema.safeParse(await response.json())
 
     if (session.success) return session.data
   } catch {

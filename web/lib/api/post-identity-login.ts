@@ -1,10 +1,5 @@
-import { z } from "zod"
+import { sessionResponseSchema } from "@/lib/api/session-response-schema"
 import { createClient } from "@/lib/api/hc-client"
-
-const identityLoginResponseSchema = z.object({
-  access_token: z.string(),
-  refresh_token: z.string().nullable().optional(),
-})
 
 /**
  * POST /system/identity-sessions。外部 identity provider が発行した短命トークンを
@@ -20,14 +15,11 @@ export async function postIdentityLogin(body: { token: string }) {
     return new Error("failed to login")
   }
 
-  const parsed = identityLoginResponseSchema.safeParse(await response.json())
+  const parsed = sessionResponseSchema.safeParse(await response.json().catch(() => null))
 
   if (parsed.success === false) {
     return new Error("failed to login")
   }
 
-  return {
-    access_token: parsed.data.access_token,
-    refresh_token: parsed.data.refresh_token ?? null,
-  }
+  return parsed.data
 }
