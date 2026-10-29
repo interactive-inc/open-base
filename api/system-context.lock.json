@@ -3,7 +3,8 @@
   "files": {
     "src/contexts/system/application/attachments/create-attachment-preservation.ts": "a18f5f7eb21bd39aeae19bb51366c2e841d17ea46f6e798aac66d5a159ff4924",
     "src/contexts/system/application/attachments/errors.ts": "605d12dc1ef69648ef143e7527d153be5fcb526fd10ff1d59d2caa6a89044a45",
-    "src/contexts/system/application/attachments/lib/attachment-kek-registry.ts": "1bb77645cbf35d233b1ba1e1dd1529f77bf043dfaa26a76a5c55d86487367c1f",
+    "src/contexts/system/application/attachments/lib/attachment-kek-registry.test.ts": "841ce4e890dde6144c178c9a31d58ae7e5a541e39ea5f87d283e2d0ce9cd66c4",
+    "src/contexts/system/application/attachments/lib/attachment-kek-registry.ts": "3d6ef76e53858688ece4136adcf5e36796111af38af93c3966444be5d539a4a3",
     "src/contexts/system/application/attachments/lib/attachment-key-material.ts": "a704edb5861e5b731d8743a9650343ba92117a4b91e10cf2f1e0ad0e9a63f927",
     "src/contexts/system/application/attachments/lib/decrypt-attachment.ts": "d1a9457011272d2080c009d5cf17e345d0c04d095d1e6397df56fc992e4d9ef0",
     "src/contexts/system/application/attachments/lib/encrypt-attachment.ts": "48433d34102d02a9e7a7dc75b9e0f21fc1931bf6315f6efbb09458a9e7948cc0",

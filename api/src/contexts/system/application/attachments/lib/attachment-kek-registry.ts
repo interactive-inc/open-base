@@ -31,6 +31,7 @@ function decodeBase64(value: string): AttachmentBytes | Error {
 
 /**
  * env の KEK 一覧を読む。`{"1": "<base64 32 bytes>", "2": "..."}` 形式で、
+ * version は先頭ゼロや符号のない十進表記の安全な正整数に限定する。
  * 最大の version が現行鍵になる。ローテーション中は旧 version も残しておく。
  *
  * 未設定・不正な形は起動時ではなく利用時に拒否する（添付機能を使わない配備を止めないため）。
@@ -78,11 +79,12 @@ export class AttachmentKekRegistry {
     for (const entry of Object.entries(parsed)) {
       const version = Number(entry[0])
 
-      if (!Number.isSafeInteger(version) || version <= 0) {
+      // 別表記の同じ数値で既存の版の鍵を黙って置き換えない。
+      if (!/^[1-9][0-9]*$/.test(entry[0]) || !Number.isSafeInteger(version)) {
         return new SystemAttachmentError(
           "validation",
           "attachment_kek_invalid",
-          "ATTACHMENT_KEKS のキーは 1 以上の整数にしてください",
+          "ATTACHMENT_KEKS のキーは 1 以上の安全な整数を十進数の正規表記で指定してください",
         )
       }
 
