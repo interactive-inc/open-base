@@ -295,11 +295,11 @@ test("掃除の候補走査後に保全が入れば本体を消さない", async
 test("削除が始まった添付には保全を付けたと回答しない", async () => {
   const c = await fixture()
   expect(
-    await c.attachments.claimUnlinkedPurge(
-      c.attachment.id,
-      new Date(at.getTime() - 24 * 60 * 60 * 1000),
-      at,
-    ),
+    await c.attachments.claimUnlinkedPurge({
+      id: c.attachment.id,
+      threshold: new Date(at.getTime() - 24 * 60 * 60 * 1000),
+      erasedAt: at,
+    }),
   ).not.toBeNull()
   expect((await c.create(c.command())).status).toBe(409)
   expect(

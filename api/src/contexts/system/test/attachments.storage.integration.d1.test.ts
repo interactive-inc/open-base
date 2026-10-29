@@ -496,11 +496,11 @@ test("encrypted original is verified before atomic finalization and failed sourc
       "pending",
     )
     if (scenario === "purge-before-submission") {
-      const claimed = await new AttachmentAdapter(context).claimUnlinkedPurge(
-        row.id,
+      const claimed = await new AttachmentAdapter(context).claimUnlinkedPurge({
+        id: row.id,
         threshold,
-        later,
-      )
+        erasedAt: later,
+      })
       if (claimed instanceof Error || claimed === null)
         throw new Error("purge did not claim pending attachment")
       expect(claimed.status).toBe("erased")
@@ -567,7 +567,11 @@ test("encrypted original is verified before atomic finalization and failed sourc
     if (stale instanceof Error) throw stale
     expect(stale.map((attachment) => attachment.id)).not.toContain(row.id)
     expect(
-      await new AttachmentAdapter(context).claimUnlinkedPurge(row.id, threshold, later),
+      await new AttachmentAdapter(context).claimUnlinkedPurge({
+        id: row.id,
+        threshold,
+        erasedAt: later,
+      }),
     ).toBeNull()
     const approved = await new ApproveSystemTask(writer).execute({
       caseId: started.workflowCase.id,

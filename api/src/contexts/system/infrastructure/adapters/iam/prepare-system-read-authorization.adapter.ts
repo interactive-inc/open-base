@@ -123,4 +123,18 @@ export class PrepareSystemReadAuthorizationAdapter {
       return new Error("read authorization unavailable", { cause })
     }
   }
+  static isRejected(cause: unknown): boolean {
+    const visited = new Set<Error>()
+    for (let error = cause; error instanceof Error && !visited.has(error); error = error.cause) {
+      if ("code" in error && error.code === "system_read_authorization_changed") return true
+      if (
+        /(?:bad JSON path:|JSON path error near)\s*['"]system_read_authorization_changed['"]/i.test(
+          error.message,
+        )
+      )
+        return true
+      visited.add(error)
+    }
+    return false
+  }
 }

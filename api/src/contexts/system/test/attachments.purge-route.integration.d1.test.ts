@@ -34,6 +34,136 @@ const uploadedAt = new Date("2026-08-19T09:00:00.000Z")
 /** アップロードから 24 時間以上あとの実行時刻。 */
 const purgeAt = new Date("2026-08-21T09:00:00.000Z")
 
+test("走査中に管理資格を失った主体は添付の消去を開始できない", async () => {
+  const fixture = await createFixture()
+  const id = await fixture.storePending()
+  const token = await fixture.tokenOf("3bca86aa-5332-4a10-bacb-a2b82d961613")
+  const scan = spyOn(AttachmentAdapter.prototype, "listStaleUnlinked")
+  const original = scan.getMockImplementation()
+  if (original === undefined) throw new Error("missing original attachment scan")
+  scan.mockImplementation(async function (this: AttachmentAdapter, ...args) {
+    const rows = await original.call(this, ...args)
+    await fixture.db
+      .prepare("UPDATE system_role_bindings SET revoked_at=?1")
+      .bind(purgeAt.getTime())
+      .run()
+    return rows
+  })
+  try {
+    const response = await fixture.request("/system/attachments/purge-unlinked", {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+    })
+    const row = await fixture.attachments.findById(id)
+    expect({ status: response.status, row, objects: fixture.bucket.keys().length }).toMatchObject({
+      status: 403,
+      row: { status: "pending" },
+      objects: 1,
+    })
+  } finally {
+    scan.mockRestore()
+  }
+})
+
+for (const scenario of ["before-claim", "inside-claim", "account-revoked", "family-revoked"]) {
+  test(`掃除の${scenario}で失効した資格は鍵破棄をrollbackする`, async () => {
+    const fixture = await createFixture()
+    const id = await fixture.storePending()
+    const before = await fixture.attachments.findById(id)
+    const token = await fixture.tokenOf("3bca86aa-5332-4a10-bacb-a2b82d961613")
+    if (scenario === "inside-claim") {
+      await fixture.db
+        .prepare(`CREATE TRIGGER revoke_purge_authority AFTER UPDATE OF status ON system_attachments
+        WHEN NEW.status='erased' BEGIN
+        UPDATE system_role_bindings SET revoked_at=${purgeAt.getTime()}; END`)
+        .run()
+    }
+    const claim = spyOn(AttachmentAdapter.prototype, "claimUnlinkedPurge")
+    const original = claim.getMockImplementation()
+    if (original === undefined) throw new Error("missing original purge claim")
+    claim.mockImplementation(async function (this: AttachmentAdapter, input) {
+      if (scenario === "before-claim")
+        await fixture.db
+          .prepare("UPDATE system_role_bindings SET revoked_at=?1")
+          .bind(purgeAt.getTime())
+          .run()
+      if (scenario === "account-revoked")
+        await fixture.db
+          .prepare("UPDATE system_accounts SET token_version=token_version+1 WHERE id=?1")
+          .bind("3bca86aa-5332-4a10-bacb-a2b82d961613")
+          .run()
+      if (scenario === "family-revoked")
+        await fixture.db.prepare("UPDATE system_sessions SET revoked_at=?1").bind(Date.now()).run()
+      return original.call(this, input)
+    })
+    try {
+      const response = await fixture.request("/system/attachments/purge-unlinked", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` },
+      })
+      expect(response.status).toBe(
+        scenario === "account-revoked" || scenario === "family-revoked" ? 401 : 403,
+      )
+      expect(await fixture.attachments.findById(id)).toEqual(before)
+      expect(fixture.bucket.keys()).toHaveLength(1)
+      if (scenario === "inside-claim")
+        expect(
+          await fixture.db
+            .prepare("SELECT revoked_at FROM system_role_bindings")
+            .first("revoked_at"),
+        ).toBeNull()
+    } finally {
+      claim.mockRestore()
+    }
+  })
+}
+
+test("認可済みclaimの後始末を完遂し、失権後の次の添付は消去しない", async () => {
+  const fixture = await createFixture()
+  const ids = [await fixture.storePending(), await fixture.storePending()]
+  const token = await fixture.tokenOf("3bca86aa-5332-4a10-bacb-a2b82d961613")
+  fixture.bucket.beforeDelete = async () => {
+    await fixture.db
+      .prepare("UPDATE system_role_bindings SET revoked_at=?1")
+      .bind(purgeAt.getTime())
+      .run()
+  }
+  const response = await fixture.request("/system/attachments/purge-unlinked", {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}` },
+  })
+  expect(response.status).toBe(403)
+  const rows = await Promise.all(ids.map((id) => fixture.attachments.findById(id)))
+  expect(rows.filter((row) => row === null)).toHaveLength(1)
+  expect(rows.filter((row) => row !== null)).toMatchObject([{ status: "pending" }])
+  expect(fixture.bucket.keys()).toHaveLength(1)
+})
+
+test("guard付きclaimは列名と日時を含む完全な添付行を返す", async () => {
+  const fixture = await createFixture()
+  const id = await fixture.storePending()
+  const adapter = new AttachmentAdapter({
+    env: { DB: fixture.db },
+    var: { database: drizzle(fixture.db) },
+  })
+  const claimed = await adapter.claimUnlinkedPurge({
+    id,
+    threshold: new Date(purgeAt.getTime() - 24 * 60 * 60 * 1000),
+    erasedAt: purgeAt,
+    assertions: [fixture.db.prepare("SELECT 1")],
+  })
+  expect(claimed).toEqual(await fixture.attachments.findById(id))
+  expect(claimed).toMatchObject({
+    id,
+    status: "erased",
+    createdAt: uploadedAt,
+    erasedAt: purgeAt,
+    linkedAt: null,
+    wrappedDek: null,
+    wrappedDekIv: null,
+  })
+})
+
 type Fixture = Readonly<{
   request: (path: string, init?: RequestInit) => Promise<Response>
   bucket: PurgeTestBucket

@@ -1,3 +1,5 @@
+import { PrepareSystemReadAuthorizationAdapter } from "@system/infrastructure/adapters/iam/prepare-system-read-authorization.adapter"
+import { prepareAttachmentPurgeAuthorization } from "@system/interface/operations/prepare-attachment-purge-authorization"
 import { AttachmentObjectAdapter } from "@system/infrastructure/adapters/attachments/attachment-object.adapter"
 import { AttachmentAdapter } from "@system/infrastructure/adapters/attachments/attachment.adapter"
 import { UNLINKED_ATTACHMENT_RETENTION_MILLISECONDS } from "@system/domain/catalogs/attachments/unlinked-attachment-retention.catalog"
@@ -10,8 +12,8 @@ import {
 import { systemFactory } from "@system/interface/request-environment/system-factory"
 
 /**
- * 紐づかないまま期限を過ぎた添付を掃除する。既存のバッチ同様、実行は HTTP から起こす
- * （定期実行は運用側のスケジューラが叩く）。冪等なので複数回呼んでも安全。
+ * 紐づかないまま期限を過ぎた添付をHTTPから掃除する。鍵破棄の確定後は
+ * 本体と行の回収を完遂する。削除失敗は消去済み行から再試行できる。
  */
 // @authorization permission - 本体を物理削除するため system:admin に限定する
 export const POST = systemFactory.createHandlers(authenticateSystemAccessToken, async (context) => {
@@ -41,13 +43,24 @@ export const POST = systemFactory.createHandlers(authenticateSystemAccessToken, 
 
     if (stale instanceof Error) return stale
 
+    await prepareAttachmentPurgeAuthorization(context)
     const store = new AttachmentObjectAdapter(context)
 
     let purgedCount = 0
 
     for (const row of stale) {
-      const claimed = await repository.claimUnlinkedPurge(row.id, threshold, command.now)
+      const assertions = await prepareAttachmentPurgeAuthorization(context)
+      const claimed = await repository.claimUnlinkedPurge({
+        id: row.id,
+        threshold,
+        erasedAt: command.now,
+        assertions,
+      })
 
+      if (PrepareSystemReadAuthorizationAdapter.isRejected(claimed)) {
+        await prepareAttachmentPurgeAuthorization(context)
+        throw new SystemForbiddenError()
+      }
       if (claimed instanceof Error) return claimed
       if (claimed === null) continue
 

@@ -37,7 +37,7 @@ export async function runScheduledAttachmentPurge(
 
   const purged: Array<string> = []
   for (const row of stale) {
-    const claimed = await repository.claimUnlinkedPurge(row.id, threshold, now)
+    const claimed = await repository.claimUnlinkedPurge({ id: row.id, threshold, erasedAt: now })
     if (claimed instanceof Error) return claimed
     if (claimed === null) continue
     const deleted = await store.delete(claimed.objectKey)

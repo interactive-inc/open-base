@@ -127,13 +127,13 @@ export class AttachmentAdapter {
     }
   }
 
-  private async runGuarded(
+  private async runGuarded<Row extends { id: string } = { id: string }>(
     query: Readonly<{ sql: string; params: unknown[] }>,
     assertions: ReadonlyArray<D1PreparedStatement>,
-  ): Promise<ReadonlyArray<{ id: string }>> {
+  ): Promise<ReadonlyArray<Row>> {
     const database = this.c.env?.DB
     if (database === undefined) throw new Error("attachment guarded database is unavailable")
-    const results = await database.batch<{ id: string }>([
+    const results = await database.batch<Row>([
       ...assertions,
       database.prepare(query.sql).bind(...query.params),
       ...assertions,
@@ -217,29 +217,73 @@ export class AttachmentAdapter {
 
   /** 本体削除より先に紐付けを禁止する。失敗した本体削除は erased 行から再試行する。 */
   async claimUnlinkedPurge(
-    id: string,
-    threshold: Date,
-    erasedAt: Date,
+    input: Readonly<{
+      id: string
+      threshold: Date
+      erasedAt: Date
+      assertions?: ReadonlyArray<D1PreparedStatement>
+    }>,
   ): Promise<SystemAttachmentRow | null | Error> {
     try {
-      const rows = await this.c.var.database
+      const update = this.c.var.database
         .update(systemAttachments)
-        .set({ status: "erased", wrappedDek: null, wrappedDekIv: null, erasedAt })
+        .set({ status: "erased", wrappedDek: null, wrappedDekIv: null, erasedAt: input.erasedAt })
         .where(
           and(
-            eq(systemAttachments.id, id),
+            eq(systemAttachments.id, input.id),
             inArray(systemAttachments.status, ["uploading", "pending", "erased"]),
             isNull(systemAttachments.linkedAt),
-            lt(systemAttachments.createdAt, threshold),
+            lt(systemAttachments.createdAt, input.threshold),
             this.unreferencedByPreservationProposal(),
             sql`NOT EXISTS (SELECT 1 FROM system_attachment_preservations preservation
               WHERE preservation.attachment_id = ${systemAttachments.id}
                 AND ((preservation.kind = 'hold' AND preservation.released_at IS NULL)
-                  OR (preservation.kind = 'retention' AND preservation.retain_until > ${erasedAt.getTime()})))`,
+                  OR (preservation.kind = 'retention' AND preservation.retain_until > ${input.erasedAt.getTime()})))`,
           ),
         )
-        .returning()
-      return rows.at(0) ?? null
+      if (input.assertions === undefined || input.assertions.length === 0) {
+        const rows = await update.returning()
+        return rows.at(0) ?? null
+      }
+      // Native D1のRETURNINGはDrizzleの列名・timestamp変換を通らない。
+      const rows = await this.runGuarded<
+        Omit<SystemAttachmentRow, "createdAt" | "linkedAt" | "erasedAt"> & {
+          createdAt: number
+          linkedAt: number | null
+          erasedAt: number | null
+        }
+      >(
+        update
+          .returning({
+            id: systemAttachments.id,
+            ownerAccountId: sql<string>`${systemAttachments.ownerAccountId}`.as("ownerAccountId"),
+            objectKey: sql<string>`${systemAttachments.objectKey}`.as("objectKey"),
+            status: systemAttachments.status,
+            contentType: sql<string>`${systemAttachments.contentType}`.as("contentType"),
+            byteSize: sql<number>`${systemAttachments.byteSize}`.as("byteSize"),
+            fileName: sql<string>`${systemAttachments.fileName}`.as("fileName"),
+            plaintextSha256: sql<string>`${systemAttachments.plaintextSha256}`.as(
+              "plaintextSha256",
+            ),
+            wrappedDek: sql<string | null>`${systemAttachments.wrappedDek}`.as("wrappedDek"),
+            wrappedDekIv: sql<string | null>`${systemAttachments.wrappedDekIv}`.as("wrappedDekIv"),
+            contentIv: sql<string>`${systemAttachments.contentIv}`.as("contentIv"),
+            kekVersion: sql<number>`${systemAttachments.kekVersion}`.as("kekVersion"),
+            createdAt: sql<number>`${systemAttachments.createdAt}`.as("createdAt"),
+            linkedAt: sql<number | null>`${systemAttachments.linkedAt}`.as("linkedAt"),
+            erasedAt: sql<number | null>`${systemAttachments.erasedAt}`.as("erasedAt"),
+          })
+          .toSQL(),
+        input.assertions,
+      )
+      const row = rows.at(0)
+      if (row === undefined) return null
+      return {
+        ...row,
+        createdAt: new Date(row.createdAt),
+        linkedAt: row.linkedAt === null ? null : new Date(row.linkedAt),
+        erasedAt: row.erasedAt === null ? null : new Date(row.erasedAt),
+      }
     } catch (cause) {
       return new SystemAttachmentError(
         "unexpected",
