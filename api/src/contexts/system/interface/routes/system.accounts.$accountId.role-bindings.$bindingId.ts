@@ -1,3 +1,5 @@
+import { prepareSystemWriteAuthorization } from "@system/interface/authorization/prepare-system-write-authorization"
+import { PrepareSystemReadAuthorizationAdapter } from "@system/infrastructure/adapters/iam/prepare-system-read-authorization.adapter"
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
 import {
   SystemForbiddenError,
@@ -35,8 +37,16 @@ export const DELETE = systemFactory.createHandlers(
     if (!targetAccountId.success || !bindingId.success) {
       throw new SystemRoleBindingNotFoundError()
     }
+    const assertions = await prepareSystemWriteAuthorization(context, {
+      now: context.var.now(),
+      requiredPermissions: ["iam:write"],
+      stepUpToken: context.req.header("x-system-step-up") ?? "",
+    })
+    if (assertions === "forbidden") throw new SystemForbiddenError()
+    if (assertions instanceof Error) throw new SystemIAMUnavailableError()
     const repository = new SystemRoleBindingRepository({
       env: { DB: context.env.DB },
+      assertions,
     })
     const binding = await repository.find(bindingId.data)
     if (binding instanceof Error) {
@@ -97,6 +107,8 @@ export const DELETE = systemFactory.createHandlers(
       now,
       auditStatements,
     )
+    if (PrepareSystemReadAuthorizationAdapter.isRejected(revocation))
+      throw new SystemForbiddenError()
     if (revocation instanceof Error) {
       throw new SystemIAMUnavailableError()
     }

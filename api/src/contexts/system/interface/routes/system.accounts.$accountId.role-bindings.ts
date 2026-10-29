@@ -1,3 +1,5 @@
+import { prepareSystemWriteAuthorization } from "@system/interface/authorization/prepare-system-write-authorization"
+import { PrepareSystemReadAuthorizationAdapter } from "@system/infrastructure/adapters/iam/prepare-system-read-authorization.adapter"
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
 import {
   SystemAccountNotFoundError,
@@ -167,9 +169,18 @@ export const POST = systemFactory.createHandlers(
     const auditStatements = new SystemAuditEventRepository({
       env: { DB: context.env.DB },
     }).prepareAppend(auditEvent)
+    const assertions = await prepareSystemWriteAuthorization(context, {
+      now,
+      requiredPermissions: ["iam:write"],
+      stepUpToken: context.req.header("x-system-step-up") ?? "",
+    })
+    if (assertions === "forbidden") throw new SystemForbiddenError()
+    if (assertions instanceof Error) throw new SystemIAMUnavailableError()
     const creation = await new SystemRoleBindingRepository({
       env: { DB: context.env.DB },
+      assertions,
     }).create(actorAccountId.data, role, binding, auditStatements)
+    if (PrepareSystemReadAuthorizationAdapter.isRejected(creation)) throw new SystemForbiddenError()
     if (creation instanceof Error) {
       throw new SystemIAMUnavailableError()
     }

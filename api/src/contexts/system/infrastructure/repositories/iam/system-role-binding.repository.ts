@@ -21,7 +21,7 @@ export type SystemRoleBindingMutation =
   | "conflict"
   | "forbidden"
   | "last_root"
-type Context = SystemD1Context
+type Context = SystemD1Context & Readonly<{ assertions?: ReadonlyArray<D1PreparedStatement> }>
 
 /** System AccountとRoleのglobalまたはopaque resource bindingを原子的に保存する。 */
 export class SystemRoleBindingRepository {
@@ -84,6 +84,7 @@ export class SystemRoleBindingRepository {
 
     try {
       const statements = [
+        ...(this.c.assertions ?? []),
         this.prepareActorRoleGuard(actorAccountId, role.permissionKeys),
         this.c.env.DB.prepare(
           `INSERT INTO system_role_bindings
@@ -111,6 +112,7 @@ export class SystemRoleBindingRepository {
           "SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('', '$') END AS ok",
         ),
         ...auditStatements,
+        ...(this.c.assertions ?? []),
       ]
       const executions = await this.c.env.DB.batch(statements)
       if (executions.length !== statements.length || executions.some((entry) => !entry.success)) {
@@ -148,6 +150,7 @@ export class SystemRoleBindingRepository {
 
     try {
       const statements = [
+        ...(this.c.assertions ?? []),
         this.prepareActorRoleGuard(actorAccountId, role.permissionKeys),
         this.c.env.DB.prepare(
           `UPDATE system_role_bindings
@@ -168,6 +171,7 @@ export class SystemRoleBindingRepository {
         ),
         this.prepareLastRootGuard(),
         ...auditStatements,
+        ...(this.c.assertions ?? []),
       ]
       const executions = await this.c.env.DB.batch(statements)
       if (executions.length !== statements.length || executions.some((entry) => !entry.success)) {

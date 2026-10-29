@@ -1,3 +1,5 @@
+import { SystemRoleBindingRepository } from "@system/infrastructure/repositories/iam/system-role-binding.repository"
+import { z } from "zod"
 import { testAccountId } from "@system/test/system-test-id.test-support"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { createSystemSessionApplications } from "@system/test/create-system-session-applications.test-support"
@@ -6,13 +8,13 @@ import { seedSystemStepUpGrant } from "@system/test/seed-system-step-up-grant.te
 import { systemFactory } from "@system/interface/request-environment/system-factory"
 import { DELETE } from "@system/interface/routes/system.accounts.$accountId.role-bindings.$bindingId"
 import { GET, POST } from "@system/interface/routes/system.accounts.$accountId.role-bindings"
-import { describe, expect, setDefaultTimeout, test } from "bun:test"
+import { describe, expect, setDefaultTimeout, spyOn, test } from "bun:test"
 import { hc } from "hono/client"
 
 // ローカルD1のtemplate作成とDBごとの往復を含むため、既定の5秒を超えることがある。
 setDefaultTimeout(30_000)
 
-const now = new Date("2026-01-01T00:00:00.000Z")
+const now = new Date()
 const rootAccountId = zAccountId.parse(testAccountId("system-binding-root"))
 const targetAccountId = zAccountId.parse(testAccountId("3ae2c1d9-f704-4381-a719-3333265bb9e4"))
 
@@ -156,3 +158,189 @@ describe("System Role Binding HTTP", () => {
     ).toEqual({ total: 2 })
   })
 })
+
+async function bindingMutationFixture(shortStepUp = false) {
+  const fixture = await SystemSessionTestContext.create()
+  const at = new Date()
+  const seedAt = new Date(at.getTime() - 600_000)
+  await fixture.database
+    .prepare(`INSERT INTO system_accounts
+           (id, status, token_version, created_at, updated_at)
+         VALUES (?1, 'active', 0, ?3, ?3), (?2, 'active', 0, ?3, ?3)`)
+    .bind(rootAccountId, targetAccountId, seedAt.getTime())
+    .run()
+  const stepUpToken = await seedSystemStepUpGrant(
+    fixture,
+    rootAccountId,
+    shortStepUp ? new Date(at.getTime() - 299_000) : at,
+  )
+  await fixture.database
+    .prepare(`INSERT INTO system_identity_bindings
+           (id, account_id, provider, subject, created_at, activated_at, revoked_at)
+         VALUES ('ac7f571e-ae97-4159-85e1-ba9cf4928de8', ?1, 'password', 'you@example.com', ?2, ?2, NULL)`)
+    .bind(rootAccountId, seedAt.getTime())
+    .run()
+  await fixture.database
+    .prepare(`INSERT INTO system_iam_roles
+           (id, key, kind, name, description, created_at, updated_at)
+         VALUES ('af285551-000d-4320-8ea0-bbfbc6c96a81', 'system:root', 'managed', 'System root', NULL, ?1, ?1),
+                ('04635707-bd54-47ea-81d4-38426e3ce8a2', 'example:reader', 'custom', 'Example reader', NULL, ?1, ?1)`)
+    .bind(seedAt.getTime())
+    .run()
+  await fixture.database
+    .prepare(`INSERT INTO system_iam_role_permissions (role_id, permission_key)
+         VALUES ('af285551-000d-4320-8ea0-bbfbc6c96a81', 'iam:read'),
+                ('af285551-000d-4320-8ea0-bbfbc6c96a81', 'iam:write'),
+                ('af285551-000d-4320-8ea0-bbfbc6c96a81', 'system:admin'),
+                ('04635707-bd54-47ea-81d4-38426e3ce8a2', 'example:read')`)
+    .run()
+  await fixture.database
+    .prepare(`INSERT INTO system_role_bindings
+           (id, account_id, role_id, resource_type, resource_id, created_at, revoked_at)
+         VALUES ('f16b950f-c6db-4760-8994-95cc8065169d', ?1, 'af285551-000d-4320-8ea0-bbfbc6c96a81', NULL, NULL, ?2, NULL)`)
+    .bind(rootAccountId, seedAt.getTime())
+    .run()
+
+  const applications = createSystemSessionApplications({
+    context: fixture.context,
+    jwtSecret: "system-session-test-jwt-secret",
+    sessionTtlMilliseconds: 604_800_000,
+  })
+  if (applications instanceof Error) throw applications
+  const session = await applications.issue.execute({
+    accountId: rootAccountId,
+    tokenVersion: 0,
+    now: new Date(),
+    auditContext: { authorizationJson: null, metadataJson: null },
+  })
+  if (session instanceof Error || session.kind === "rejected")
+    throw new Error("test session issuance failed")
+  const app = systemFactory
+    .createApp()
+    .use("*", async (c, next) => {
+      c.set("now", () => at)
+      await next()
+    })
+    .post("/system/accounts/:accountId/role-bindings", ...POST)
+    .delete("/system/accounts/:accountId/role-bindings/:bindingId", ...DELETE)
+  const request = (method: string, id: string | null = null) =>
+    app.request(
+      `/system/accounts/${targetAccountId}/role-bindings${id === null ? "" : `/${id}`}`,
+      {
+        method,
+        headers: {
+          authorization: `Bearer ${session.accessToken}`,
+          "x-system-step-up": stepUpToken,
+          "content-type": "application/json",
+        },
+        ...(method === "POST"
+          ? {
+              body: JSON.stringify({
+                role_id: "04635707-bd54-47ea-81d4-38426e3ce8a2",
+                resource: null,
+              }),
+            }
+          : {}),
+      },
+      { DB: fixture.database, JWT_SECRET: "system-session-test-jwt-secret" },
+    )
+  const snapshot = () =>
+    fixture.database
+      .prepare(`SELECT
+    (SELECT group_concat(id || ':' || token_version || ':' || updated_at) FROM system_accounts WHERE id=?1) AS accounts,
+    (SELECT group_concat(id || ':' || coalesce(revoked_at,'active')) FROM system_role_bindings) AS bindings,
+    (SELECT count(*) FROM system_audit_events) AS audits`)
+      .bind(targetAccountId)
+      .first<Record<string, unknown>>()
+  return { database: fixture.database, request, snapshot, at }
+}
+
+type BindingMutationCase = Readonly<{
+  operation: "create" | "revoke"
+  change: "logout" | "version" | "step-up" | "expiry"
+}>
+const bindingMutationCases: ReadonlyArray<BindingMutationCase> = [
+  { operation: "create", change: "logout" },
+  { operation: "revoke", change: "logout" },
+  { operation: "create", change: "version" },
+  { operation: "revoke", change: "step-up" },
+  { operation: "create", change: "expiry" },
+]
+for (const scenario of bindingMutationCases) {
+  const operation = scenario.operation
+  test(`Role Binding ${operation}保存前の${scenario.change}で対象と成功監査を変更しない`, async () => {
+    const f = await bindingMutationFixture(scenario.change === "expiry")
+    const binding =
+      operation === "revoke"
+        ? z.object({ id: z.string() }).parse(await (await f.request("POST")).json()).id
+        : null
+    const before = await f.snapshot()
+    const create = spyOn(SystemRoleBindingRepository.prototype, "create")
+    const revoke = spyOn(SystemRoleBindingRepository.prototype, "revoke")
+    const originalCreate = create.getMockImplementation()
+    const originalRevoke = revoke.getMockImplementation()
+    if (!originalCreate || !originalRevoke) throw new Error("missing original binding methods")
+    const logout = async () => {
+      if (scenario.change === "version") {
+        await f.database
+          .prepare("UPDATE system_accounts SET token_version=token_version+1 WHERE id=?1")
+          .bind(rootAccountId)
+          .run()
+        return
+      }
+      if (scenario.change === "step-up") {
+        await f.database
+          .prepare("UPDATE system_step_up_grants SET revoked_at=?1")
+          .bind(Date.now())
+          .run()
+        return
+      }
+      if (scenario.change === "expiry") {
+        const expiry = await f.database
+          .prepare("SELECT max(expires_at) AS expiry FROM system_step_up_grants")
+          .first<number>("expiry")
+        if (expiry === null) throw new Error("missing step-up expiry")
+        expect(Date.now()).toBeLessThan(expiry)
+        await Bun.sleep(Math.max(0, expiry - Date.now()) + 50)
+        return
+      }
+      await f.database.prepare("UPDATE system_sessions SET revoked_at=?1").bind(Date.now()).run()
+    }
+    create.mockImplementation(async function (this: SystemRoleBindingRepository, ...args) {
+      if (operation === "create") await logout()
+      return originalCreate.call(this, ...args)
+    })
+    revoke.mockImplementation(async function (this: SystemRoleBindingRepository, ...args) {
+      if (operation === "revoke") await logout()
+      return originalRevoke.call(this, ...args)
+    })
+    try {
+      expect({
+        status: (await f.request(operation === "create" ? "POST" : "DELETE", binding)).status,
+        snapshot: await f.snapshot(),
+      }).toEqual({ status: 403, snapshot: before })
+    } finally {
+      create.mockRestore()
+      revoke.mockRestore()
+    }
+  })
+}
+
+for (const operation of ["create", "revoke"]) {
+  test(`Role Binding ${operation} transaction中のlogoutは対象認証版と成功監査も巻き戻す`, async () => {
+    const f = await bindingMutationFixture()
+    const binding =
+      operation === "revoke"
+        ? z.object({ id: z.string() }).parse(await (await f.request("POST")).json()).id
+        : null
+    const before = await f.snapshot()
+    const trigger = operation === "create" ? "INSERT" : "UPDATE OF revoked_at"
+    await f.database
+      .prepare(
+        `CREATE TRIGGER revoke_binding_session AFTER ${trigger} ON system_role_bindings BEGIN UPDATE system_sessions SET revoked_at=${Date.now()}; END`,
+      )
+      .run()
+    expect((await f.request(operation === "create" ? "POST" : "DELETE", binding)).status).toBe(403)
+    expect(await f.snapshot()).toEqual(before)
+  })
+}
