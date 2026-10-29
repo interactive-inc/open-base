@@ -1,3 +1,4 @@
+import { PrepareAttachmentActorGuardAdapter } from "@system/infrastructure/adapters/attachments/prepare-attachment-actor-guard.adapter"
 /** /attachments */
 import { StoreAttachment } from "@system/application/attachments/store-attachment"
 import { SystemAttachmentError } from "@system/domain/errors"
@@ -6,6 +7,7 @@ import {
   SystemAttachmentInternalError,
   SystemAttachmentUnavailableError,
   SystemAttachmentValidationError,
+  SystemInvalidSessionError,
 } from "@system/interface/errors"
 import { authenticateSystemAccessToken } from "@system/interface/middlewares/authenticate-system-access-token"
 import { limitSystemAttachmentUploadBody } from "@system/interface/middlewares/limit-system-attachment-upload-body"
@@ -30,14 +32,22 @@ export const POST = systemFactory.createHandlers(
       throw new SystemAttachmentFileRequiredError()
     }
 
-    const stored = await new StoreAttachment(context).run({
-      ownerAccountId: context.var.userId,
-      fileName: file.name,
-      contentType: file.type,
-      content: new Uint8Array(await file.arrayBuffer()),
-      now: context.var.now(),
-    })
+    const authentication = context.var.bearerReadAuthentication
+    if (authentication === undefined || authentication.accountId !== context.var.userId)
+      throw new SystemInvalidSessionError()
+    const stored = await new StoreAttachment(context).run(
+      {
+        ownerAccountId: context.var.userId,
+        fileName: file.name,
+        contentType: file.type,
+        content: new Uint8Array(await file.arrayBuffer()),
+        now: context.var.now(),
+      },
+      authentication,
+    )
 
+    if (PrepareAttachmentActorGuardAdapter.isUploadRejected(stored))
+      throw new SystemInvalidSessionError()
     if (stored instanceof SystemAttachmentError) {
       if (stored.kind === "unavailable") {
         throw new SystemAttachmentUnavailableError({

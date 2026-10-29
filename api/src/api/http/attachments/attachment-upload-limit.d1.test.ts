@@ -19,7 +19,7 @@ const runtime = new Miniflare({
   r2Buckets: ["ATTACHMENTS"],
 })
 const fixture = {
-  database: await createSystemAttachmentTestDatabase(),
+  databases: new Array<D1Database>(),
   bucket: await runtime.getR2Bucket("ATTACHMENTS"),
   token: "",
 }
@@ -29,8 +29,9 @@ const app = createAppBase()
   .post("/system/attachments", ...POST)
   .get("/system/attachments/:attachmentId", ...GET_ATTACHMENT)
 beforeAll(async () => {
+  fixture.databases.push(await createSystemAttachmentTestDatabase())
   const accountId = zAccountId.parse("3b2b8827-25c9-459b-a05b-6eff821639e0")
-  await fixture.database
+  await getDatabase()
     .prepare(
       "INSERT INTO system_accounts(id,status,created_at,updated_at) VALUES (?1,'active',0,0)",
     )
@@ -90,9 +91,14 @@ test("記号を含む添付名はfilename拡張parameter内で符号化する", 
     "attachment; filename*=UTF-8''example%20%27copy%27%281%29%2A.pdf",
   )
 })
+function getDatabase(): D1Database {
+  const database = fixture.databases.at(0)
+  if (database === undefined) throw new Error("attachment test database is not initialized")
+  return database
+}
 function environment() {
   return {
-    DB: fixture.database,
+    DB: getDatabase(),
     ATTACHMENTS: fixture.bucket,
     ATTACHMENT_KEKS: createSystemAttachmentTestKekEnvironment(),
     JWT_SECRET: secret,
@@ -116,14 +122,14 @@ test("25MiB本体とmultipart headerを上限内で保管できる", async () =>
   })
 })
 test("本体の25MiB超過は従来のSystem413で保管しない", async () => {
-  const before = await fixture.database
+  const before = await getDatabase()
     .prepare("SELECT count(*) AS count FROM system_attachments")
     .first<number>("count")
   const response = await upload(ATTACHMENT_MAX_BYTE_SIZE + 1)
   expect(response.status).toBe(413)
   expect(await response.json()).toMatchObject({ code: "attachment_byte_size_exceeded" })
   expect(
-    await fixture.database
+    await getDatabase()
       .prepare("SELECT count(*) AS count FROM system_attachments")
       .first<number>("count"),
   ).toBe(before)

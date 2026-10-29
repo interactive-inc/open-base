@@ -16,6 +16,7 @@ export class SystemSessionFamilyGuardAdapter {
       rejection:
         | "system_read_authorization_changed"
         | "attachment_read_actor_changed"
+        | "attachment_upload_actor_changed"
         | "work_item_authorization_changed"
     }>,
   ): ReadonlyArray<D1PreparedStatement> {

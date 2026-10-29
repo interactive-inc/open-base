@@ -19,7 +19,8 @@ export type NewAttachment = Readonly<{
   kekVersion: number
   createdAt: Date
 }>
-type Context = SystemDatabaseContext
+type Context = SystemDatabaseContext &
+  Readonly<{ env?: Readonly<{ DB?: D1Database }> & Readonly<Record<string, unknown>> }>
 
 /** 添付メタデータの永続化。本体の所在と復号鍵を持つ唯一の場所。 */
 export class AttachmentAdapter {
@@ -31,25 +32,34 @@ export class AttachmentAdapter {
    * 本体を書く前に uploading 行を予約する。この順にすることで
    * 「object storage にあるが行が無い」孤児が構造的に発生しない。
    */
-  async reserve(input: NewAttachment): Promise<void | Error> {
+  async reserve(
+    input: NewAttachment,
+    assertions: ReadonlyArray<D1PreparedStatement> = [],
+  ): Promise<void | Error> {
     try {
-      await this.c.var.database.insert(systemAttachments).values({
-        id: input.id,
-        ownerAccountId: input.ownerAccountId,
-        objectKey: input.objectKey,
-        status: "uploading",
-        contentType: input.contentType,
-        byteSize: input.byteSize,
-        fileName: input.fileName,
-        plaintextSha256: input.plaintextSha256,
-        wrappedDek: input.wrappedDek,
-        wrappedDekIv: input.wrappedDekIv,
-        contentIv: input.contentIv,
-        kekVersion: input.kekVersion,
-        createdAt: input.createdAt,
-        linkedAt: null,
-        erasedAt: null,
-      })
+      const insert = this.c.var.database
+        .insert(systemAttachments)
+        .values({
+          id: input.id,
+          ownerAccountId: input.ownerAccountId,
+          objectKey: input.objectKey,
+          status: "uploading",
+          contentType: input.contentType,
+          byteSize: input.byteSize,
+          fileName: input.fileName,
+          plaintextSha256: input.plaintextSha256,
+          wrappedDek: input.wrappedDek,
+          wrappedDekIv: input.wrappedDekIv,
+          contentIv: input.contentIv,
+          kekVersion: input.kekVersion,
+          createdAt: input.createdAt,
+          linkedAt: null,
+          erasedAt: null,
+        })
+        .returning({ id: systemAttachments.id })
+      const inserted =
+        assertions.length === 0 ? await insert : await this.runGuarded(insert.toSQL(), assertions)
+      if (inserted.length !== 1) throw new Error("attachment reservation did not succeed")
 
       return undefined
     } catch (error) {
@@ -62,33 +72,47 @@ export class AttachmentAdapter {
     }
   }
 
-  async markPending(id: string): Promise<void | Error> {
-    return this.updateStatus(id, "uploading", "pending", null)
+  async markPending(
+    id: string,
+    assertions: ReadonlyArray<D1PreparedStatement> = [],
+  ): Promise<void | Error> {
+    return this.updateStatus({ id, from: "uploading", to: "pending", linkedAt: null, assertions })
   }
 
   /** 業務レコードへの紐づけ。pending の行だけが linked へ進める。 */
   async markLinked(id: string, linkedAt: Date): Promise<void | Error> {
-    return this.updateStatus(id, "pending", "linked", linkedAt)
+    return this.updateStatus({ id, from: "pending", to: "linked", linkedAt, assertions: [] })
   }
 
   private async updateStatus(
-    id: string,
-    from: AttachmentStatus,
-    to: AttachmentStatus,
-    linkedAt: Date | null,
+    input: Readonly<{
+      id: string
+      from: AttachmentStatus
+      to: AttachmentStatus
+      linkedAt: Date | null
+      assertions: ReadonlyArray<D1PreparedStatement>
+    }>,
   ): Promise<void | Error> {
     try {
-      const updated = await this.c.var.database
+      const update = this.c.var.database
         .update(systemAttachments)
-        .set(linkedAt === null ? { status: to } : { status: to, linkedAt })
-        .where(and(eq(systemAttachments.id, id), eq(systemAttachments.status, from)))
+        .set(
+          input.linkedAt === null
+            ? { status: input.to }
+            : { status: input.to, linkedAt: input.linkedAt },
+        )
+        .where(and(eq(systemAttachments.id, input.id), eq(systemAttachments.status, input.from)))
         .returning({ id: systemAttachments.id })
 
+      const updated =
+        input.assertions.length === 0
+          ? await update
+          : await this.runGuarded(update.toSQL(), input.assertions)
       if (updated.length === 0) {
         return new SystemAttachmentError(
           "unexpected",
           "attachment_transition_failed",
-          `添付の状態を ${from} から ${to} へ変更できませんでした`,
+          `添付の状態を ${input.from} から ${input.to} へ変更できませんでした`,
         )
       }
 
@@ -101,6 +125,22 @@ export class AttachmentAdapter {
         { cause: error },
       )
     }
+  }
+
+  private async runGuarded(
+    query: Readonly<{ sql: string; params: unknown[] }>,
+    assertions: ReadonlyArray<D1PreparedStatement>,
+  ): Promise<ReadonlyArray<{ id: string }>> {
+    const database = this.c.env?.DB
+    if (database === undefined) throw new Error("attachment guarded database is unavailable")
+    const results = await database.batch<{ id: string }>([
+      ...assertions,
+      database.prepare(query.sql).bind(...query.params),
+      ...assertions,
+    ])
+    if (results.length !== assertions.length * 2 + 1 || !results.every((result) => result.success))
+      throw new Error("attachment guarded write failed")
+    return results[assertions.length]?.results ?? []
   }
 
   async findById(id: string): Promise<SystemAttachmentRow | null | Error> {

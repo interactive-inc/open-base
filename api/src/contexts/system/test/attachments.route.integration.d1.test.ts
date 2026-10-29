@@ -1,7 +1,8 @@
 import { execSql } from "@system/test/local-d1/exec-sql.test-support"
 import { SignJWT } from "jose"
 import { createSystemIdentityTestKey } from "@system/test/create-system-identity-test-key.test-support"
-import { describe, expect, setDefaultTimeout, test } from "bun:test"
+import { describe, expect, setDefaultTimeout, spyOn, test } from "bun:test"
+import { AttachmentAdapter } from "@system/infrastructure/adapters/attachments/attachment.adapter"
 import { drizzle } from "drizzle-orm/d1"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { createSystemSessionApplications } from "@system/test/create-system-session-applications.test-support"
@@ -222,6 +223,45 @@ function receiptForm(fileName = "領収書.pdf", type = "application/pdf"): Form
   form.set("file", new File([new TextEncoder().encode("%PDF-1.7 領収書")], fileName, { type }))
 
   return form
+}
+
+for (const actor of ["machine", "external"]) {
+  test(`upload保存中の${actor}資格の失効をpending化前に検出する`, async () => {
+    const fixture = await createFixture(actor === "machine" ? "agent" : null, actor === "external")
+    const token = await fixture.tokenOf("4f810255-55d5-43c8-b43f-2df5e7bf5a3c")
+    const intercepted = spyOn(AttachmentAdapter.prototype, "markPending")
+    const original = intercepted.getMockImplementation()
+    if (original === undefined) throw new Error("missing original pending transition")
+    intercepted.mockImplementation(async function (this: AttachmentAdapter, ...args) {
+      if (actor === "machine")
+        await fixture.db
+          .prepare(
+            "UPDATE system_machine_credentials SET status='revoked',revoked_at=?1,updated_at=?1",
+          )
+          .bind(Date.now())
+          .run()
+      else
+        await fixture.db
+          .prepare("UPDATE system_identity_bindings SET revoked_at=?1")
+          .bind(Date.now())
+          .run()
+      return original.call(this, ...args)
+    })
+    try {
+      const response = await fixture.request("/attachments", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` },
+        body: receiptForm("example.pdf"),
+      })
+      expect(response.status).toBe(401)
+      expect(intercepted).toHaveBeenCalledTimes(1)
+      expect(
+        await fixture.db.prepare("SELECT status FROM system_attachments").first<string>("status"),
+      ).toBe("uploading")
+    } finally {
+      intercepted.mockRestore()
+    }
+  })
 }
 
 describe("POST /attachments", () => {

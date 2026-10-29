@@ -1,3 +1,4 @@
+import type { SystemReadAuthentication } from "@system/domain/definitions/system-read-authentication.definition"
 import { StoreEncryptedAttachmentAdapter } from "@system/infrastructure/adapters/attachments/store-encrypted-attachment.adapter"
 import type {
   AttachmentStorageCommand,
@@ -37,7 +38,17 @@ export class StoreAttachment {
     )
   }
 
-  async run(command: AttachmentStorageCommand): Promise<StoredAttachment | Error> {
+  /** HTTP uploadでは検証済みproofを必ず渡す。省略はサーバー内部の本文準備に限る。 */
+  async run(
+    command: AttachmentStorageCommand,
+    authentication: SystemReadAuthentication | null = null,
+  ): Promise<StoredAttachment | Error> {
+    if (authentication !== null && authentication.accountId !== command.ownerAccountId)
+      return new SystemAttachmentError(
+        "validation",
+        "attachment_upload_actor_changed",
+        "attachment upload authentication changed",
+      )
     const violation = validateAttachmentContent({
       contentType: command.contentType,
       byteSize: command.content.byteLength,
@@ -46,6 +57,6 @@ export class StoreAttachment {
 
     if (violation !== null) return StoreAttachment.toViolationError(violation)
 
-    return new StoreEncryptedAttachmentAdapter(this.c).run(command)
+    return new StoreEncryptedAttachmentAdapter(this.c).run(command, authentication)
   }
 }

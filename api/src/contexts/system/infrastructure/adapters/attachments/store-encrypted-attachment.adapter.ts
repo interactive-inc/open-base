@@ -1,3 +1,5 @@
+import type { SystemReadAuthentication } from "@system/domain/definitions/system-read-authentication.definition"
+import { PrepareAttachmentActorGuardAdapter } from "@system/infrastructure/adapters/attachments/prepare-attachment-actor-guard.adapter"
 import {
   RECORD_BINARY_CONTENT_TYPE,
   RECORD_BINARY_MAX_SIZE,
@@ -19,7 +21,9 @@ import type {
   SystemDatabaseContext,
 } from "@system/configuration/system-context"
 
-type Context = SystemDatabaseContext & SystemAttachmentStorageContext
+type Context = SystemDatabaseContext &
+  SystemAttachmentStorageContext &
+  Readonly<{ env: Readonly<{ DB?: D1Database }> }>
 
 /** 内容種別を所有側で検査したデータを、予約行・暗号文・未紐付け状態の順で保存する。 */
 export class StoreEncryptedAttachmentAdapter {
@@ -27,7 +31,10 @@ export class StoreEncryptedAttachmentAdapter {
     Object.freeze(this)
   }
 
-  async run(command: AttachmentStorageCommand): Promise<StoredAttachment | Error> {
+  async run(
+    command: AttachmentStorageCommand,
+    authentication: SystemReadAuthentication | null = null,
+  ): Promise<StoredAttachment | Error> {
     if (
       command.content.byteLength <= 0 ||
       command.content.byteLength >
@@ -53,20 +60,34 @@ export class StoreEncryptedAttachmentAdapter {
 
     const repository = new AttachmentAdapter(this.c)
 
-    const reserved = await repository.reserve({
-      id,
-      ownerAccountId: command.ownerAccountId,
-      objectKey,
-      contentType: command.contentType,
-      byteSize: command.content.byteLength,
-      fileName: command.fileName.trim(),
-      plaintextSha256: encrypted.plaintextSha256,
-      wrappedDek: encrypted.wrappedDek,
-      wrappedDekIv: encrypted.wrappedDekIv,
-      contentIv: encrypted.contentIv,
-      kekVersion: encrypted.kekVersion,
-      createdAt: command.now,
-    })
+    const database = this.c.env.DB
+    if (authentication !== null && database === undefined)
+      return new Error("attachment authentication guard database is unavailable")
+    const assertions = () =>
+      authentication === null || database === undefined
+        ? []
+        : new PrepareAttachmentActorGuardAdapter({ env: { DB: database } }).prepare({
+            authentication,
+            at: new Date(Math.max(command.now.getTime(), Date.now())),
+            rejection: "attachment_upload_actor_changed",
+          })
+    const reserved = await repository.reserve(
+      {
+        id,
+        ownerAccountId: command.ownerAccountId,
+        objectKey,
+        contentType: command.contentType,
+        byteSize: command.content.byteLength,
+        fileName: command.fileName.trim(),
+        plaintextSha256: encrypted.plaintextSha256,
+        wrappedDek: encrypted.wrappedDek,
+        wrappedDekIv: encrypted.wrappedDekIv,
+        contentIv: encrypted.contentIv,
+        kekVersion: encrypted.kekVersion,
+        createdAt: command.now,
+      },
+      assertions(),
+    )
 
     if (reserved instanceof Error) return reserved
 
@@ -74,7 +95,7 @@ export class StoreEncryptedAttachmentAdapter {
 
     if (stored instanceof Error) return stored
 
-    const pending = await repository.markPending(id)
+    const pending = await repository.markPending(id, assertions())
 
     if (pending instanceof Error) return pending
 
