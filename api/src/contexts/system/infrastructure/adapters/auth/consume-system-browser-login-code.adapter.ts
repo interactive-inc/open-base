@@ -15,21 +15,23 @@ export class ConsumeSystemBrowserLoginCodeAdapter {
   async consumeSystemBrowserLoginCode(
     codeHash: string,
     now: Date,
-  ): Promise<Readonly<{ accountId: AccountId }> | null | Error> {
+  ): Promise<Readonly<{ accountId: AccountId; tokenVersion: number }> | null | Error> {
     try {
       const database = this.c.env.DB
       const row = await database
         .prepare(
-          `SELECT account_id
+          `SELECT account_id, token_version
            FROM system_browser_login_codes
-           WHERE code_hash = ?1 AND expires_at > ?2
+           WHERE code_hash = ?1 AND created_at <= ?2 AND expires_at > ?2
+             AND EXISTS (SELECT 1 FROM system_accounts account WHERE account.id=account_id AND account.status='active' AND account.closed_at IS NULL AND account.token_version=system_browser_login_codes.token_version)
            LIMIT 1`,
         )
         .bind(codeHash, now.getTime())
-        .first<{ account_id: string }>()
+        .first<{ account_id: string; token_version: number }>()
       if (row === null) return null
       const accountId = zAccountId.safeParse(row.account_id)
-      if (!accountId.success) return new Error("invalid System AccountEntity ID")
+      if (!accountId.success || !Number.isSafeInteger(row.token_version) || row.token_version < 0)
+        return new Error("invalid System AccountEntity ID")
 
       const audit = SystemAuditEventEntity.create({
         actorAccountId: accountId.data,
@@ -50,9 +52,10 @@ export class ConsumeSystemBrowserLoginCodeAdapter {
         database
           .prepare(
             `DELETE FROM system_browser_login_codes
-             WHERE code_hash = ?1 AND account_id = ?2 AND expires_at > ?3`,
+             WHERE code_hash = ?1 AND account_id = ?2 AND created_at <= ?3 AND expires_at > ?3 AND token_version=?4
+               AND EXISTS (SELECT 1 FROM system_accounts account WHERE account.id=account_id AND account.status='active' AND account.closed_at IS NULL AND account.token_version=system_browser_login_codes.token_version)`,
           )
-          .bind(codeHash, accountId.data, now.getTime()),
+          .bind(codeHash, accountId.data, now.getTime(), row.token_version),
         database.prepare(
           "SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('', '$') END AS ok",
         ),
@@ -61,7 +64,7 @@ export class ConsumeSystemBrowserLoginCodeAdapter {
       const results = await database.batch(statements)
 
       return results.length === statements.length && results.every((result) => result.success)
-        ? Object.freeze({ accountId: accountId.data })
+        ? Object.freeze({ accountId: accountId.data, tokenVersion: row.token_version })
         : new Error("System browser login code consumption did not succeed")
     } catch (caught) {
       return caught instanceof Error

@@ -298,7 +298,7 @@ export const systemCliLoginStates = sqliteTable(
 
 export type SystemCliLoginStateRow = InferSelectModel<typeof systemCliLoginStates>
 
-/** CLI callbackからtoken交換へAccountEntityだけを渡すhashed single-use code。 */
+/** CLI callbackからtoken交換へAccountEntityと認証版を渡すhashed single-use code。 */
 export const systemCliLoginCodes = sqliteTable(
   "system_cli_login_codes",
   {
@@ -306,19 +306,21 @@ export const systemCliLoginCodes = sqliteTable(
     accountId: text("account_id")
       .notNull()
       .references(() => systemAccounts.id, { onDelete: "cascade" }),
+    tokenVersion: integer("token_version").notNull().default(0),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
     expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
   },
   (table) => [
     index("system_cli_login_codes_expires_idx").on(table.expiresAt),
     check("system_cli_login_codes_hash_length", sql`length(${table.codeHash}) BETWEEN 32 AND 512`),
+    check("system_cli_login_codes_token_version", sql`${table.tokenVersion} >= 0`),
     check("system_cli_login_codes_expiration", sql`${table.expiresAt} > ${table.createdAt}`),
   ],
 )
 
 export type SystemCliLoginCodeRow = InferSelectModel<typeof systemCliLoginCodes>
 
-/** Web browserからtoken交換へAccountEntityだけを渡すhashed single-use code。 */
+/** Web browserからtoken交換へAccountEntityと認証版を渡すhashed single-use code。 */
 export const systemBrowserLoginCodes = sqliteTable(
   "system_browser_login_codes",
   {
@@ -326,6 +328,7 @@ export const systemBrowserLoginCodes = sqliteTable(
     accountId: text("account_id")
       .notNull()
       .references(() => systemAccounts.id, { onDelete: "cascade" }),
+    tokenVersion: integer("token_version").notNull().default(0),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
     expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
   },
@@ -335,6 +338,7 @@ export const systemBrowserLoginCodes = sqliteTable(
       "system_browser_login_codes_hash_length",
       sql`length(${table.codeHash}) BETWEEN 32 AND 512`,
     ),
+    check("system_browser_login_codes_token_version", sql`${table.tokenVersion} >= 0`),
     check("system_browser_login_codes_expiration", sql`${table.expiresAt} > ${table.createdAt}`),
   ],
 )

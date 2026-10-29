@@ -15,7 +15,10 @@ export const issueSystemBrowserLoginCode = factory.createMiddleware(async (c, ne
 
   await authenticateSystemBearer(c)
 
-  const creation = await new CreateSystemBrowserLoginCode(c).execute(c.var.userId)
+  const creation = await new CreateSystemBrowserLoginCode(c).execute(
+    c.var.userId,
+    c.var.accountTokenVersion,
+  )
   if (creation instanceof Error) throw new SystemBrowserLoginCodeUnavailableError()
 
   return c.json({ code: creation.code, expires_in: creation.expiresInSeconds }, 201)

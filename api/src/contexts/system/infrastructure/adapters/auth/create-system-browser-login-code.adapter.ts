@@ -5,7 +5,7 @@ import { SystemAuditEventRepository } from "@system/infrastructure/repositories/
 import type { SystemD1Context } from "@system/configuration/system-context"
 type Context = SystemD1Context
 
-/** browser token交換用codeのhashとAccountだけを短期間保存し、発行監査と同じbatchで確定する。 */
+/** browser token交換用codeのhash・Account・認証版を短期間保存し、発行監査と同じbatchで確定する。 */
 export class CreateSystemBrowserLoginCodeAdapter {
   constructor(private readonly c: Context) {
     Object.freeze(this)
@@ -15,6 +15,7 @@ export class CreateSystemBrowserLoginCodeAdapter {
     input: Readonly<{
       codeHash: string
       accountId: AccountId
+      tokenVersion: number
       createdAt: Date
       expiresAt: Date
     }>,
@@ -40,15 +41,20 @@ export class CreateSystemBrowserLoginCodeAdapter {
         database
           .prepare(
             `INSERT INTO system_browser_login_codes
-             (code_hash, account_id, created_at, expires_at)
-           VALUES (?1, ?2, ?3, ?4)`,
+             (code_hash, account_id, created_at, expires_at, token_version)
+           SELECT ?1, id, ?3, ?4, token_version FROM system_accounts
+           WHERE id=?2 AND status='active' AND closed_at IS NULL AND token_version=?5 AND created_at<=?3`,
           )
           .bind(
             input.codeHash,
             input.accountId,
             input.createdAt.getTime(),
             input.expiresAt.getTime(),
+            input.tokenVersion,
           ),
+        database.prepare(
+          "SELECT CASE WHEN changes()=1 THEN 1 ELSE json_extract('{}','browser_code_authorization_changed') END",
+        ),
         ...new SystemAuditEventRepository(this.c).prepareAppend(audit),
       ]
       const results = await database.batch(statements)

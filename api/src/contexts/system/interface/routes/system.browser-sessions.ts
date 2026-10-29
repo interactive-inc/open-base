@@ -75,7 +75,7 @@ export const POST = systemFactory.createHandlers(
       sessionMaxLifetimeMilliseconds,
     }).execute({
       accountId: account.id,
-      tokenVersion: account.tokenVersion,
+      tokenVersion: consumed.tokenVersion,
       now,
       auditContext: { authorizationJson: null, metadataJson: metadataJson?.toString() ?? null },
     })

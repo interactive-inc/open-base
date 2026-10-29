@@ -48,6 +48,7 @@ describe("System browser login code audit", () => {
       await new CreateSystemBrowserLoginCodeAdapter(context).createSystemBrowserLoginCode({
         codeHash,
         accountId,
+        tokenVersion: 0,
         createdAt,
         expiresAt,
       }),
@@ -55,6 +56,7 @@ describe("System browser login code audit", () => {
     const consumer = new ConsumeSystemBrowserLoginCodeAdapter(context)
     expect(await consumer.consumeSystemBrowserLoginCode(codeHash, new Date(2_000))).toEqual({
       accountId,
+      tokenVersion: 0,
     })
     expect(await consumer.consumeSystemBrowserLoginCode(codeHash, new Date(3_000))).toBeNull()
 
@@ -84,6 +86,7 @@ describe("System browser login code audit", () => {
     await new CreateSystemBrowserLoginCodeAdapter(context).createSystemBrowserLoginCode({
       codeHash,
       accountId,
+      tokenVersion: 0,
       createdAt,
       expiresAt,
     })
@@ -110,6 +113,7 @@ describe("System browser login code audit", () => {
       await new CreateSystemBrowserLoginCodeAdapter(context).createSystemBrowserLoginCode({
         codeHash,
         accountId,
+        tokenVersion: 0,
         createdAt,
         expiresAt,
       }),

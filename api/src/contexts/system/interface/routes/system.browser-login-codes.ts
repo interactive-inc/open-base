@@ -6,7 +6,10 @@ import { systemFactory } from "@system/interface/request-environment/system-fact
 
 // @authorization owner - 認証済みSystem Account自身へだけone-time codeを発行する
 export const POST = systemFactory.createHandlers(authenticateSystemAccessToken, async (context) => {
-  const creation = await new CreateSystemBrowserLoginCode(context).execute(context.var.userId)
+  const creation = await new CreateSystemBrowserLoginCode(context).execute(
+    context.var.userId,
+    context.var.accountTokenVersion,
+  )
   if (creation instanceof Error) throw new SystemBrowserLoginCodeUnavailableError()
 
   return context.json({ code: creation.code, expires_in: creation.expiresInSeconds }, 201)

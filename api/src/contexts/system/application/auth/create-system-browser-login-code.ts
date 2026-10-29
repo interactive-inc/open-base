@@ -18,10 +18,18 @@ export class CreateSystemBrowserLoginCode {
     Object.freeze(this)
   }
 
-  async execute(rawAccountId: unknown): Promise<SystemBrowserLoginCode | Error> {
+  async execute(
+    rawAccountId: unknown,
+    tokenVersion: number,
+  ): Promise<SystemBrowserLoginCode | Error> {
     const now = this.c.var.now()
     const accountId = zAccountId.safeParse(rawAccountId)
-    if (!Number.isSafeInteger(now.getTime()) || !accountId.success) {
+    if (
+      !Number.isSafeInteger(now.getTime()) ||
+      !accountId.success ||
+      !Number.isSafeInteger(tokenVersion) ||
+      tokenVersion < 0
+    ) {
       return new Error("browser login code is unavailable")
     }
 
@@ -34,6 +42,7 @@ export class CreateSystemBrowserLoginCode {
     ).createSystemBrowserLoginCode({
       codeHash,
       accountId: accountId.data,
+      tokenVersion,
       createdAt: now,
       expiresAt: new Date(now.getTime() + this.codeTtlMilliseconds),
     })
