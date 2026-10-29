@@ -16,6 +16,10 @@ const maximumPublicationPayloadBytes = 1_000_000
 type Props = Readonly<{
   context: SystemD1Context
   publicationAuthorization?: () => ReadonlyArray<D1PreparedStatement> | Error
+  recipientAuthorization?: Readonly<{
+    accountId: AccountId
+    assertions: () => ReadonlyArray<D1PreparedStatement> | Error
+  }>
 }>
 
 type DeliveryPayload = Readonly<{
@@ -71,6 +75,35 @@ type Context = SystemNotificationRepositoryContext
 export class SystemNotificationRepository {
   constructor(private readonly c: Context) {
     Object.freeze(this)
+  }
+
+  /** 読み取った本文や件数を返す前にも、受信者の現在の資格を要求する。 */
+  async revalidateRecipient(recipientAccountId: AccountId): Promise<void | Error> {
+    const checked = await this.recipientBatch(recipientAccountId, [])
+    if (checked instanceof Error) return checked
+  }
+
+  private async recipientBatch<T = Record<string, unknown>>(
+    recipientAccountId: AccountId,
+    statements: ReadonlyArray<D1PreparedStatement>,
+  ): Promise<ReadonlyArray<D1Result<T>> | Error> {
+    const authorization = this.c.recipientAuthorization
+    if (authorization !== undefined && authorization.accountId !== recipientAccountId)
+      return new Error("System Notification recipient authorization does not match")
+    const assertions = authorization?.assertions() ?? []
+    if (assertions instanceof Error) return assertions
+    const batch = [...assertions, ...statements, ...assertions]
+    if (batch.length === 0) return []
+    try {
+      const results = await this.c.context.env.DB.batch<T>(batch)
+      if (results.length !== batch.length || results.some((result) => !result.success))
+        return new Error("System Notification recipient operation did not succeed")
+      return results.slice(assertions.length, assertions.length + statements.length)
+    } catch (cause) {
+      return cause instanceof Error
+        ? cause
+        : new Error("System Notification recipient operation failed")
+    }
   }
 
   /** 業務変更と通知を同じtransactionへ保存するための検証済みstatement。 */
@@ -156,11 +189,11 @@ export class SystemNotificationRepository {
     recipientAccountId: AccountId,
   ): Promise<NotificationDeliveryEntity | null | Error> {
     try {
-      const row = await prepareDeliverySelect(
-        this.c.context.env.DB,
-        deliveryId,
-        recipientAccountId,
-      ).first<Record<string, unknown>>()
+      const results = await this.recipientBatch(recipientAccountId, [
+        prepareDeliverySelect(this.c.context.env.DB, deliveryId, recipientAccountId),
+      ])
+      if (results instanceof Error) return results
+      const row = results[0]?.results[0] ?? null
 
       return row === null ? null : toSystemNotificationDelivery(row)
     } catch (caught) {
@@ -175,11 +208,11 @@ export class SystemNotificationRepository {
     recipientAccountId: AccountId,
   ): Promise<SystemNotification | null | Error> {
     try {
-      const row = await prepareNotificationSelect(
-        this.c.context.env.DB,
-        deliveryId,
-        recipientAccountId,
-      ).first<Record<string, unknown>>()
+      const results = await this.recipientBatch(recipientAccountId, [
+        prepareNotificationSelect(this.c.context.env.DB, deliveryId, recipientAccountId),
+      ])
+      if (results instanceof Error) return results
+      const row = results[0]?.results[0] ?? null
 
       return row === null ? null : toSystemNotification(row)
     } catch (caught) {
@@ -190,7 +223,7 @@ export class SystemNotificationRepository {
   async findMany(props: ListSystemNotificationsProps): Promise<SystemNotificationPage | Error> {
     try {
       const database = this.c.context.env.DB
-      const results = await database.batch([
+      const results = await this.recipientBatch(props.recipientAccountId, [
         database
           .prepare(
             `SELECT
@@ -239,6 +272,7 @@ export class SystemNotificationRepository {
           .bind(props.recipientAccountId, props.read === null ? null : props.read ? 1 : 0),
       ])
 
+      if (results instanceof Error) return results
       if (results.length !== 2 || results.some((result) => !result.success)) {
         return new Error("System Notification list did not succeed")
       }
@@ -268,8 +302,9 @@ export class SystemNotificationRepository {
     deliveryId: string | null = null,
   ): Promise<ReadonlyArray<SystemNotificationRecord> | Error> {
     try {
-      const result = await this.c.context.env.DB.prepare(
-        `SELECT delivery.id, delivery.message_id, delivery.delivered_at, delivery.read_at,
+      const results = await this.recipientBatch(recipientAccountId, [
+        this.c.context.env.DB.prepare(
+          `SELECT delivery.id, delivery.message_id, delivery.delivered_at, delivery.read_at,
                 message.kind, message.title, message.body, message.priority,
                 message.action_url, message.action_type, message.action_id,
                 scope.resource_type, scope.resource_id
@@ -280,10 +315,12 @@ export class SystemNotificationRepository {
             AND delivery.dismissed_at IS NULL
             AND (?2 IS NULL OR (delivery.read_at IS NOT NULL) = ?2)
             AND (?3 IS NULL OR delivery.id = ?3)`,
-      )
-        .bind(recipientAccountId, read === null ? null : read ? 1 : 0, deliveryId)
-        .all()
-      if (!result.success) return new Error("System Notification record list did not succeed")
+        ).bind(recipientAccountId, read === null ? null : read ? 1 : 0, deliveryId),
+      ])
+      if (results instanceof Error) return results
+      const result = results[0]
+      if (result === undefined || !result.success)
+        return new Error("System Notification record list did not succeed")
       const records: Array<SystemNotificationRecord> = []
       for (const raw of result.results) {
         const record = toSystemNotificationRecord(raw)
@@ -300,13 +337,15 @@ export class SystemNotificationRepository {
 
   async countUnreadForAccount(recipientAccountId: AccountId): Promise<number | Error> {
     try {
-      const total = await this.c.context.env.DB.prepare(
-        `SELECT count(*) AS total
+      const results = await this.recipientBatch<{ total: number }>(recipientAccountId, [
+        this.c.context.env.DB.prepare(
+          `SELECT count(*) AS total
            FROM system_notification_deliveries
            WHERE recipient_account_id = ?1 AND read_at IS NULL AND dismissed_at IS NULL`,
-      )
-        .bind(recipientAccountId)
-        .first<number>("total")
+        ).bind(recipientAccountId),
+      ])
+      if (results instanceof Error) return results
+      const total = results[0]?.results[0]?.total
 
       return typeof total === "number" && Number.isSafeInteger(total) && total >= 0
         ? total
@@ -334,23 +373,29 @@ export class SystemNotificationRepository {
     ) {
       return new Error("System Notification read selection is invalid")
     }
-    if (input.deliveryIds.length === 0) return 0
+    if (input.deliveryIds.length === 0) {
+      const checked = await this.revalidateRecipient(input.recipientAccountId)
+      return checked instanceof Error ? checked : 0
+    }
     const payload = JSON.stringify([...new Set(input.deliveryIds)])
     if (new TextEncoder().encode(payload).byteLength > maximumPublicationPayloadBytes) {
       return new Error("System Notification read selection is too large")
     }
     try {
-      const result = await this.c.context.env.DB.prepare(
-        `UPDATE system_notification_deliveries
+      const results = await this.recipientBatch(input.recipientAccountId, [
+        this.c.context.env.DB.prepare(
+          `UPDATE system_notification_deliveries
             SET read_at = ?1
           WHERE recipient_account_id = ?2
             AND id IN (SELECT value FROM json_each(?3))
             AND read_at IS NULL
             AND dismissed_at IS NULL
             AND delivered_at <= ?1`,
-      )
-        .bind(input.readAt.getTime(), input.recipientAccountId, payload)
-        .run()
+        ).bind(input.readAt.getTime(), input.recipientAccountId, payload),
+      ])
+      if (results instanceof Error) return results
+      const result = results[0]
+      if (result === undefined) return new Error("System Notification transition result is missing")
       const changes = result.meta.changes
       return Number.isSafeInteger(changes) && changes >= 0 && changes <= input.deliveryIds.length
         ? changes
@@ -365,7 +410,7 @@ export class SystemNotificationRepository {
   ): Promise<NotificationDeliveryEntity | null | Error> {
     try {
       const database = this.c.context.env.DB
-      const results = await database.batch([
+      const results = await this.recipientBatch(props.recipientAccountId, [
         database
           .prepare(
             `UPDATE system_notification_deliveries
@@ -380,6 +425,7 @@ export class SystemNotificationRepository {
         prepareDeliverySelect(database, props.deliveryId, props.recipientAccountId),
       ])
 
+      if (results instanceof Error) return results
       if (results.length !== 2 || results.some((result) => !result.success)) {
         return new Error("System Notification read transition did not succeed")
       }
@@ -412,16 +458,19 @@ export class SystemNotificationRepository {
     readAt: Date,
   ): Promise<number | Error> {
     try {
-      const result = await this.c.context.env.DB.prepare(
-        `UPDATE system_notification_deliveries
+      const results = await this.recipientBatch(recipientAccountId, [
+        this.c.context.env.DB.prepare(
+          `UPDATE system_notification_deliveries
            SET read_at = ?1
            WHERE recipient_account_id = ?2
              AND read_at IS NULL
              AND dismissed_at IS NULL
              AND delivered_at <= ?1`,
-      )
-        .bind(readAt.getTime(), recipientAccountId)
-        .run()
+        ).bind(readAt.getTime(), recipientAccountId),
+      ])
+      if (results instanceof Error) return results
+      const result = results[0]
+      if (result === undefined) return new Error("System Notification transition result is missing")
 
       const changes = result.meta.changes
       return Number.isSafeInteger(changes) && changes >= 0
@@ -440,14 +489,17 @@ export class SystemNotificationRepository {
     dismissedAt: Date,
   ): Promise<boolean | Error> {
     try {
-      const result = await this.c.context.env.DB.prepare(
-        `UPDATE system_notification_deliveries
+      const results = await this.recipientBatch(recipientAccountId, [
+        this.c.context.env.DB.prepare(
+          `UPDATE system_notification_deliveries
            SET dismissed_at = ?3
            WHERE id = ?1 AND recipient_account_id = ?2
              AND dismissed_at IS NULL AND delivered_at <= ?3`,
-      )
-        .bind(deliveryId, recipientAccountId, dismissedAt.getTime())
-        .run()
+        ).bind(deliveryId, recipientAccountId, dismissedAt.getTime()),
+      ])
+      if (results instanceof Error) return results
+      const result = results[0]
+      if (result === undefined) return new Error("System Notification transition result is missing")
 
       return result.meta.changes === 1
     } catch (caught) {

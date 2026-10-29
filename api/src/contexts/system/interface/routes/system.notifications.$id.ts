@@ -1,5 +1,5 @@
+import { prepareSystemNotificationRecipientAccess } from "@system/interface/operations/prepare-system-notification-recipient-access"
 import {
-  SystemInvalidSessionError,
   SystemNotificationNotFoundError,
   SystemNotificationTransitionInvalidError,
   SystemNotificationUnavailableError,
@@ -7,8 +7,6 @@ import {
 /** /system/notifications/:id */
 import { DismissSystemNotification } from "@system/application/notifications/dismiss-system-notification"
 import { MarkSystemNotificationRead } from "@system/application/notifications/mark-system-notification-read"
-import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
-import { SystemNotificationRepository } from "@system/infrastructure/repositories/notifications/system-notification.repository"
 import { authenticateSystemAccessToken } from "@system/interface/middlewares/authenticate-system-access-token"
 import { systemFactory } from "@system/interface/request-environment/system-factory"
 import { zValidator } from "@hono/zod-validator"
@@ -22,16 +20,15 @@ export const GET = systemFactory.createHandlers(
     z.object({ id: z.string().min(1).max(255).brand<"NotificationDeliveryId">() }),
   ),
   async (context) => {
-    const accountId = zAccountId.safeParse(context.var.userId)
-    if (!accountId.success) {
-      throw new SystemInvalidSessionError()
-    }
-    const notification = await new SystemNotificationRepository({
-      context: { env: { DB: context.env.DB } },
-    }).findByDeliveryIdForAccount(context.req.valid("param").id, accountId.data)
+    const access = await prepareSystemNotificationRecipientAccess(context)
+    const notification = await access.repository.findByDeliveryIdForAccount(
+      context.req.valid("param").id,
+      access.accountId,
+    )
     if (notification instanceof Error) {
       throw new SystemNotificationUnavailableError()
     }
+    await access.revalidate()
     if (notification === null) {
       throw new SystemNotificationNotFoundError()
     }
@@ -70,21 +67,16 @@ export const PATCH = systemFactory.createHandlers(
   ),
   zValidator("json", z.object({ read: z.literal(true) })),
   async (context) => {
-    const accountId = zAccountId.safeParse(context.var.userId)
-    if (!accountId.success) {
-      throw new SystemInvalidSessionError()
-    }
+    const access = await prepareSystemNotificationRecipientAccess(context)
     const readAt = context.var.now()
     if (!Number.isSafeInteger(readAt.getTime())) {
       throw new SystemNotificationUnavailableError()
     }
     const transition = await new MarkSystemNotificationRead({
-      notificationRepository: new SystemNotificationRepository({
-        context: { env: { DB: context.env.DB } },
-      }),
+      notificationRepository: access.repository,
     }).execute({
       deliveryId: context.req.valid("param").id,
-      recipientAccountId: accountId.data,
+      recipientAccountId: access.accountId,
       readAt,
     })
     if (transition instanceof Error) {
@@ -115,21 +107,16 @@ export const DELETE = systemFactory.createHandlers(
     z.object({ id: z.string().min(1).max(255).brand<"NotificationDeliveryId">() }),
   ),
   async (context) => {
-    const accountId = zAccountId.safeParse(context.var.userId)
-    if (!accountId.success) {
-      throw new SystemInvalidSessionError()
-    }
+    const access = await prepareSystemNotificationRecipientAccess(context)
     const dismissedAt = context.var.now()
     if (!Number.isSafeInteger(dismissedAt.getTime())) {
       throw new SystemNotificationUnavailableError()
     }
     const transition = await new DismissSystemNotification({
-      notificationRepository: new SystemNotificationRepository({
-        context: { env: { DB: context.env.DB } },
-      }),
+      notificationRepository: access.repository,
     }).execute({
       deliveryId: context.req.valid("param").id,
-      recipientAccountId: accountId.data,
+      recipientAccountId: access.accountId,
       dismissedAt,
     })
     if (transition instanceof Error) {

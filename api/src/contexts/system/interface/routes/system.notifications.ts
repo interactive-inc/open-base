@@ -1,3 +1,4 @@
+import { prepareSystemNotificationRecipientAccess } from "@system/interface/operations/prepare-system-notification-recipient-access"
 import {
   SystemForbiddenError,
   SystemInvalidSessionError,
@@ -8,7 +9,6 @@ import {
 /** /system/notifications */
 import { PublishSystemNotification } from "@system/application/notifications/publish-system-notification"
 import { SystemFeaturePermission } from "@system/domain/catalogs/iam/system-feature-permission.catalog"
-import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { notificationSourceReferenceSchema } from "@system/domain/schemas/notifications/notification-reference.schema"
 import { NotificationDeliveryBatchValue } from "@system/domain/values/notifications/notification-delivery-batch.value"
 import { NotificationDeliveryEntity } from "@system/domain/entities/notification-delivery.entity"
@@ -33,15 +33,10 @@ export const GET = systemFactory.createHandlers(
     }),
   ),
   async (context) => {
-    const accountId = zAccountId.safeParse(context.var.userId)
-    if (!accountId.success) {
-      throw new SystemInvalidSessionError()
-    }
+    const access = await prepareSystemNotificationRecipientAccess(context)
     const query = context.req.valid("query")
-    const page = await new SystemNotificationRepository({
-      context: { env: { DB: context.env.DB } },
-    }).findMany({
-      recipientAccountId: accountId.data,
+    const page = await access.repository.findMany({
+      recipientAccountId: access.accountId,
       read: query.read === undefined ? null : query.read === "true",
       limit: query.limit,
       offset: query.offset,
@@ -50,6 +45,7 @@ export const GET = systemFactory.createHandlers(
       throw new SystemNotificationUnavailableError()
     }
 
+    await access.revalidate()
     return context.json(
       {
         notifications: page.items.map(({ delivery, message }) => ({
@@ -199,17 +195,12 @@ export const PATCH = systemFactory.createHandlers(
   authenticateSystemAccessToken,
   zValidator("json", z.object({ read: z.literal(true) })),
   async (context) => {
-    const accountId = zAccountId.safeParse(context.var.userId)
-    if (!accountId.success) {
-      throw new SystemInvalidSessionError()
-    }
+    const access = await prepareSystemNotificationRecipientAccess(context)
     const readAt = context.var.now()
     if (!Number.isSafeInteger(readAt.getTime())) {
       throw new SystemNotificationUnavailableError()
     }
-    const markedCount = await new SystemNotificationRepository({
-      context: { env: { DB: context.env.DB } },
-    }).markAllDeliveriesRead(accountId.data, readAt)
+    const markedCount = await access.repository.markAllDeliveriesRead(access.accountId, readAt)
     if (markedCount instanceof Error) {
       throw new SystemNotificationUnavailableError()
     }
