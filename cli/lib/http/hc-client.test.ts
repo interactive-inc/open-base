@@ -89,3 +89,40 @@ test("the response from the authenticated retry still uses the ApiError contract
     globalThis.fetch = originalFetch
   }
 })
+
+for (const hasRefreshed of [false, true]) {
+  test(`an explicit bearer cannot fall back to the stored account after a 401 (refreshed=${hasRefreshed})`, async () => {
+    fixture.generation = hasRefreshed ? 1 : 0
+    const client = await createClient()
+    if (hasRefreshed) await client.system["work-items"].$get({ query: {} })
+    const saved = await new SettingsFile().tokensFor(process.env.BASE_API ?? "")
+    const generation = fixture.generation
+    fixture.headers.length = 0
+    const failure = await client.company["current-profile"]
+      .$get({}, { headers: { Authorization: "Bearer rejected-explicit-account" } })
+      .catch((error: unknown) => error)
+
+    expect(failure).toBeInstanceOf(ApiError)
+    if (!(failure instanceof ApiError)) throw new Error("expected explicit bearer rejection")
+    expect(failure.status).toBe(401)
+    expect(fixture.headers).toEqual(["Bearer rejected-explicit-account"])
+    expect(fixture.generation).toBe(generation)
+    expect(await new SettingsFile().tokensFor(process.env.BASE_API ?? "")).toEqual(saved)
+  })
+}
+
+test("an accepted explicit bearer is preserved without replacing the saved session", async () => {
+  const client = await createClient()
+  const response = await client.company["current-profile"].$get(
+    {},
+    { headers: { Authorization: "Bearer example-access-1" } },
+  )
+
+  expect(response.status).toBe(200)
+  expect(fixture.headers).toEqual(["Bearer example-access-1"])
+  expect(fixture.generation).toBe(1)
+  expect(await new SettingsFile().tokensFor(process.env.BASE_API ?? "")).toEqual({
+    token: "example-access-0",
+    refresh_token: "example-refresh-0",
+  })
+})

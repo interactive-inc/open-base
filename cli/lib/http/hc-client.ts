@@ -18,10 +18,10 @@ function toFetchOrThrow(baseUrl: string, initialToken: string | null): typeof fe
     init?: Parameters<typeof fetch>[1],
   ): Promise<Response> => {
     const headers = new Headers(init?.headers)
-
-    if (
+    const usesStoredAuthentication =
       headers.get("Authorization") === (initialToken === null ? null : `Bearer ${initialToken}`)
-    ) {
+
+    if (usesStoredAuthentication) {
       if (authentication.token !== null)
         headers.set("Authorization", `Bearer ${authentication.token}`)
     }
@@ -33,7 +33,7 @@ function toFetchOrThrow(baseUrl: string, initialToken: string | null): typeof fe
       return responses.current
     }
 
-    if (responses.current.status === 401) {
+    if (responses.current.status === 401 && usesStoredAuthentication) {
       const refreshed = await new SettingsFile().refreshTokens(
         baseUrl,
         headers.get("Authorization")?.replace(/^Bearer /, "") ?? null,
