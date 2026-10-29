@@ -190,13 +190,41 @@ export async function ensureAuth(): Promise<{ baseUrl: string; token: string | n
   return authentication.get()
 }
 
+type Props = Omit<RequestInit, "body"> & { body?: string | FormData }
+
+/** 再送可能なbodyを認証付きで送り、401のときだけ後継tokenで一回やり直す。 */
+export async function authenticatedFetch(path: string | URL, options: Props): Promise<Response> {
+  const session = await ensureAuth()
+  const headers = new Headers(options.headers)
+  if (session.token !== null) headers.set("Authorization", `Bearer ${session.token}`)
+
+  const url = new URL(path, session.baseUrl)
+  const response = await fetch(url, {
+    ...options,
+    headers,
+    signal: options.signal ?? AbortSignal.timeout(15_000),
+  })
+  if (response.status !== 401) return response
+
+  const token = await sessionRefreshes.refresh({
+    baseUrl: session.baseUrl,
+    failedToken: session.token,
+  })
+  if (token === null) return response
+
+  await response.body?.cancel()
+  headers.set("Authorization", `Bearer ${token}`)
+
+  return fetch(url, { ...options, headers, signal: options.signal ?? AbortSignal.timeout(15_000) })
+}
+
 export async function apiRequest<T = unknown>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const { baseUrl, token } = await ensureAuth()
+  const session = await ensureAuth()
 
-  const url = new URL(path, baseUrl)
+  const url = new URL(path, session.baseUrl)
 
   for (const [key, value] of Object.entries(options.query ?? {})) {
     if (value !== null && value !== undefined && value !== "") {
@@ -207,35 +235,15 @@ export async function apiRequest<T = unknown>(
   const headers: Record<string, string> = {}
   if (options.idempotencyKey !== undefined) headers["Idempotency-Key"] = options.idempotencyKey
 
-  if (token !== null) {
-    headers.Authorization = `Bearer ${token}`
-  }
-
   if (options.json !== undefined) {
     headers["content-type"] = "application/json"
   }
 
-  let res = await fetch(url, {
+  const res = await authenticatedFetch(url, {
     method: options.method ?? "GET",
     headers,
     body: options.json !== undefined ? JSON.stringify(options.json) : undefined,
-    signal: AbortSignal.timeout(15_000),
   })
-
-  if (res.status === 401) {
-    const refreshed = await sessionRefreshes.refresh({ baseUrl, failedToken: token })
-
-    if (refreshed !== null) {
-      await res.body?.cancel()
-      headers.Authorization = `Bearer ${refreshed}`
-      res = await fetch(url, {
-        method: options.method ?? "GET",
-        headers,
-        body: options.json !== undefined ? JSON.stringify(options.json) : undefined,
-        signal: AbortSignal.timeout(15_000),
-      })
-    }
-  }
 
   if (res.ok === false) {
     const contentType = res.headers.get("content-type") ?? ""

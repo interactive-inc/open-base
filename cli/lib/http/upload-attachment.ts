@@ -1,7 +1,6 @@
 import { basename, extname } from "node:path"
-import { resolveBaseUrl } from "@/lib/config/resolve-base-url"
-import { SettingsFile } from "@/lib/config/settings-file"
-import { UsageError } from "@/lib/errors"
+import { createClient } from "@/lib/http/hc-client"
+import { ApiError, UsageError } from "@/lib/errors"
 
 const CONTENT_TYPES: Readonly<Record<string, string>> = {
   ".pdf": "application/pdf",
@@ -32,10 +31,6 @@ export async function uploadAttachment(
   path: string,
   baseUrlOverride?: string | null,
 ): Promise<string> {
-  const baseUrl = resolveBaseUrl(baseUrlOverride)
-
-  const tokens = await new SettingsFile().tokensFor(baseUrl)
-
   const file = Bun.file(path)
 
   if (!(await file.exists())) {
@@ -51,21 +46,19 @@ export async function uploadAttachment(
     }),
   )
 
-  const headers: Record<string, string> = {}
-
-  if (tokens.token !== null) {
-    headers.Authorization = `Bearer ${tokens.token}`
-  }
-
-  const response = await fetch(new URL("/system/attachments", baseUrl), {
-    method: "POST",
-    headers,
-    body: form,
-  })
-
-  if (!response.ok) {
-    throw new UsageError(`添付のアップロードに失敗しました (${response.status})`)
-  }
+  const client = await createClient(baseUrlOverride)
+  const response = await client.system.attachments
+    .$post(
+      {},
+      {
+        init: { body: form, signal: AbortSignal.timeout(120_000) },
+      },
+    )
+    .catch((error: unknown) => {
+      if (error instanceof ApiError)
+        throw new UsageError(`添付のアップロードに失敗しました (${error.status})`)
+      throw error
+    })
 
   const body = await response.json()
 

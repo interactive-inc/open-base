@@ -1,5 +1,5 @@
 import { basename, extname } from "node:path"
-import { ensureAuth } from "@/lib/api-client.ts"
+import { authenticatedFetch } from "@/lib/api-client.ts"
 
 const CONTENT_TYPES: Readonly<Record<string, string>> = {
   ".pdf": "application/pdf",
@@ -26,33 +26,31 @@ export async function uploadAttachment(path: string): Promise<string> {
     throw new Error(`ファイルが見つかりません: ${path}`)
   }
 
-  const auth = await ensureAuth()
-
   const form = new FormData()
 
   form.set("file", new File([await file.arrayBuffer()], basename(path), { type: contentType }))
 
-  const headers: Record<string, string> = {}
-
-  if (auth.token !== null) {
-    headers.Authorization = `Bearer ${auth.token}`
-  }
-
-  const response = await fetch(new URL("/attachments", auth.baseUrl), {
+  const response = await authenticatedFetch("/system/attachments", {
     method: "POST",
-    headers,
     body: form,
+    signal: AbortSignal.timeout(120_000),
   })
 
   if (!response.ok) {
     throw new Error(`添付のアップロードに失敗しました (${response.status})`)
   }
 
-  const body: unknown = await response.json()
+  const body: unknown = await response.json().catch(() => null)
 
-  if (typeof body !== "object" || body === null || !("id" in body)) {
+  if (
+    typeof body !== "object" ||
+    body === null ||
+    !("id" in body) ||
+    typeof body.id !== "string" ||
+    body.id.trim().length === 0
+  ) {
     throw new Error("添付の応答に id がありません")
   }
 
-  return String(body.id)
+  return body.id
 }
