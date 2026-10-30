@@ -283,7 +283,9 @@ async function roleMutationFixture(shortStepUp = false) {
       (SELECT json_group_array(json_array(id,token_version,updated_at)) FROM system_accounts) AS accounts,
       (SELECT count(*) FROM system_audit_events) AS audits`)
       .first()
-  return { database: fixture.database, mutate, snapshot, roleId: role.id, at: now }
+  const read = (path: string) =>
+    request(path, { headers: { authorization: `Bearer ${issuance.accessToken}` } })
+  return { database: fixture.database, mutate, snapshot, roleId: role.id, at: now, read }
 }
 
 for (const operation of ["create", "update", "delete", "unchanged"]) {
@@ -519,3 +521,101 @@ test("非管理者が自己Roleのiam:writeを除く変更も正当な認証版�
       .first<number>("token_version"),
   ).toBe(1)
 })
+
+for (const change of ["logout", "version", "authority"]) {
+  for (const target of ["list", "detail", "absent"]) {
+    test(`Role参照${target}の読取後${change}で定義を開示しない`, async () => {
+      const f = await roleMutationFixture()
+      const list = spyOn(SystemRoleCatalogRepository.prototype, "findMany")
+      const find = spyOn(SystemRoleCatalogRepository.prototype, "find")
+      const originalList = list.getMockImplementation()
+      const originalFind = find.getMockImplementation()
+      if (!originalList || !originalFind) throw new Error("missing original Role reads")
+      const revoke = async () => {
+        if (change === "version")
+          await f.database
+            .prepare("UPDATE system_accounts SET token_version=token_version+1 WHERE id=?1")
+            .bind(rootAccountId)
+            .run()
+        if (change === "authority")
+          await f.database
+            .prepare("UPDATE system_role_bindings SET revoked_at=?1 WHERE account_id=?2")
+            .bind(Date.now(), rootAccountId)
+            .run()
+        if (change === "logout")
+          await f.database
+            .prepare("UPDATE system_sessions SET revoked_at=?1 WHERE account_id=?2")
+            .bind(Date.now(), rootAccountId)
+            .run()
+      }
+      list.mockImplementation(async function (this: SystemRoleCatalogRepository, ...args) {
+        const found = await originalList.call(this, ...args)
+        if (target === "list") await revoke()
+        return found
+      })
+      find.mockImplementation(async function (this: SystemRoleCatalogRepository, ...args) {
+        const found = await originalFind.call(this, ...args)
+        if (target !== "list") await revoke()
+        return found
+      })
+      try {
+        const response = await f.read(
+          target === "list"
+            ? "/system/roles"
+            : `/system/roles/${target === "absent" ? "a09b38c2-26dd-47ad-87d3-60ea86a38b18" : f.roleId}`,
+        )
+        expect({
+          status: response.status,
+          disclosed: (await response.text()).includes("example:reader"),
+        }).toEqual({ status: 403, disclosed: false })
+      } finally {
+        list.mockRestore()
+        find.mockRestore()
+      }
+    })
+  }
+}
+
+for (const mode of ["read", "admin", "scoped"]) {
+  test(`Role参照のglobal read/adminとscope分離を維持する: ${mode}`, async () => {
+    const f = await roleMutationFixture()
+    const roleId = crypto.randomUUID()
+    const resourceType = mode === "scoped" ? "example:record" : null
+    await f.database.batch([
+      f.database
+        .prepare("UPDATE system_role_bindings SET revoked_at=?1 WHERE account_id=?2")
+        .bind(f.at.getTime(), rootAccountId),
+      f.database
+        .prepare(
+          "INSERT INTO system_iam_roles(id,key,kind,resource_type,name,created_at,updated_at) VALUES (?1,'example:read_access','custom',?2,'Read access',?3,?3)",
+        )
+        .bind(roleId, resourceType, f.at.getTime()),
+      f.database
+        .prepare("INSERT INTO system_iam_role_permissions(role_id,permission_key) VALUES (?1,?2)")
+        .bind(roleId, mode === "admin" ? "system:admin" : "iam:read"),
+      f.database
+        .prepare(
+          "INSERT INTO system_role_bindings(id,account_id,role_id,resource_type,resource_id,created_at) VALUES (?1,?2,?3,?4,?5,?6)",
+        )
+        .bind(
+          crypto.randomUUID(),
+          rootAccountId,
+          roleId,
+          resourceType,
+          resourceType === null ? null : "example-record",
+          f.at.getTime(),
+        ),
+    ])
+    const listed = await f.read("/system/roles")
+    expect(listed.status).toBe(mode === "scoped" ? 403 : 200)
+    const detailed = await f.read(`/system/roles/${f.roleId}`)
+    expect(detailed.status).toBe(mode === "scoped" ? 403 : 200)
+    if (mode !== "scoped") {
+      expect(await listed.text()).toContain("example:reader")
+      expect(await detailed.json()).toMatchObject({ permission_keys: ["example:read"] })
+    }
+    expect((await f.read("/system/roles/a09b38c2-26dd-47ad-87d3-60ea86a38b18")).status).toBe(
+      mode === "scoped" ? 403 : 404,
+    )
+  })
+}

@@ -1,3 +1,4 @@
+import { prepareSystemBearerReadAccess } from "@system/interface/authorization/prepare-system-bearer-read-access"
 import { prepareSystemWriteAuthorization } from "@system/interface/authorization/prepare-system-write-authorization"
 import { PrepareSystemReadAuthorizationAdapter } from "@system/infrastructure/adapters/iam/prepare-system-read-authorization.adapter"
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
@@ -24,12 +25,19 @@ import { z } from "zod"
 
 // @authorization permission iam:read - namespaced permissionを持つSystem Roleだけを読む
 export const GET = systemFactory.createHandlers(authenticateSystemAccessToken, async (context) => {
-  if (!context.var.permissions.has("system:admin") && !context.var.permissions.has("iam:read")) {
+  const access = await prepareSystemBearerReadAccess(context, context.var.now())
+  if (access === "forbidden") throw new SystemForbiddenError()
+  if (access instanceof Error) throw new SystemIAMUnavailableError()
+
+  if (!access.permissionKeys.has("system:admin") && !access.permissionKeys.has("iam:read")) {
     throw new SystemForbiddenError()
   }
   const roles = await new SystemRoleCatalogRepository({
     env: { DB: context.env.DB },
   }).findMany()
+  const revalidation = await access.revalidate()
+  if (revalidation === "forbidden") throw new SystemForbiddenError()
+  if (revalidation instanceof Error) throw new SystemIAMUnavailableError()
   if (roles instanceof Error) {
     throw new SystemIAMUnavailableError()
   }

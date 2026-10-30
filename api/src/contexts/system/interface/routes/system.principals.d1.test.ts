@@ -150,18 +150,27 @@ describe("System Principal HTTP", () => {
   })
 })
 
-async function seedRoot(fixture: SystemSessionTestContext): Promise<void> {
+async function seedRoot(fixture: SystemSessionTestContext, legacy = false): Promise<void> {
   await fixture.database
     .prepare(`INSERT INTO system_accounts (id, status, token_version, created_at, updated_at)
        VALUES (?1, 'active', 0, ?2, ?2)`)
     .bind(rootAccountId, now.getTime())
     .run()
-  await fixture.database
-    .prepare(`INSERT INTO system_principals
+  if (!legacy) {
+    await fixture.database
+      .prepare(`INSERT INTO system_principals
          (id, account_id, kind, name, connector_id, revision, created_at, updated_at)
        VALUES ('4d0f979a-6d3b-4d7b-9be0-fe4b3a99e1d2', ?1, 'human', 'Root', NULL, 1, ?2, ?2)`)
-    .bind(rootAccountId, now.getTime())
-    .run()
+      .bind(rootAccountId, now.getTime())
+      .run()
+  } else {
+    await fixture.database
+      .prepare(
+        "INSERT INTO system_identity_bindings(id,account_id,provider,subject,created_at,activated_at) VALUES (?1,?2,'password','you@example.com',?3,?3)",
+      )
+      .bind(crypto.randomUUID(), rootAccountId, now.getTime())
+      .run()
+  }
   await execSql(
     fixture.database,
     `INSERT INTO system_iam_roles
@@ -222,6 +231,7 @@ async function mutationFixture(stepUpTtlMilliseconds = 300_000) {
       c.set("now", () => now)
       await next()
     })
+    .get("/system/principals", ...principalsGET)
     .post("/system/principals", ...principalsPOST)
     .patch("/system/principals/:principalId", ...principalPATCH)
     .post("/system/principals/:principalId/machine-credentials", ...credentialsPOST)
@@ -236,10 +246,10 @@ async function mutationFixture(stepUpTtlMilliseconds = 300_000) {
         method,
         headers: {
           authorization: `Bearer ${accessToken}`,
-          "x-system-step-up": raw,
+          ...(method === "GET" ? {} : { "x-system-step-up": raw }),
           "content-type": "application/json",
         },
-        body: JSON.stringify(body),
+        ...(method === "GET" ? {} : { body: JSON.stringify(body) }),
       },
       { DB: fixture.database, JWT_SECRET: jwtSecret },
     )
@@ -473,3 +483,98 @@ test("自己名称変更の予定版を許しても途中のIAM失権は許さ�
   expect(response.status).toBe(403)
   expect(await f.snapshot()).toEqual(before)
 })
+
+for (const change of ["logout", "version", "authority"]) {
+  test(`Principal参照の読取後${change}で分類一覧を開示しない`, async () => {
+    const f = await mutationFixture()
+    const read = spyOn(SystemPrincipalRepository.prototype, "findMany")
+    const original = read.getMockImplementation()
+    if (!original) throw new Error("missing original Principal read")
+    read.mockImplementation(async function (this: SystemPrincipalRepository, ...args) {
+      const found = await original.call(this, ...args)
+      if (change === "version")
+        await f.database
+          .prepare("UPDATE system_accounts SET token_version=token_version+1 WHERE id=?1")
+          .bind(rootAccountId)
+          .run()
+      if (change === "authority")
+        await f.database
+          .prepare("UPDATE system_role_bindings SET revoked_at=?1 WHERE account_id=?2")
+          .bind(Date.now(), rootAccountId)
+          .run()
+      if (change === "logout")
+        await f.database
+          .prepare("UPDATE system_sessions SET revoked_at=?1 WHERE account_id=?2")
+          .bind(Date.now(), rootAccountId)
+          .run()
+      return found
+    })
+    try {
+      const response = await f.request("/system/principals", "GET", null)
+      expect({
+        status: response.status,
+        disclosed: (await response.text()).includes('"principals"'),
+      }).toEqual({ status: 403, disclosed: false })
+    } finally {
+      read.mockRestore()
+    }
+  })
+}
+
+for (const mode of ["read", "admin", "scoped", "logout"]) {
+  test(`空Principal一覧の現在のglobal資格と失効拒否を維持する: ${mode}`, async () => {
+    const fixture = await SystemSessionTestContext.create()
+    await seedRoot(fixture, true)
+    const token = await issueRootAccessToken(fixture)
+    if (token instanceof Error) throw token
+    const roleId = "7fc6245e-9a8a-419a-849e-d398ffef5c52"
+    const resourceType = mode === "scoped" ? "example:record" : null
+    await fixture.database.batch([
+      fixture.database
+        .prepare(
+          "UPDATE system_iam_roles SET key='example:read_access',kind='custom',resource_type=?1 WHERE id=?2",
+        )
+        .bind(resourceType, roleId),
+      fixture.database
+        .prepare("DELETE FROM system_iam_role_permissions WHERE role_id=?1 AND permission_key<>?2")
+        .bind(roleId, mode === "admin" || mode === "logout" ? "system:admin" : "iam:read"),
+      fixture.database
+        .prepare(
+          "UPDATE system_role_bindings SET resource_type=?1,resource_id=?2 WHERE account_id=?3",
+        )
+        .bind(resourceType, resourceType === null ? null : "example-record", rootAccountId),
+    ])
+    const app = systemFactory
+      .createApp()
+      .use("*", async (c, next) => {
+        c.set("now", () => now)
+        await next()
+      })
+      .get("/system/principals", ...principalsGET)
+    const read = spyOn(SystemPrincipalRepository.prototype, "findMany")
+    const original = read.getMockImplementation()
+    if (!original) throw new Error("missing original Principal read")
+    read.mockImplementation(async function (this: SystemPrincipalRepository, ...args) {
+      const found = await original.call(this, ...args)
+      expect(found).toEqual([])
+      if (mode === "logout")
+        await fixture.database
+          .prepare("UPDATE system_sessions SET revoked_at=?1 WHERE account_id=?2")
+          .bind(Date.now(), rootAccountId)
+          .run()
+      return found
+    })
+    try {
+      const response = await app.request(
+        "/system/principals",
+        { headers: { authorization: `Bearer ${token}` } },
+        { DB: fixture.database, JWT_SECRET: jwtSecret },
+      )
+      expect(response.status).toBe(mode === "scoped" || mode === "logout" ? 403 : 200)
+      if (response.status === 200) expect(await response.json()).toEqual({ principals: [] })
+      else expect(await response.text()).not.toContain('"principals"')
+    } finally {
+      read.mockRestore()
+    }
+  })
+}

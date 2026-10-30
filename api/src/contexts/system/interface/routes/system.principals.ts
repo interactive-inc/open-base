@@ -1,3 +1,4 @@
+import { prepareSystemBearerReadAccess } from "@system/interface/authorization/prepare-system-bearer-read-access"
 import { prepareSystemWriteAuthorization } from "@system/interface/authorization/prepare-system-write-authorization"
 import { PrepareSystemReadAuthorizationAdapter } from "@system/infrastructure/adapters/iam/prepare-system-read-authorization.adapter"
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
@@ -35,10 +36,17 @@ const createBody = z.discriminatedUnion("kind", [
 
 // @authorization permission iam:read - Accountと独立したPrincipal分類を読む
 export const GET = systemFactory.createHandlers(authenticateSystemAccessToken, async (context) => {
-  if (!authorizeSystemOperation(context.var.permissions, "iam:read", context.var.now())) {
+  const access = await prepareSystemBearerReadAccess(context, context.var.now())
+  if (access === "forbidden") throw new SystemForbiddenError()
+  if (access instanceof Error) throw new SystemPrincipalUnavailableError(access)
+
+  if (!authorizeSystemOperation(access.permissionKeys, "iam:read", context.var.now())) {
     throw new SystemForbiddenError()
   }
   const principals = await new SystemPrincipalRepository({ env: { DB: context.env.DB } }).findMany()
+  const revalidation = await access.revalidate()
+  if (revalidation === "forbidden") throw new SystemForbiddenError()
+  if (revalidation instanceof Error) throw new SystemPrincipalUnavailableError(revalidation)
   if (principals instanceof Error) throw new SystemPrincipalUnavailableError(principals)
 
   return context.json({ principals: principals.map(systemPrincipalResponse) }, 200)
