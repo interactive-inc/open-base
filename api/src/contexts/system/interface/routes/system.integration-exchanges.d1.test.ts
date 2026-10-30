@@ -1,3 +1,4 @@
+import { SystemReconciliationRepository } from "@system/infrastructure/repositories/integration/system-reconciliation.repository"
 import { SystemIntegrationExchangeRepository } from "@system/infrastructure/repositories/integration/system-integration-exchange.repository"
 import { SystemConnectorRepository } from "@system/infrastructure/repositories/integration/system-connector.repository"
 import { execSql } from "@system/test/local-d1/exec-sql.test-support"
@@ -333,6 +334,8 @@ async function connectorMutationFixture(shortStepUp = false) {
     .patch("/system/connectors/:connectorId", ...connectorPATCH)
     .post("/system/integration-exchanges", ...exchangesPOST)
     .patch("/system/integration-exchanges/:exchangeId", ...exchangePATCH)
+    .get("/system/integration-exchanges/:exchangeId/reconciliations", ...reconciliationsGET)
+    .post("/system/integration-exchanges/:exchangeId/reconciliations", ...reconciliationsPOST)
   const headers = {
     authorization: `Bearer ${session.accessToken}`,
     "x-system-step-up": stepUp,
@@ -346,7 +349,7 @@ async function connectorMutationFixture(shortStepUp = false) {
   ) =>
     app.request(
       path,
-      { method, headers: actor, body: JSON.stringify(body) },
+      { method, headers: actor, ...(method === "GET" ? {} : { body: JSON.stringify(body) }) },
       { DB: fixture.database, JWT_SECRET: "system-session-test-jwt-secret" },
     )
   expect((await request("/system/connectors", "POST", connectorInput())).status).toBe(201)
@@ -769,6 +772,245 @@ for (const revoked of [false, true]) {
           ).status,
         ).toBe(200)
       }
+    } finally {
+      write.mockRestore()
+    }
+  })
+}
+
+function reconciliationInput(at: Date) {
+  return {
+    id: "reconciliation:1",
+    connector_id: "connector:1",
+    assertion: {
+      id: "assertion:1",
+      external_key: "record:1",
+      external_version: "1",
+      payload_digest: digestB,
+      observed_at: at.toISOString(),
+    },
+    local_version: "7",
+    items: [{ key: "record:1", local_digest: digestA, external_digest: digestB }],
+  }
+}
+
+function reconciliationSnapshot(database: SystemSessionTestContext["database"]) {
+  return database
+    .prepare(`SELECT
+    (SELECT count(*) FROM system_external_assertions) AS assertions,
+    (SELECT count(*) FROM system_reconciliation_runs) AS runs,
+    (SELECT count(*) FROM system_reconciliation_items) AS items,
+    (SELECT count(*) FROM system_audit_events) AS audits`)
+    .first()
+}
+
+for (const change of ["logout", "version", "authority"]) {
+  for (const operation of ["write", "read"]) {
+    test(`外部照合${operation}中の${change}で保存も開示も行わない`, async () => {
+      const f = await connectorMutationFixture()
+      expect(
+        (await f.request("/system/integration-exchanges", "POST", exchangeInput("exchange:1")))
+          .status,
+      ).toBe(201)
+      const path = "/system/integration-exchanges/exchange:1/reconciliations"
+      if (operation === "read")
+        expect((await f.request(path, "POST", reconciliationInput(f.now))).status).toBe(201)
+      const before = await reconciliationSnapshot(f.database)
+      const write = spyOn(SystemReconciliationRepository.prototype, "write")
+      const read = spyOn(SystemReconciliationRepository.prototype, "findMany")
+      const originalWrite = write.getMockImplementation()
+      const originalRead = read.getMockImplementation()
+      if (!originalWrite || !originalRead)
+        throw new Error("missing original reconciliation methods")
+      const revoke = async () => {
+        if (change === "version")
+          await f.database
+            .prepare("UPDATE system_accounts SET token_version=token_version+1 WHERE id=?1")
+            .bind(accountId)
+            .run()
+        if (change === "authority")
+          await f.database
+            .prepare("UPDATE system_role_bindings SET revoked_at=?1 WHERE account_id=?2")
+            .bind(Date.now(), accountId)
+            .run()
+        if (change === "logout")
+          await f.database
+            .prepare("UPDATE system_sessions SET revoked_at=?1 WHERE account_id=?2")
+            .bind(Date.now(), accountId)
+            .run()
+      }
+      write.mockImplementation(async function (this: SystemReconciliationRepository, ...args) {
+        if (operation === "write") await revoke()
+        return originalWrite.call(this, ...args)
+      })
+      read.mockImplementation(async function (this: SystemReconciliationRepository, ...args) {
+        const runs = await originalRead.call(this, ...args)
+        if (operation === "read") await revoke()
+        return runs
+      })
+      try {
+        const response = await f.request(
+          path,
+          operation === "write" ? "POST" : "GET",
+          reconciliationInput(f.now),
+        )
+        const body = await response.text()
+        expect({
+          status: response.status,
+          snapshot: await reconciliationSnapshot(f.database),
+          disclosed: body.includes('"reconciliations"'),
+        }).toEqual({ status: 403, snapshot: before, disclosed: false })
+      } finally {
+        write.mockRestore()
+        read.mockRestore()
+      }
+    })
+  }
+}
+
+for (const table of [
+  "system_external_assertions",
+  "system_reconciliation_runs",
+  "system_reconciliation_items",
+]) {
+  test(`外部照合の${table}保存中のlogoutは全行と監査を巻き戻す`, async () => {
+    const f = await connectorMutationFixture()
+    expect(
+      (await f.request("/system/integration-exchanges", "POST", exchangeInput("exchange:1")))
+        .status,
+    ).toBe(201)
+    const before = await reconciliationSnapshot(f.database)
+    await f.database
+      .prepare(
+        `CREATE TRIGGER logout_reconciliation_actor AFTER INSERT ON ${table} BEGIN UPDATE system_sessions SET revoked_at=${Date.now()}; END`,
+      )
+      .run()
+    expect(
+      (
+        await f.request(
+          "/system/integration-exchanges/exchange:1/reconciliations",
+          "POST",
+          reconciliationInput(f.now),
+        )
+      ).status,
+    ).toBe(403)
+    expect(await reconciliationSnapshot(f.database)).toEqual(before)
+  })
+}
+
+test("外部照合の読取直前のlogoutも403として扱う", async () => {
+  const f = await connectorMutationFixture()
+  expect(
+    (await f.request("/system/integration-exchanges", "POST", exchangeInput("exchange:1"))).status,
+  ).toBe(201)
+  const read = spyOn(SystemReconciliationRepository.prototype, "findMany")
+  const original = read.getMockImplementation()
+  if (!original) throw new Error("missing original reconciliation read")
+  read.mockImplementation(async function (this: SystemReconciliationRepository, ...args) {
+    await f.database
+      .prepare("UPDATE system_sessions SET revoked_at=?1 WHERE account_id=?2")
+      .bind(Date.now(), accountId)
+      .run()
+    return original.call(this, ...args)
+  })
+  try {
+    const response = await f.request(
+      "/system/integration-exchanges/exchange:1/reconciliations",
+      "GET",
+      null,
+    )
+    expect(response.status).toBe(403)
+    expect(await response.text()).not.toContain('"reconciliations"')
+  } finally {
+    read.mockRestore()
+  }
+})
+
+for (const revoked of [false, true]) {
+  test(`外部照合のConnector scopeとstep-up不要の操作を維持する: ${revoked}`, async () => {
+    const f = await connectorMutationFixture()
+    expect(
+      (await f.request("/system/integration-exchanges", "POST", exchangeInput("exchange:1")))
+        .status,
+    ).toBe(201)
+    expect(
+      (
+        await f.request("/system/connectors", "POST", {
+          ...connectorInput(),
+          id: "connector:other",
+          key: "other",
+        })
+      ).status,
+    ).toBe(201)
+    expect(
+      (
+        await f.request("/system/integration-exchanges", "POST", {
+          ...exchangeInput("exchange:other"),
+          connector_id: "connector:other",
+        })
+      ).status,
+    ).toBe(201)
+    const session = await issueSession(f.fixture, scopedAccountId)
+    if (session instanceof Error || session.kind === "rejected")
+      throw new Error("scoped session issuance failed")
+    const headers = {
+      authorization: `Bearer ${session.accessToken}`,
+      "content-type": "application/json",
+    }
+    const path = "/system/integration-exchanges/exchange:1/reconciliations"
+    const other = "/system/integration-exchanges/exchange:other/reconciliations"
+    expect((await f.request(other, "GET", null, headers)).status).toBe(403)
+    expect(
+      (
+        await f.request(
+          other,
+          "POST",
+          { ...reconciliationInput(f.now), connector_id: "connector:other" },
+          headers,
+        )
+      ).status,
+    ).toBe(403)
+    expect(
+      (
+        await f.request(
+          path,
+          "POST",
+          { ...reconciliationInput(f.now), connector_id: "connector:other" },
+          headers,
+        )
+      ).status,
+    ).toBe(403)
+    const empty = await f.request(path, "GET", null, headers)
+    expect(empty.status).toBe(200)
+    expect(await empty.json()).toEqual({ reconciliations: [] })
+    const write = spyOn(SystemReconciliationRepository.prototype, "write")
+    const original = write.getMockImplementation()
+    if (!original) throw new Error("missing original reconciliation write")
+    const before = await reconciliationSnapshot(f.database)
+    write.mockImplementation(async function (this: SystemReconciliationRepository, ...args) {
+      if (revoked)
+        await f.database
+          .prepare("UPDATE system_role_bindings SET revoked_at=?1 WHERE account_id=?2")
+          .bind(Date.now(), scopedAccountId)
+          .run()
+      return original.call(this, ...args)
+    })
+    try {
+      expect((await f.request(path, "POST", reconciliationInput(f.now), headers)).status).toBe(
+        revoked ? 403 : 201,
+      )
+      if (revoked) {
+        expect(await reconciliationSnapshot(f.database)).toEqual(before)
+        return
+      }
+      const response = await f.request(path, "GET", null, headers)
+      expect(response.status).toBe(200)
+      expect(await response.json()).toMatchObject({
+        reconciliations: [{ status: "mismatched", item_count: 1 }],
+      })
+      const saved = await reconciliationSnapshot(f.database)
+      expect((await f.request(path, "POST", reconciliationInput(f.now), headers)).status).toBe(409)
+      expect(await reconciliationSnapshot(f.database)).toEqual(saved)
     } finally {
       write.mockRestore()
     }

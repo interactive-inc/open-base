@@ -1,3 +1,5 @@
+import { prepareSystemBearerAuthorization } from "@system/interface/authorization/prepare-system-bearer-authorization"
+import { PrepareSystemReadAuthorizationAdapter } from "@system/infrastructure/adapters/iam/prepare-system-read-authorization.adapter"
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
 /** /system/integration-exchanges/:exchangeId/reconciliations */
 import { ReconcileIntegrationExchange } from "@system/application/integration/reconcile-integration-exchange"
@@ -40,10 +42,27 @@ export const GET = systemFactory.createHandlers(
     ) {
       throw new SystemForbiddenError()
     }
+    const assertions = await prepareSystemBearerAuthorization(context, {
+      now: context.var.now(),
+      requiredPermissions: ["integration:read"],
+      resource: { type: "system:connector", id: exchange.connectorId },
+    })
+    if (assertions === "forbidden") throw new SystemForbiddenError()
+    if (assertions instanceof Error) throw new SystemIntegrationUnavailableError(assertions)
     const runs = await new SystemReconciliationRepository({
       env: { DB: context.env.DB },
+      assertions,
     }).findMany(exchangeId)
+    if (PrepareSystemReadAuthorizationAdapter.isRejected(runs)) throw new SystemForbiddenError()
     if (runs instanceof Error) throw new SystemIntegrationUnavailableError(runs)
+    try {
+      const checked = await context.env.DB.batch([...assertions])
+      if (checked.length !== assertions.length || checked.some((entry) => !entry.success))
+        throw new SystemIntegrationUnavailableError(null)
+    } catch (cause) {
+      if (PrepareSystemReadAuthorizationAdapter.isRejected(cause)) throw new SystemForbiddenError()
+      throw new SystemIntegrationUnavailableError(cause)
+    }
     return context.json({ reconciliations: runs }, 200)
   },
 )
@@ -153,7 +172,14 @@ export const POST = systemFactory.createHandlers(
       occurredAt: now,
     })
     if (event instanceof Error) throw new SystemIntegrationUnavailableError(event)
-    const systemContext = { env: { DB: context.env.DB } }
+    const assertions = await prepareSystemBearerAuthorization(context, {
+      now,
+      requiredPermissions: ["integration:write"],
+      resource: { type: "system:connector", id: exchange.connectorId },
+    })
+    if (assertions === "forbidden") throw new SystemForbiddenError()
+    if (assertions instanceof Error) throw new SystemIntegrationUnavailableError(assertions)
+    const systemContext = { env: { DB: context.env.DB }, assertions }
     const repository = new SystemReconciliationRepository(systemContext)
     const auditStatements = new SystemAuditEventRepository(systemContext).prepareAppend(event)
     const result = await new ReconcileIntegrationExchange({
@@ -161,6 +187,11 @@ export const POST = systemFactory.createHandlers(
     }).execute({ assertion: assertionInput, reconciliation: reconciliationInput })
     if (result instanceof Error) throw new SystemIntegrationInvalidError(result)
     if (result.kind === "conflict") throw new SystemIntegrationConflictError()
+    if (
+      result.kind === "unavailable" &&
+      PrepareSystemReadAuthorizationAdapter.isRejected(result.cause)
+    )
+      throw new SystemForbiddenError()
     if (result.kind === "unavailable") throw new SystemIntegrationUnavailableError(result.cause)
     return context.json({ reconciliation: result.run }, 201)
   },

@@ -7,7 +7,7 @@ export type SystemReconciliationWriteResult =
   | Readonly<{ kind: "conflict" }>
   | Readonly<{ kind: "unavailable"; cause: unknown }>
 
-type Context = SystemD1Context
+type Context = SystemD1Context & Readonly<{ assertions?: ReadonlyArray<D1PreparedStatement> }>
 
 /** assertionとsemantic item差分を同一D1 batchへappendする。 */
 export class SystemReconciliationRepository {
@@ -19,16 +19,24 @@ export class SystemReconciliationRepository {
     exchangeId: string,
   ): Promise<ReadonlyArray<Readonly<Record<string, unknown>>> | Error> {
     try {
-      const rows = await this.c.env.DB.prepare(
+      const statement = this.c.env.DB.prepare(
         `SELECT run.id, run.exchange_id, run.assertion_id, run.local_version,
                 run.status, run.created_at, count(item.item_key) AS item_count
          FROM system_reconciliation_runs AS run
          INNER JOIN system_reconciliation_items AS item ON item.run_id = run.id
          WHERE run.exchange_id = ?1
          GROUP BY run.id ORDER BY run.created_at DESC, run.id DESC`,
-      )
-        .bind(exchangeId)
-        .all<Record<string, unknown>>()
+      ).bind(exchangeId)
+      const assertions = this.c.assertions ?? []
+      const checked = await this.c.env.DB.batch<Record<string, unknown>>([
+        ...assertions,
+        statement,
+        ...assertions,
+      ])
+      if (checked.length !== assertions.length * 2 + 1 || checked.some((entry) => !entry.success))
+        return new Error("reconciliation read batch failed")
+      const rows = checked[assertions.length]
+      if (rows === undefined) return new Error("reconciliation read result missing")
       return Object.freeze(rows.results.map((row) => Object.freeze({ ...row })))
     } catch (cause) {
       return cause instanceof Error ? cause : new Error("failed to find reconciliation runs")
@@ -52,12 +60,17 @@ export class SystemReconciliationRepository {
       if (exchange === null || exchange.connector_id !== assertion.connectorId) {
         return { kind: "conflict" }
       }
-      await database.batch([
+      const statements = [
+        ...(this.c.assertions ?? []),
         assertionInsert(database, assertion),
         runInsert(database, run),
         ...run.items.map((item) => itemInsert(database, run.id, item)),
         ...auditStatements,
-      ])
+        ...(this.c.assertions ?? []),
+      ]
+      const checked = await database.batch(statements)
+      if (checked.length !== statements.length || checked.some((entry) => !entry.success))
+        return { kind: "unavailable", cause: new Error("reconciliation write batch failed") }
       return { kind: "written", run }
     } catch (cause) {
       return isConstraintConflict(cause) ? { kind: "conflict" } : { kind: "unavailable", cause }
