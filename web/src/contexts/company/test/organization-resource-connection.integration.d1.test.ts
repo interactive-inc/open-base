@@ -344,6 +344,20 @@ describe("organization resources and the company period ledger", () => {
     ).toBe(409)
   })
 
+  test("保存先の形でない操作IDは、組織を保存せず入力の誤りとして断る", async () => {
+    const f = await fixture()
+    await f.connect()
+    const before = await f.state()
+    for (const key of ["smoke", "A8D9AFB7-6C37-41BD-A661-E97CF1D26265"]) {
+      const response = await f.writes["organization-units"].$post(
+        { json: { code: "MALFORMED", name: "MALFORMED", parent_code: null } },
+        { headers: { "idempotency-key": key } },
+      )
+      expect(Number(response.status)).toBe(422)
+    }
+    expect(await f.state()).toEqual(before)
+  })
+
   test("既存の新設・更新と公開APIの更新が同じ組織を変更し、再送で履歴を増やさない", async () => {
     const f = await fixture()
     await f.connect()
