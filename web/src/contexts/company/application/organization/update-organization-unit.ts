@@ -1,10 +1,10 @@
 import { isCalendarDate } from "@/contexts/company/domain/definitions/is-calendar-date.definition"
+import { zOrganizationChangeOperationId } from "@/contexts/company/domain/definitions/workforce-id-validation.definition"
 import { periodContainsDate } from "@/contexts/company/domain/definitions/period-contains-date.definition"
 import type { CompanyContext } from "@/contexts/company/configuration/company-context"
 import { fingerprintOrganizationUnitCommand } from "@/contexts/company/domain/definitions/fingerprint-organization-unit-command.definition"
 import { resolveCompanyBusinessDate } from "@/contexts/company/domain/definitions/resolve-company-business-date.definition"
 import { restoreCalendarDate } from "@/contexts/company/domain/definitions/restore-calendar-date.definition"
-import { restoreWorkforceId } from "@/contexts/company/domain/definitions/restore-workforce-id.definition"
 import { OrganizationWorkforceChangeEntity } from "@/contexts/company/domain/entities/organization-workforce-change.entity"
 import {
   CompanyConflictError,
@@ -57,12 +57,13 @@ export class UpdateOrganizationUnit {
     ) {
       return new CompanyValidationError("確認した組織版と日付が必要です", "invalid_change")
     }
-    let operationId
-    try {
-      operationId = restoreWorkforceId("personnel_action", input.operationId)
-    } catch (cause) {
-      return new CompanyValidationError("組織変更IDが不正です", "invalid_change", { cause })
+    const parsedOperationId = zOrganizationChangeOperationId.safeParse(input.operationId)
+    if (!parsedOperationId.success) {
+      return new CompanyValidationError("組織変更IDが不正です", "invalid_change", {
+        cause: parsedOperationId.error,
+      })
     }
+    const operationId = parsedOperationId.data
     const requestFingerprint = await fingerprintOrganizationUnitCommand({
       kind: "update",
       expectedOrganizationRevision: input.expectedOrganizationRevision,
