@@ -330,6 +330,9 @@ async function connectorMutationFixture(shortStepUp = false) {
       c.set("now", () => now)
       await next()
     })
+    .get("/system/connectors", ...connectorsGET)
+    .get("/system/integration-exchanges", ...exchangesGET)
+    .get("/system/integration-exchanges/:exchangeId", ...exchangeGET)
     .post("/system/connectors", ...connectorsPOST)
     .patch("/system/connectors/:connectorId", ...connectorPATCH)
     .post("/system/integration-exchanges", ...exchangesPOST)
@@ -1013,6 +1016,210 @@ for (const revoked of [false, true]) {
       expect(await reconciliationSnapshot(f.database)).toEqual(saved)
     } finally {
       write.mockRestore()
+    }
+  })
+}
+
+for (const change of ["logout", "version", "authority"]) {
+  for (const target of ["connectors", "exchanges", "exchange", "absent"]) {
+    test(`外部参照${target}の読取後${change}で結果を開示しない`, async () => {
+      const f = await connectorMutationFixture()
+      expect(
+        (await f.request("/system/integration-exchanges", "POST", exchangeInput("exchange:1")))
+          .status,
+      ).toBe(201)
+      const connectors = spyOn(SystemConnectorRepository.prototype, "findMany")
+      const exchanges = spyOn(SystemIntegrationExchangeRepository.prototype, "findMany")
+      const exchange = spyOn(SystemIntegrationExchangeRepository.prototype, "find")
+      const originalConnectors = connectors.getMockImplementation()
+      const originalExchanges = exchanges.getMockImplementation()
+      const originalExchange = exchange.getMockImplementation()
+      if (!originalConnectors || !originalExchanges || !originalExchange)
+        throw new Error("missing original integration reads")
+      const revoke = async () => {
+        if (change === "version")
+          await f.database
+            .prepare("UPDATE system_accounts SET token_version=token_version+1 WHERE id=?1")
+            .bind(accountId)
+            .run()
+        if (change === "authority")
+          await f.database
+            .prepare("UPDATE system_role_bindings SET revoked_at=?1 WHERE account_id=?2")
+            .bind(Date.now(), accountId)
+            .run()
+        if (change === "logout")
+          await f.database
+            .prepare("UPDATE system_sessions SET revoked_at=?1 WHERE account_id=?2")
+            .bind(Date.now(), accountId)
+            .run()
+      }
+      connectors.mockImplementation(async function (this: SystemConnectorRepository, ...args) {
+        const found = await originalConnectors.call(this, ...args)
+        if (target === "connectors") await revoke()
+        return found
+      })
+      exchanges.mockImplementation(async function (
+        this: SystemIntegrationExchangeRepository,
+        ...args
+      ) {
+        const found = await originalExchanges.call(this, ...args)
+        if (target === "exchanges") await revoke()
+        return found
+      })
+      exchange.mockImplementation(async function (
+        this: SystemIntegrationExchangeRepository,
+        ...args
+      ) {
+        const found = await originalExchange.call(this, ...args)
+        if (target === "exchange" || target === "absent") await revoke()
+        return found
+      })
+      try {
+        const path =
+          target === "connectors"
+            ? "/system/connectors"
+            : target === "exchanges"
+              ? "/system/integration-exchanges?connector_id=connector:1"
+              : target === "absent"
+                ? "/system/integration-exchanges/exchange:absent"
+                : "/system/integration-exchanges/exchange:1"
+        const response = await f.request(path, "GET", null)
+        expect({
+          status: response.status,
+          disclosed: (await response.text()).includes(`"${target}"`),
+        }).toEqual({ status: 403, disclosed: false })
+      } finally {
+        connectors.mockRestore()
+        exchanges.mockRestore()
+        exchange.mockRestore()
+      }
+    })
+  }
+}
+
+for (const scoped of [false, true]) {
+  test(`外部参照のglobalとConnector scope・並び順・未存在応答を維持する: ${scoped}`, async () => {
+    const f = await connectorMutationFixture()
+    expect(
+      (await f.request("/system/integration-exchanges", "POST", exchangeInput("exchange:1")))
+        .status,
+    ).toBe(201)
+    expect(
+      (
+        await f.request("/system/integration-exchanges", "POST", {
+          ...exchangeInput("exchange:2"),
+          idempotency_key: "command:2",
+        })
+      ).status,
+    ).toBe(201)
+    expect(
+      (
+        await f.request("/system/connectors", "POST", {
+          ...connectorInput(),
+          id: "connector:other",
+          key: "other",
+        })
+      ).status,
+    ).toBe(201)
+    const session = await issueSession(f.fixture, scoped ? scopedAccountId : accountId)
+    if (session instanceof Error || session.kind === "rejected")
+      throw new Error("read session issuance failed")
+    const headers = { authorization: `Bearer ${session.accessToken}` }
+    expect((await f.request("/system/connectors", "GET", null, headers)).status).toBe(
+      scoped ? 403 : 200,
+    )
+    const listed = await f.request(
+      "/system/integration-exchanges?connector_id=connector:1",
+      "GET",
+      null,
+      headers,
+    )
+    expect(listed.status).toBe(200)
+    expect(await listed.json()).toMatchObject({
+      exchanges: [{ id: "exchange:2" }, { id: "exchange:1" }],
+    })
+    const detailed = await f.request(
+      "/system/integration-exchanges/exchange:1",
+      "GET",
+      null,
+      headers,
+    )
+    expect(detailed.status).toBe(200)
+    expect(await detailed.json()).toMatchObject({ exchange: { id: "exchange:1" } })
+    expect(
+      (await f.request("/system/integration-exchanges/exchange:absent", "GET", null, headers))
+        .status,
+    ).toBe(404)
+    const empty = await f.request(
+      "/system/integration-exchanges?connector_id=connector:other",
+      "GET",
+      null,
+      headers,
+    )
+    expect(empty.status).toBe(scoped ? 403 : 200)
+    if (!scoped) expect(await empty.json()).toEqual({ exchanges: [] })
+    expect(
+      (
+        await f.request("/system/integration-exchanges", "POST", {
+          ...exchangeInput("exchange:other"),
+          connector_id: "connector:other",
+        })
+      ).status,
+    ).toBe(201)
+    expect(
+      (await f.request("/system/integration-exchanges/exchange:other", "GET", null, headers))
+        .status,
+    ).toBe(scoped ? 403 : 200)
+  })
+}
+
+for (const target of ["connectors", "exchanges"]) {
+  test(`空の外部参照${target}も読取後logoutなら結果を返さない`, async () => {
+    const f = await connectorMutationFixture()
+    if (target === "connectors") await f.database.prepare("DELETE FROM system_connectors").run()
+    const connectors = spyOn(SystemConnectorRepository.prototype, "findMany")
+    const exchanges = spyOn(SystemIntegrationExchangeRepository.prototype, "findMany")
+    const originalConnectors = connectors.getMockImplementation()
+    const originalExchanges = exchanges.getMockImplementation()
+    if (!originalConnectors || !originalExchanges)
+      throw new Error("missing original integration lists")
+    const logout = () =>
+      f.database
+        .prepare("UPDATE system_sessions SET revoked_at=?1 WHERE account_id=?2")
+        .bind(Date.now(), accountId)
+        .run()
+    connectors.mockImplementation(async function (this: SystemConnectorRepository, ...args) {
+      const found = await originalConnectors.call(this, ...args)
+      if (target === "connectors") {
+        expect(found).toEqual([])
+        await logout()
+      }
+      return found
+    })
+    exchanges.mockImplementation(async function (
+      this: SystemIntegrationExchangeRepository,
+      ...args
+    ) {
+      const found = await originalExchanges.call(this, ...args)
+      if (target === "exchanges") {
+        expect(found).toEqual([])
+        await logout()
+      }
+      return found
+    })
+    try {
+      const response = await f.request(
+        target === "connectors"
+          ? "/system/connectors"
+          : "/system/integration-exchanges?connector_id=connector:1",
+        "GET",
+        null,
+      )
+      expect(response.status).toBe(403)
+      expect(await response.text()).not.toContain(`"${target}"`)
+    } finally {
+      connectors.mockRestore()
+      exchanges.mockRestore()
     }
   })
 }

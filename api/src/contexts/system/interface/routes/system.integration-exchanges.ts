@@ -1,3 +1,4 @@
+import { prepareSystemBearerReadAccess } from "@system/interface/authorization/prepare-system-bearer-read-access"
 import { prepareSystemBearerAuthorization } from "@system/interface/authorization/prepare-system-bearer-authorization"
 import { PrepareSystemReadAuthorizationAdapter } from "@system/infrastructure/adapters/iam/prepare-system-read-authorization.adapter"
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
@@ -26,10 +27,14 @@ export const GET = systemFactory.createHandlers(
   authenticateSystemAccessToken,
   zValidator("query", z.object({ connector_id: z.string().regex(/^\S{1,255}$/) })),
   async (context) => {
+    const access = await prepareSystemBearerReadAccess(context, context.var.now())
+    if (access === "forbidden") throw new SystemForbiddenError()
+    if (access instanceof Error) throw new SystemIntegrationUnavailableError(access)
+
     const connectorId = context.req.valid("query").connector_id
     if (
-      !authorizeSystemOperation(context.var.permissions, "integration:read", context.var.now(), {
-        scopedPermissionKeys: context.var.scopedPermissions,
+      !authorizeSystemOperation(access.permissionKeys, "integration:read", context.var.now(), {
+        scopedPermissionKeys: access.scopedPermissionKeys,
         resource: { type: "system:connector", id: connectorId },
       })
     ) {
@@ -38,6 +43,9 @@ export const GET = systemFactory.createHandlers(
     const exchanges = await new SystemIntegrationExchangeRepository({
       env: { DB: context.env.DB },
     }).findMany(connectorId)
+    const revalidation = await access.revalidate()
+    if (revalidation === "forbidden") throw new SystemForbiddenError()
+    if (revalidation instanceof Error) throw new SystemIntegrationUnavailableError(revalidation)
     if (exchanges instanceof Error) throw new SystemIntegrationUnavailableError(exchanges)
     return context.json({ exchanges }, 200)
   },
