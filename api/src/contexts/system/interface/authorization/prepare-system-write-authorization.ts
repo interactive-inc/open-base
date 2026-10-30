@@ -1,56 +1,20 @@
-import type { IamRoleEntity } from "@system/domain/entities/iam-role.entity"
-import type { RoleBindingResource } from "@system/domain/schemas/iam/role-binding.schema"
 import type {
   SystemAuthorizationContext,
   SystemD1Context,
 } from "@system/configuration/system-context"
-import { PrepareSystemReadAuthorizationAdapter } from "@system/infrastructure/adapters/iam/prepare-system-read-authorization.adapter"
+import { prepareSystemBearerAuthorization } from "@system/interface/authorization/prepare-system-bearer-authorization"
 import { SystemPrincipalSecretService } from "@system/lib/auth/system-principal-secret-service"
-import { authorizeSystemOperation } from "@system/interface/authorization/authorize-system-operation"
 
 /** Systemの変更を現在のBearer・対象資源の権限・利用済み再認証grantへ束縛する。 */
 export async function prepareSystemWriteAuthorization(
   context: SystemD1Context & SystemAuthorizationContext,
-  input: Readonly<{
-    now: Date
-    stepUpToken: string
-    requiredPermissions: ReadonlyArray<string>
-    resource?: RoleBindingResource | null
-    afterRoleRevision?: IamRoleEntity
-    principalRename?: Readonly<{ principalId: string; revision: number; updatedAtMs: number }>
-  }>,
+  input: Parameters<typeof prepareSystemBearerAuthorization>[1] & Readonly<{ stepUpToken: string }>,
 ): Promise<ReadonlyArray<D1PreparedStatement> | "forbidden" | Error> {
   const authentication = context.var.bearerReadAuthentication
-  if (
-    (input.afterRoleRevision !== undefined && input.principalRename !== undefined) ||
-    authentication === undefined ||
-    authentication.accountId !== context.var.userId ||
-    authentication.tokenVersion !== context.var.accountTokenVersion ||
-    !/^[0-9a-f]{64}$/.test(input.stepUpToken) ||
-    input.requiredPermissions.length === 0 ||
-    input.requiredPermissions.length > 100
-  )
-    return "forbidden"
+  if (authentication === undefined || !/^[0-9a-f]{64}$/.test(input.stepUpToken)) return "forbidden"
   const now = new Date(Math.max(input.now.getTime(), Date.now()))
-  const proof = await new PrepareSystemReadAuthorizationAdapter(context).prepare(
-    authentication,
-    now,
-    input.afterRoleRevision,
-  )
-  if (proof === null || PrepareSystemReadAuthorizationAdapter.isRejected(proof)) return "forbidden"
-  if (proof instanceof Error) return proof
-  if (
-    input.requiredPermissions.some(
-      (permission) =>
-        !authorizeSystemOperation(proof.permissionKeys, permission, now, {
-          scopedPermissionKeys: proof.scopedPermissionKeys,
-          resource: input.resource ?? null,
-        }),
-    )
-  )
-    return "forbidden"
-  const assertions = proof.assertions(now, input.principalRename)
-  if (assertions instanceof Error) return assertions
+  const assertions = await prepareSystemBearerAuthorization(context, input)
+  if (assertions === "forbidden" || assertions instanceof Error) return assertions
   const hash = await new SystemPrincipalSecretService().hashRawSecret(input.stepUpToken)
   if (hash instanceof Error) return hash
   return [

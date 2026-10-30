@@ -1,3 +1,5 @@
+import { prepareSystemBearerAuthorization } from "@system/interface/authorization/prepare-system-bearer-authorization"
+import { PrepareSystemReadAuthorizationAdapter } from "@system/infrastructure/adapters/iam/prepare-system-read-authorization.adapter"
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
 /** /system/integration-exchanges/:exchangeId */
 import { UpdateIntegrationExchange } from "@system/application/integration/update-integration-exchange"
@@ -68,9 +70,9 @@ export const PATCH = systemFactory.createHandlers(
     const now = context.var.now()
     const body = context.req.valid("json")
     const systemContext = { env: { DB: context.env.DB } }
-    const repository = new SystemIntegrationExchangeRepository(systemContext)
+    const lookup = new SystemIntegrationExchangeRepository(systemContext)
     const exchangeId = context.req.valid("param").exchangeId
-    const current = await repository.find(exchangeId)
+    const current = await lookup.find(exchangeId)
     if (current instanceof Error) throw new SystemIntegrationUnavailableError(current)
     if (current === null) throw new SystemIntegrationNotFoundError()
     if (
@@ -81,6 +83,14 @@ export const PATCH = systemFactory.createHandlers(
     ) {
       throw new SystemForbiddenError()
     }
+    const assertions = await prepareSystemBearerAuthorization(context, {
+      now,
+      requiredPermissions: ["integration:write"],
+      resource: { type: "system:connector", id: current.connectorId },
+    })
+    if (assertions === "forbidden") throw new SystemForbiddenError()
+    if (assertions instanceof Error) throw new SystemIntegrationUnavailableError(assertions)
+    const repository = new SystemIntegrationExchangeRepository({ ...systemContext, assertions })
     const updated = current.transition(body.status, now, {
       externalReference: body.external_reference,
       errorCode: body.error_code,
@@ -122,6 +132,11 @@ export const PATCH = systemFactory.createHandlers(
     if (result === null) throw new SystemIntegrationNotFoundError()
     if (result instanceof Error) throw new SystemIntegrationInvalidError(result)
     if (result.kind === "conflict") throw new SystemIntegrationConflictError()
+    if (
+      result.kind === "unavailable" &&
+      PrepareSystemReadAuthorizationAdapter.isRejected(result.cause)
+    )
+      throw new SystemForbiddenError()
     if (result.kind === "unavailable") throw new SystemIntegrationUnavailableError(result.cause)
     return context.json({ exchange: result.exchange }, 200)
   },

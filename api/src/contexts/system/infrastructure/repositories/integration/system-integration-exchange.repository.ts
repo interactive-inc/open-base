@@ -1,3 +1,4 @@
+import { PrepareSystemReadAuthorizationAdapter } from "@system/infrastructure/adapters/iam/prepare-system-read-authorization.adapter"
 import type { SystemD1Context } from "@system/configuration/system-context"
 import { IntegrationExchangeEntity } from "@system/domain/entities/integration-exchange.entity"
 
@@ -7,7 +8,7 @@ export type SystemIntegrationExchangeWriteResult =
   | Readonly<{ kind: "unavailable"; cause: unknown }>
 
 type ExchangeRow = Readonly<Record<string, unknown>>
-type Context = SystemD1Context
+type Context = SystemD1Context & Readonly<{ assertions?: ReadonlyArray<D1PreparedStatement> }>
 
 /** 外部交換のidempotencyと楽観競合をD1で直列化する。 */
 export class SystemIntegrationExchangeRepository {
@@ -66,6 +67,8 @@ export class SystemIntegrationExchangeRepository {
       await this.insert(exchange, auditStatements)
       return { kind: "written", exchange, replayed: false }
     } catch (cause) {
+      if (PrepareSystemReadAuthorizationAdapter.isRejected(cause))
+        return { kind: "unavailable", cause }
       return this.resolveInsertConflict(exchange, cause)
     }
   }
@@ -75,6 +78,7 @@ export class SystemIntegrationExchangeRepository {
     auditStatements: ReadonlyArray<D1PreparedStatement>,
   ): Promise<void> {
     const statements = [
+      ...(this.c.assertions ?? []),
       this.c.env.DB.prepare(
         `INSERT INTO system_integration_exchanges
            (id, connector_id, direction, operation_key, idempotency_key, payload_digest,
@@ -83,6 +87,7 @@ export class SystemIntegrationExchangeRepository {
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)`,
       ).bind(...exchangeValues(exchange)),
       ...auditStatements,
+      ...(this.c.assertions ?? []),
     ]
     const results = await this.c.env.DB.batch(statements)
     if (results.length !== statements.length || results.some((result) => !result.success)) {
@@ -97,6 +102,7 @@ export class SystemIntegrationExchangeRepository {
   ): Promise<SystemIntegrationExchangeWriteResult> {
     try {
       const statements = [
+        ...(this.c.assertions ?? []),
         this.c.env.DB.prepare(
           `UPDATE system_integration_exchanges
            SET status = ?1, attempt = ?2, external_reference = ?3, last_error_code = ?4,
@@ -116,6 +122,7 @@ export class SystemIntegrationExchangeRepository {
           "SELECT CASE WHEN changes() = 1 THEN 1 ELSE abs(-9223372036854775808) END AS ok",
         ),
         ...auditStatements,
+        ...(this.c.assertions ?? []),
       ]
       const results = await this.c.env.DB.batch(statements)
       if (results.length !== statements.length || results.some((result) => !result.success)) {
@@ -138,7 +145,7 @@ export class SystemIntegrationExchangeRepository {
     cause: unknown,
   ): Promise<SystemIntegrationExchangeWriteResult> {
     const existing = await this.findByIdempotencyKey(exchange.connectorId, exchange.idempotencyKey)
-    if (existing instanceof Error) return { kind: "unavailable", cause }
+    if (existing instanceof Error) return { kind: "unavailable", cause: existing }
     if (existing === null) return { kind: "unavailable", cause }
     return sameExchangeCommand(existing, exchange)
       ? { kind: "written", exchange: existing, replayed: true }
@@ -150,15 +157,22 @@ export class SystemIntegrationExchangeRepository {
     idempotencyKey: string,
   ): Promise<IntegrationExchangeEntity | null | Error> {
     try {
-      const row = await this.c.env.DB.prepare(
+      const statement = this.c.env.DB.prepare(
         `SELECT id, connector_id, direction, operation_key, idempotency_key, payload_digest,
                 status, attempt, external_reference, last_error_code,
                 created_at, updated_at, completed_at
          FROM system_integration_exchanges
          WHERE connector_id = ?1 AND idempotency_key = ?2 LIMIT 1`,
-      )
-        .bind(connectorId, idempotencyKey)
-        .first<ExchangeRow>()
+      ).bind(connectorId, idempotencyKey)
+      const assertions = this.c.assertions ?? []
+      const checked = await this.c.env.DB.batch<ExchangeRow>([
+        ...assertions,
+        statement,
+        ...assertions,
+      ])
+      if (checked.length !== assertions.length * 2 + 1 || checked.some((entry) => !entry.success))
+        return new Error("exchange replay authorization failed")
+      const row = checked[assertions.length]?.results.at(0) ?? null
       return row === null ? null : toExchange(row)
     } catch (cause) {
       return cause instanceof Error ? cause : new Error("failed to find exchange command")

@@ -1,3 +1,5 @@
+import { prepareSystemBearerAuthorization } from "@system/interface/authorization/prepare-system-bearer-authorization"
+import { PrepareSystemReadAuthorizationAdapter } from "@system/infrastructure/adapters/iam/prepare-system-read-authorization.adapter"
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
 /** /system/integration-exchanges */
 import { CreateIntegrationExchange } from "@system/application/integration/create-integration-exchange"
@@ -101,7 +103,14 @@ export const POST = systemFactory.createHandlers(
       occurredAt: now,
     })
     if (event instanceof Error) throw new SystemIntegrationUnavailableError(event)
-    const systemContext = { env: { DB: context.env.DB } }
+    const assertions = await prepareSystemBearerAuthorization(context, {
+      now,
+      requiredPermissions: ["integration:write"],
+      resource: { type: "system:connector", id: body.connector_id },
+    })
+    if (assertions === "forbidden") throw new SystemForbiddenError()
+    if (assertions instanceof Error) throw new SystemIntegrationUnavailableError(assertions)
+    const systemContext = { env: { DB: context.env.DB }, assertions }
     const repository = new SystemIntegrationExchangeRepository(systemContext)
     const auditStatements = new SystemAuditEventRepository(systemContext).prepareAppend(event)
     const result = await new CreateIntegrationExchange({
@@ -110,6 +119,11 @@ export const POST = systemFactory.createHandlers(
     }).execute(input)
     if (result instanceof Error) throw new SystemIntegrationInvalidError(result)
     if (result.kind === "conflict") throw new SystemIntegrationConflictError()
+    if (
+      result.kind === "unavailable" &&
+      PrepareSystemReadAuthorizationAdapter.isRejected(result.cause)
+    )
+      throw new SystemForbiddenError()
     if (result.kind === "unavailable") throw new SystemIntegrationUnavailableError(result.cause)
     return context.json(
       { exchange: result.exchange, replayed: result.replayed },

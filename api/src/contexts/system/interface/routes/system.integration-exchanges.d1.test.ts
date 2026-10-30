@@ -1,3 +1,4 @@
+import { SystemIntegrationExchangeRepository } from "@system/infrastructure/repositories/integration/system-integration-exchange.repository"
 import { SystemConnectorRepository } from "@system/infrastructure/repositories/integration/system-connector.repository"
 import { execSql } from "@system/test/local-d1/exec-sql.test-support"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
@@ -330,12 +331,19 @@ async function connectorMutationFixture(shortStepUp = false) {
     })
     .post("/system/connectors", ...connectorsPOST)
     .patch("/system/connectors/:connectorId", ...connectorPATCH)
+    .post("/system/integration-exchanges", ...exchangesPOST)
+    .patch("/system/integration-exchanges/:exchangeId", ...exchangePATCH)
   const headers = {
     authorization: `Bearer ${session.accessToken}`,
     "x-system-step-up": stepUp,
     "content-type": "application/json",
   }
-  const request = (path: string, method: string, body: unknown, actor = headers) =>
+  const request = (
+    path: string,
+    method: string,
+    body: unknown,
+    actor: Readonly<Record<string, string>> = headers,
+  ) =>
     app.request(
       path,
       { method, headers: actor, body: JSON.stringify(body) },
@@ -540,3 +548,229 @@ test("現在の資格ならConnectorの同一再送を受け付け内容の異�
   ).toBe(409)
   expect(await f.snapshot()).toEqual(before)
 })
+
+for (const change of ["logout", "version", "authority"]) {
+  for (const operation of ["create", "update", "replay"]) {
+    test(`外部交換${operation}保存前の${change}で交換と成功監査を変更しない`, async () => {
+      const f = await connectorMutationFixture()
+      if (operation !== "create")
+        expect(
+          (await f.request("/system/integration-exchanges", "POST", exchangeInput("exchange:1")))
+            .status,
+        ).toBe(201)
+      const snapshot = () => exchangeSnapshot(f.database)
+      const before = await snapshot()
+      const write = spyOn(SystemIntegrationExchangeRepository.prototype, "write")
+      const original = write.getMockImplementation()
+      if (!original) throw new Error("missing original exchange write")
+      write.mockImplementation(async function (this: SystemIntegrationExchangeRepository, ...args) {
+        if (change === "version")
+          await f.database
+            .prepare("UPDATE system_accounts SET token_version=token_version+1 WHERE id=?1")
+            .bind(accountId)
+            .run()
+        if (change === "authority")
+          await f.database
+            .prepare("UPDATE system_role_bindings SET revoked_at=?1 WHERE account_id=?2")
+            .bind(Date.now(), accountId)
+            .run()
+        if (change === "logout")
+          await f.database
+            .prepare("UPDATE system_sessions SET revoked_at=?1 WHERE account_id=?2")
+            .bind(Date.now(), accountId)
+            .run()
+        return original.call(this, ...args)
+      })
+      try {
+        const response = await f.request(
+          operation === "update"
+            ? "/system/integration-exchanges/exchange:1"
+            : "/system/integration-exchanges",
+          operation === "update" ? "PATCH" : "POST",
+          operation === "update"
+            ? { status: "failed", error_code: "remote.unavailable", external_reference: null }
+            : exchangeInput("exchange:2"),
+        )
+        expect({ status: response.status, snapshot: await snapshot() }).toEqual({
+          status: 403,
+          snapshot: before,
+        })
+      } finally {
+        write.mockRestore()
+      }
+    })
+  }
+}
+
+function exchangeSnapshot(database: SystemSessionTestContext["database"]) {
+  return database
+    .prepare(`SELECT
+    (SELECT json_group_array(json_array(id,status,attempt,external_reference,last_error_code,updated_at,completed_at)) FROM system_integration_exchanges) AS exchanges,
+    (SELECT count(*) FROM system_audit_events) AS audits`)
+    .first()
+}
+
+for (const operation of ["create", "update"]) {
+  test(`外部交換${operation} transaction中のlogoutは交換と成功監査を巻き戻す`, async () => {
+    const f = await connectorMutationFixture()
+    if (operation === "update")
+      expect(
+        (await f.request("/system/integration-exchanges", "POST", exchangeInput("exchange:1")))
+          .status,
+      ).toBe(201)
+    const before = await exchangeSnapshot(f.database)
+    const action = operation === "create" ? "INSERT" : "UPDATE"
+    await f.database
+      .prepare(
+        `CREATE TRIGGER logout_exchange_actor AFTER ${action} ON system_integration_exchanges BEGIN UPDATE system_sessions SET revoked_at=${Date.now()}; END`,
+      )
+      .run()
+    const response = await f.request(
+      operation === "create"
+        ? "/system/integration-exchanges"
+        : "/system/integration-exchanges/exchange:1",
+      operation === "create" ? "POST" : "PATCH",
+      operation === "create"
+        ? exchangeInput("exchange:2")
+        : { status: "failed", external_reference: null, error_code: "remote.unavailable" },
+    )
+    expect(response.status).toBe(403)
+    expect(await exchangeSnapshot(f.database)).toEqual(before)
+  })
+}
+
+test("外部交換のinsert競合から再送読取へ移る間のlogoutを拒否する", async () => {
+  const f = await connectorMutationFixture()
+  expect(
+    (await f.request("/system/integration-exchanges", "POST", exchangeInput("exchange:1"))).status,
+  ).toBe(201)
+  const before = await exchangeSnapshot(f.database)
+  const batch = spyOn(f.database, "batch")
+  const original = batch.getMockImplementation()
+  if (!original) throw new Error("missing original D1 batch")
+  const execute = original.bind(f.database)
+  batch.mockImplementation(
+    async <T = unknown>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]> => {
+      try {
+        return await execute<T>(statements)
+      } catch (cause) {
+        if (cause instanceof Error && /unique/i.test(cause.message))
+          await f.database
+            .prepare("UPDATE system_sessions SET revoked_at=?1 WHERE account_id=?2")
+            .bind(Date.now(), accountId)
+            .run()
+        throw cause
+      }
+    },
+  )
+  try {
+    expect(
+      (await f.request("/system/integration-exchanges", "POST", exchangeInput("exchange:2")))
+        .status,
+    ).toBe(403)
+    expect(await exchangeSnapshot(f.database)).toEqual(before)
+  } finally {
+    batch.mockRestore()
+  }
+})
+
+test("外部交換の正常な冪等再送と異内容競合にstep-upを要求しない", async () => {
+  const f = await connectorMutationFixture()
+  const session = await issueSession(f.fixture, accountId)
+  if (session instanceof Error || session.kind === "rejected")
+    throw new Error("test session issuance failed")
+  const headers = {
+    authorization: `Bearer ${session.accessToken}`,
+    "content-type": "application/json",
+  }
+  expect(
+    (await f.request("/system/integration-exchanges", "POST", exchangeInput("exchange:1"), headers))
+      .status,
+  ).toBe(201)
+  const before = await exchangeSnapshot(f.database)
+  expect(
+    (await f.request("/system/integration-exchanges", "POST", exchangeInput("exchange:2"), headers))
+      .status,
+  ).toBe(200)
+  expect(
+    (
+      await f.request(
+        "/system/integration-exchanges",
+        "POST",
+        { ...exchangeInput("exchange:3"), payload_digest: digestB },
+        headers,
+      )
+    ).status,
+  ).toBe(409)
+  expect(await exchangeSnapshot(f.database)).toEqual(before)
+})
+
+for (const revoked of [false, true]) {
+  test(`外部交換のConnector scopeを保存時にも維持する: ${revoked}`, async () => {
+    const f = await connectorMutationFixture()
+    const session = await issueSession(f.fixture, scopedAccountId)
+    if (session instanceof Error || session.kind === "rejected")
+      throw new Error("scoped session issuance failed")
+    const headers = {
+      authorization: `Bearer ${session.accessToken}`,
+      "content-type": "application/json",
+    }
+    expect(
+      (
+        await f.request(
+          "/system/integration-exchanges",
+          "POST",
+          { ...exchangeInput("exchange:other"), connector_id: "connector:other" },
+          headers,
+        )
+      ).status,
+    ).toBe(403)
+    const write = spyOn(SystemIntegrationExchangeRepository.prototype, "write")
+    const original = write.getMockImplementation()
+    if (!original) throw new Error("missing original exchange write")
+    write.mockImplementation(async function (this: SystemIntegrationExchangeRepository, ...args) {
+      if (revoked)
+        await f.database
+          .prepare("UPDATE system_role_bindings SET revoked_at=?1 WHERE account_id=?2")
+          .bind(Date.now(), scopedAccountId)
+          .run()
+      return original.call(this, ...args)
+    })
+    try {
+      expect(
+        (
+          await f.request(
+            "/system/integration-exchanges",
+            "POST",
+            exchangeInput("exchange:1"),
+            headers,
+          )
+        ).status,
+      ).toBe(revoked ? 403 : 201)
+      if (!revoked) {
+        expect(
+          (
+            await f.request(
+              "/system/integration-exchanges",
+              "POST",
+              exchangeInput("exchange:replay"),
+              headers,
+            )
+          ).status,
+        ).toBe(200)
+        expect(
+          (
+            await f.request(
+              "/system/integration-exchanges/exchange:1",
+              "PATCH",
+              { status: "failed", external_reference: null, error_code: "remote.unavailable" },
+              headers,
+            )
+          ).status,
+        ).toBe(200)
+      }
+    } finally {
+      write.mockRestore()
+    }
+  })
+}
