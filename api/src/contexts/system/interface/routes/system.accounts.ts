@@ -1,3 +1,5 @@
+import { prepareSystemWriteAuthorization } from "@system/interface/authorization/prepare-system-write-authorization"
+import { PrepareSystemReadAuthorizationAdapter } from "@system/infrastructure/adapters/iam/prepare-system-read-authorization.adapter"
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
 import {
   SystemAccountConflictError,
@@ -80,8 +82,19 @@ export const POST = systemFactory.createHandlers(
     const auditStatements = new SystemAuditEventRepository({
       env: { DB: context.env.DB },
     }).prepareAppend(auditEvent)
-    const repository = new SystemAccountCatalogRepository({ env: { DB: context.env.DB } })
+    const assertions = await prepareSystemWriteAuthorization(context, {
+      now,
+      stepUpToken: context.req.header("x-system-step-up") ?? "",
+      requiredPermissions: ["iam:write"],
+    })
+    if (assertions === "forbidden") throw new SystemForbiddenError()
+    if (assertions instanceof Error) throw new SystemAccountUnavailableError()
+    const repository = new SystemAccountCatalogRepository({
+      env: { DB: context.env.DB },
+      assertions,
+    })
     const creation = await repository.create(accountId.data, now, auditStatements)
+    if (PrepareSystemReadAuthorizationAdapter.isRejected(creation)) throw new SystemForbiddenError()
     if (creation instanceof Error) {
       throw new SystemAccountUnavailableError()
     }

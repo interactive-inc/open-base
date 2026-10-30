@@ -1,3 +1,5 @@
+import { prepareSystemWriteAuthorization } from "@system/interface/authorization/prepare-system-write-authorization"
+import { PrepareSystemReadAuthorizationAdapter } from "@system/infrastructure/adapters/iam/prepare-system-read-authorization.adapter"
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
 import {
   SystemAccountNotFoundError,
@@ -68,7 +70,19 @@ export const PATCH = systemFactory.createHandlers(
       throw new SystemAccountNotFoundError()
     }
 
-    const repository = new SystemAccountCatalogRepository({ env: { DB: context.env.DB } })
+    const now = context.var.now()
+    if (!Number.isSafeInteger(now.getTime())) throw new SystemAccountUnavailableError()
+    const assertions = await prepareSystemWriteAuthorization(context, {
+      now,
+      stepUpToken: context.req.header("x-system-step-up") ?? "",
+      requiredPermissions: ["iam:write"],
+    })
+    if (assertions === "forbidden") throw new SystemForbiddenError()
+    if (assertions instanceof Error) throw new SystemAccountUnavailableError()
+    const repository = new SystemAccountCatalogRepository({
+      env: { DB: context.env.DB },
+      assertions,
+    })
     const before = await repository.find(targetAccountId.data)
     if (before instanceof Error) {
       throw new SystemAccountUnavailableError()
@@ -78,6 +92,10 @@ export const PATCH = systemFactory.createHandlers(
     }
     const body = context.req.valid("json")
     if (before.status === body.status) {
+      const authorization = await repository.revalidateAuthorization()
+      if (PrepareSystemReadAuthorizationAdapter.isRejected(authorization))
+        throw new SystemForbiddenError()
+      if (authorization instanceof Error) throw new SystemAccountUnavailableError()
       return context.json(
         {
           id: before.id,
@@ -89,10 +107,6 @@ export const PATCH = systemFactory.createHandlers(
         },
         200,
       )
-    }
-    const now = context.var.now()
-    if (!Number.isSafeInteger(now.getTime())) {
-      throw new SystemAccountUnavailableError()
     }
     const beforeJson = StableSystemAuditJsonValue.create({
       status: before.status,
@@ -131,6 +145,7 @@ export const PATCH = systemFactory.createHandlers(
       now,
       auditStatements,
     )
+    if (PrepareSystemReadAuthorizationAdapter.isRejected(update)) throw new SystemForbiddenError()
     if (update instanceof Error) {
       throw new SystemAccountUnavailableError()
     }
@@ -147,6 +162,13 @@ export const PATCH = systemFactory.createHandlers(
     const account = await repository.find(targetAccountId.data)
     if (account === null || account instanceof Error) {
       throw new SystemAccountUnavailableError()
+    }
+
+    if (update === "unchanged") {
+      const authorization = await repository.revalidateAuthorization()
+      if (PrepareSystemReadAuthorizationAdapter.isRejected(authorization))
+        throw new SystemForbiddenError()
+      if (authorization instanceof Error) throw new SystemAccountUnavailableError()
     }
 
     return context.json(

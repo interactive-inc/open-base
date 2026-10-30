@@ -33,7 +33,7 @@ export type SystemAccountStatusUpdate =
   | "not_found"
   | "forbidden"
   | "last_root"
-type Context = SystemD1Context
+type Context = SystemD1Context & Readonly<{ assertions?: ReadonlyArray<D1PreparedStatement> }>
 
 /** AccountEntity一覧と、失効を伴うstatus変更をCompanyなしで保存する。 */
 export class SystemAccountCatalogRepository {
@@ -110,6 +110,7 @@ export class SystemAccountCatalogRepository {
   ): Promise<"created" | "conflict" | Error> {
     try {
       const statements = [
+        ...(this.c.assertions ?? []),
         this.c.env.DB.prepare(
           `INSERT INTO system_accounts (id, status, token_version, created_at, updated_at)
            VALUES (?1, 'active', 0, ?2, ?2)`,
@@ -120,6 +121,7 @@ export class SystemAccountCatalogRepository {
            VALUES (?1, ?2, 'human', ?2, NULL, 1, ?3, ?3)`,
         ).bind(crypto.randomUUID(), accountId, now.getTime()),
         ...auditStatements,
+        ...(this.c.assertions ?? []),
       ]
       const executions = await this.c.env.DB.batch(statements)
       if (executions.length !== statements.length || executions.some((entry) => !entry.success)) {
@@ -144,6 +146,8 @@ export class SystemAccountCatalogRepository {
     auditStatements: ReadonlyArray<D1PreparedStatement>,
   ): Promise<SystemAccountStatusUpdate | Error> {
     const target = await this.find(targetAccountId)
+    const authorization = await this.revalidateAuthorization()
+    if (authorization instanceof Error) return authorization
     if (target === null) return "not_found"
     if (target instanceof Error) return target
     if (actorAccountId === targetAccountId && status !== "active") return "forbidden"
@@ -167,6 +171,7 @@ export class SystemAccountCatalogRepository {
 
     try {
       const statements = [
+        ...(this.c.assertions ?? []),
         this.prepareActorAccountGuard(actorAccountId, targetAccountId),
         this.c.env.DB.prepare(
           `UPDATE system_accounts
@@ -192,6 +197,7 @@ export class SystemAccountCatalogRepository {
         ),
         this.prepareLastRootGuard(),
         ...auditStatements,
+        ...(this.c.assertions ?? []),
       ]
       const executions = await this.c.env.DB.batch(statements)
       if (executions.length !== statements.length || executions.some((entry) => !entry.success)) {
@@ -208,6 +214,20 @@ export class SystemAccountCatalogRepository {
       }
 
       return caught instanceof Error ? caught : new Error("failed to update System AccountEntity")
+    }
+  }
+
+  /** 保存を伴わない応答も、渡された現在資格のassertionを通す。 */
+  async revalidateAuthorization(): Promise<Error | null> {
+    const assertions = this.c.assertions ?? []
+    if (assertions.length === 0) return null
+    try {
+      const checked = await this.c.env.DB.batch([...assertions])
+      if (checked.length !== assertions.length || checked.some((entry) => !entry.success))
+        return new Error("Account authorization revalidation failed")
+      return null
+    } catch (cause) {
+      return cause instanceof Error ? cause : new Error("Account authorization revalidation failed")
     }
   }
 
