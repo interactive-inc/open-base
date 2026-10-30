@@ -1,3 +1,4 @@
+import type { IamRoleEntity } from "@system/domain/entities/iam-role.entity"
 import type { SystemD1Context } from "@system/configuration/system-context"
 import type { SystemReadAuthentication } from "@system/domain/definitions/system-read-authentication.definition"
 import { z } from "zod"
@@ -47,13 +48,17 @@ WHERE account.id = ?1 AND account.status = 'active' AND account.closed_at IS NUL
   AND (?6 IS NULL OR (identity.id IS NOT NULL AND identity.created_at <= (SELECT at FROM evaluation)
     AND identity.activated_at IS NOT NULL AND identity.activated_at <= (SELECT at FROM evaluation) AND identity.revoked_at IS NULL))`
 
-/** 現在のBearer発行元と権限を読み、開示監査の前後でも同じ資格と期限を要求する。 */
+/** 現在のBearerと権限を固定する。Role変更指定時のassertionは予定した保存後だけに使う。 */
 export class PrepareSystemReadAuthorizationAdapter {
   constructor(private readonly c: Context) {
     Object.freeze(this)
   }
 
-  async prepare(authentication: SystemReadAuthentication, at: Date) {
+  async prepare(
+    authentication: SystemReadAuthentication,
+    at: Date,
+    afterRoleRevision?: IamRoleEntity,
+  ) {
     if (
       !Number.isSafeInteger(at.getTime()) ||
       at.getTime() < 0 ||
@@ -65,9 +70,9 @@ export class PrepareSystemReadAuthorizationAdapter {
       authentication.expiresAtMs <= authentication.issuedAtMs
     )
       return new Error("read authentication is invalid")
-    const parameters = (now: Date) => [
+    const parameters = (now: Date, tokenVersion = authentication.tokenVersion) => [
       authentication.accountId,
-      authentication.tokenVersion,
+      tokenVersion,
       authentication.issuedAtMs,
       authentication.expiresAtMs,
       authentication.machineCredentialId,
@@ -78,11 +83,20 @@ export class PrepareSystemReadAuthorizationAdapter {
       // 発行元の照合と付与の読取を同じ batch で読み、往復を 1 回にする。
       const authorization = new SystemD1AuthorizationAdapter(this.c)
       const family = new SystemSessionFamilyGuardAdapter(this.c)
-      const [current, grants] = await this.c.env.DB.batch<Record<string, unknown>>([
+      const executions = await this.c.env.DB.batch<Record<string, unknown>>([
         this.c.env.DB.prepare(authorizationSql).bind(...parameters(at)),
         authorization.statementForAccount(authentication.accountId),
         ...family.prepare({ authentication, at, rejection: "system_read_authorization_changed" }),
+        ...(afterRoleRevision === undefined
+          ? []
+          : [
+              this.c.env.DB.prepare(`SELECT EXISTS (
+          SELECT 1 FROM system_role_bindings WHERE account_id=?1 AND role_id=?2 AND revoked_at IS NULL
+        ) AS assigned`).bind(authentication.accountId, afterRoleRevision.id),
+            ]),
       ])
+      const current = executions[0]
+      const grants = executions[1]
       const row = current?.results[0]
       if (row === undefined) return null
       const snapshot = snapshotSchema.parse(row)
@@ -98,6 +112,19 @@ export class PrepareSystemReadAuthorizationAdapter {
         [...canonical.permissionKeys].some((key) => !keys.has(key))
       )
         return null
+      const assigned =
+        afterRoleRevision === undefined
+          ? 0
+          : z
+              .object({ assigned: z.union([z.literal(0), z.literal(1)]) })
+              .parse(executions.at(-1)?.results[0]).assigned
+      const expected =
+        afterRoleRevision === undefined
+          ? snapshot
+          : this.reviseRoleSnapshot(snapshot, afterRoleRevision, assigned === 1)
+      const tokenVersion = authentication.tokenVersion + assigned
+      if (!Number.isSafeInteger(tokenVersion))
+        return new Error("role revision token version is invalid")
       return {
         permissionKeys: keys,
         scopedPermissionKeys: canonical.scopedPermissionKeys,
@@ -126,9 +153,9 @@ export class PrepareSystemReadAuthorizationAdapter {
                 AND current.proof=json_set(?8,'$[3]',CAST(?11 AS INTEGER),'$[5]',CAST(?12 AS INTEGER))))
               AND current.permissions = ?9
           ) THEN 1 ELSE json_extract('{}','system_read_authorization_changed') END`).bind(
-              ...parameters(now),
-              snapshot.proof,
-              snapshot.permissions,
+              ...parameters(now, tokenVersion),
+              expected.proof,
+              expected.permissions,
               principalRename?.principalId ?? null,
               principalRename?.revision ?? null,
               principalRename?.updatedAtMs ?? null,
@@ -145,6 +172,45 @@ export class PrepareSystemReadAuthorizationAdapter {
       return new Error("read authorization unavailable", { cause })
     }
   }
+  /** Role更新だけを反映した保存後の資格を作る。その他の付与・主体・credentialは固定する。 */
+  private reviseRoleSnapshot(
+    snapshot: z.infer<typeof snapshotSchema>,
+    role: IamRoleEntity,
+    assigned: boolean,
+  ) {
+    const proof = z.array(z.unknown()).parse(JSON.parse(snapshot.proof))
+    const grants = z.array(z.array(z.unknown())).parse(proof[18])
+    const revised = this.reviseRoleGrants(grants, role)
+    if (assigned) proof[0] = Math.max(z.number().parse(proof[0]), role.updatedAt.getTime())
+    proof[18] = revised
+    return {
+      proof: JSON.stringify(proof),
+      permissions: JSON.stringify(
+        revised
+          .filter(
+            (grant) =>
+              grant[2] === null && grant[3] === null && grant[8] === null && grant[11] !== null,
+          )
+          .map((grant) => grant[11]),
+      ),
+    }
+  }
+
+  private reviseRoleGrants(grants: ReadonlyArray<Array<unknown>>, role: IamRoleEntity) {
+    const bindings = new Set<unknown>()
+    return grants.flatMap((grant) => {
+      if (grant[1] !== role.id) return [grant]
+      if (bindings.has(grant[0])) return []
+      bindings.add(grant[0])
+      return (role.permissionKeys.length === 0 ? [null] : role.permissionKeys).map((permission) => {
+        const next = [...grant]
+        next[10] = role.updatedAt.getTime()
+        next[11] = permission
+        return next
+      })
+    })
+  }
+
   static isRejected(cause: unknown): boolean {
     const visited = new Set<Error>()
     for (let error = cause; error instanceof Error && !visited.has(error); error = error.cause) {

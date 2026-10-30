@@ -29,7 +29,11 @@ export type SystemRoleMutation =
   | "forbidden"
   | "managed_role"
   | "role_in_use"
-type Context = SystemD1Context
+type Context = SystemD1Context &
+  Readonly<{
+    assertions?: ReadonlyArray<D1PreparedStatement>
+    afterAssertions?: ReadonlyArray<D1PreparedStatement>
+  }>
 
 /** namespaced permissionを束ねるSystem Roleを、割当と同じ正本へ保存する。 */
 export class SystemRoleCatalogRepository {
@@ -85,6 +89,7 @@ export class SystemRoleCatalogRepository {
   ): Promise<SystemRoleMutation | Error> {
     try {
       const statements = [
+        ...(this.c.assertions ?? []),
         this.prepareActorRoleGuard(actorAccountId, role.permissionKeys),
         this.c.env.DB.prepare(
           `INSERT INTO system_iam_roles
@@ -105,6 +110,7 @@ export class SystemRoleCatalogRepository {
           ).bind(role.id, permissionKey),
         ),
         ...auditStatements,
+        ...(this.c.afterAssertions ?? this.c.assertions ?? []),
       ]
       const executions = await this.c.env.DB.batch(statements)
       if (executions.length !== statements.length || executions.some((entry) => !entry.success)) {
@@ -134,6 +140,7 @@ export class SystemRoleCatalogRepository {
 
     try {
       const statements = [
+        ...(this.c.assertions ?? []),
         this.prepareActorRoleGuard(actorAccountId, next.permissionKeys),
         this.c.env.DB.prepare(
           `UPDATE system_iam_roles
@@ -171,6 +178,7 @@ export class SystemRoleCatalogRepository {
         this.prepareAssignedAccountTokenGuard(previous.id),
         this.prepareLastRootGuard(),
         ...auditStatements,
+        ...(this.c.afterAssertions ?? this.c.assertions ?? []),
       ]
       const executions = await this.c.env.DB.batch(statements)
       if (executions.length !== statements.length || executions.some((entry) => !entry.success)) {
@@ -199,6 +207,7 @@ export class SystemRoleCatalogRepository {
 
     try {
       const statements = [
+        ...(this.c.assertions ?? []),
         this.prepareActorRoleGuard(actorAccountId, role.permissionKeys),
         this.c.env.DB.prepare(
           `SELECT CASE WHEN EXISTS (
@@ -216,6 +225,7 @@ export class SystemRoleCatalogRepository {
           "SELECT CASE WHEN changes() = 1 THEN 1 ELSE abs(-9223372036854775808) END AS ok",
         ),
         ...auditStatements,
+        ...(this.c.afterAssertions ?? this.c.assertions ?? []),
       ]
       const executions = await this.c.env.DB.batch(statements)
       if (executions.length !== statements.length || executions.some((entry) => !entry.success)) {

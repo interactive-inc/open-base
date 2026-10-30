@@ -1,3 +1,5 @@
+import { prepareSystemWriteAuthorization } from "@system/interface/authorization/prepare-system-write-authorization"
+import { PrepareSystemReadAuthorizationAdapter } from "@system/infrastructure/adapters/iam/prepare-system-read-authorization.adapter"
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
 import {
   SystemForbiddenError,
@@ -106,6 +108,14 @@ export const PATCH = systemFactory.createHandlers(
     if (!Number.isSafeInteger(now.getTime())) {
       throw new SystemIAMUnavailableError()
     }
+    const assertions = await prepareSystemWriteAuthorization(context, {
+      now,
+      stepUpToken: context.req.header("x-system-step-up") ?? "",
+      requiredPermissions: ["iam:write"],
+    })
+    if (assertions === "forbidden") throw new SystemForbiddenError()
+    if (assertions instanceof Error) throw new SystemIAMUnavailableError()
+
     const body = context.req.valid("json")
     const revised = current.revise({
       name: body.name,
@@ -117,6 +127,14 @@ export const PATCH = systemFactory.createHandlers(
       throw new SystemRoleInvalidError()
     }
     if (revised === current) {
+      try {
+        const checks = await context.env.DB.batch([...assertions])
+        if (checks.some((check) => !check.success)) throw new SystemIAMUnavailableError()
+      } catch (cause) {
+        if (PrepareSystemReadAuthorizationAdapter.isRejected(cause))
+          throw new SystemForbiddenError()
+        throw new SystemIAMUnavailableError()
+      }
       return context.json(
         {
           id: current.id,
@@ -164,7 +182,20 @@ export const PATCH = systemFactory.createHandlers(
     const auditStatements = new SystemAuditEventRepository({
       env: { DB: context.env.DB },
     }).prepareAppend(auditEvent)
-    const update = await repository.update(actorAccountId.data, current, revised, auditStatements)
+    const afterAssertions = await prepareSystemWriteAuthorization(context, {
+      now,
+      stepUpToken: context.req.header("x-system-step-up") ?? "",
+      requiredPermissions: ["iam:write"],
+      afterRoleRevision: revised,
+    })
+    if (afterAssertions === "forbidden") throw new SystemForbiddenError()
+    if (afterAssertions instanceof Error) throw new SystemIAMUnavailableError()
+    const update = await new SystemRoleCatalogRepository({
+      env: { DB: context.env.DB },
+      assertions,
+      afterAssertions,
+    }).update(actorAccountId.data, current, revised, auditStatements)
+    if (PrepareSystemReadAuthorizationAdapter.isRejected(update)) throw new SystemForbiddenError()
     if (update instanceof Error) {
       throw new SystemIAMUnavailableError()
     }
@@ -226,6 +257,14 @@ export const DELETE = systemFactory.createHandlers(
     if (!Number.isSafeInteger(now.getTime())) {
       throw new SystemIAMUnavailableError()
     }
+    const assertions = await prepareSystemWriteAuthorization(context, {
+      now,
+      stepUpToken: context.req.header("x-system-step-up") ?? "",
+      requiredPermissions: ["iam:write"],
+    })
+    if (assertions === "forbidden") throw new SystemForbiddenError()
+    if (assertions instanceof Error) throw new SystemIAMUnavailableError()
+
     const beforeJson = StableSystemAuditJsonValue.create({
       description: role.description,
       key: role.key,
@@ -256,7 +295,11 @@ export const DELETE = systemFactory.createHandlers(
     const auditStatements = new SystemAuditEventRepository({
       env: { DB: context.env.DB },
     }).prepareAppend(auditEvent)
-    const deletion = await repository.delete(actorAccountId.data, role, auditStatements)
+    const deletion = await new SystemRoleCatalogRepository({
+      env: { DB: context.env.DB },
+      assertions,
+    }).delete(actorAccountId.data, role, auditStatements)
+    if (PrepareSystemReadAuthorizationAdapter.isRejected(deletion)) throw new SystemForbiddenError()
     if (deletion instanceof Error) {
       throw new SystemIAMUnavailableError()
     }

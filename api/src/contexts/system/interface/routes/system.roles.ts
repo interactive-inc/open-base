@@ -1,3 +1,5 @@
+import { prepareSystemWriteAuthorization } from "@system/interface/authorization/prepare-system-write-authorization"
+import { PrepareSystemReadAuthorizationAdapter } from "@system/infrastructure/adapters/iam/prepare-system-read-authorization.adapter"
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
 import {
   SystemForbiddenError,
@@ -87,6 +89,14 @@ export const POST = systemFactory.createHandlers(
     if (!Number.isSafeInteger(now.getTime())) {
       throw new SystemIAMUnavailableError()
     }
+    const assertions = await prepareSystemWriteAuthorization(context, {
+      now,
+      stepUpToken: context.req.header("x-system-step-up") ?? "",
+      requiredPermissions: ["iam:write"],
+    })
+    if (assertions === "forbidden") throw new SystemForbiddenError()
+    if (assertions instanceof Error) throw new SystemIAMUnavailableError()
+
     const body = context.req.valid("json")
     const role = IamRoleEntity.create({
       id: crypto.randomUUID(),
@@ -134,7 +144,9 @@ export const POST = systemFactory.createHandlers(
     }).prepareAppend(auditEvent)
     const creation = await new SystemRoleCatalogRepository({
       env: { DB: context.env.DB },
+      assertions,
     }).create(actorAccountId.data, role, auditStatements)
+    if (PrepareSystemReadAuthorizationAdapter.isRejected(creation)) throw new SystemForbiddenError()
     if (creation instanceof Error) {
       throw new SystemIAMUnavailableError()
     }

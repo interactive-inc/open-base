@@ -1,3 +1,4 @@
+import type { IamRoleEntity } from "@system/domain/entities/iam-role.entity"
 import type { RoleBindingResource } from "@system/domain/schemas/iam/role-binding.schema"
 import type {
   SystemAuthorizationContext,
@@ -15,11 +16,13 @@ export async function prepareSystemWriteAuthorization(
     stepUpToken: string
     requiredPermissions: ReadonlyArray<string>
     resource?: RoleBindingResource | null
+    afterRoleRevision?: IamRoleEntity
     principalRename?: Readonly<{ principalId: string; revision: number; updatedAtMs: number }>
   }>,
 ): Promise<ReadonlyArray<D1PreparedStatement> | "forbidden" | Error> {
   const authentication = context.var.bearerReadAuthentication
   if (
+    (input.afterRoleRevision !== undefined && input.principalRename !== undefined) ||
     authentication === undefined ||
     authentication.accountId !== context.var.userId ||
     authentication.tokenVersion !== context.var.accountTokenVersion ||
@@ -32,6 +35,7 @@ export async function prepareSystemWriteAuthorization(
   const proof = await new PrepareSystemReadAuthorizationAdapter(context).prepare(
     authentication,
     now,
+    input.afterRoleRevision,
   )
   if (proof === null || PrepareSystemReadAuthorizationAdapter.isRejected(proof)) return "forbidden"
   if (proof instanceof Error) return proof
