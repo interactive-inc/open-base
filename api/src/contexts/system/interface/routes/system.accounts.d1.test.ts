@@ -213,6 +213,21 @@ describe("System AccountEntity HTTP", () => {
         .bind(scopedPrivilegedAccountId)
         .first<Record<string, unknown>>(),
     ).toEqual({ status: "active", token_version: 0 })
+    expect((await delegatedAdministratorClient.system.accounts.$post()).status).toBe(201)
+    expect(
+      Number(
+        (
+          await delegatedAdministratorClient.system.accounts[":accountId"].$get({
+            param: { accountId: scopedPrivilegedAccountId },
+          })
+        ).status,
+      ),
+    ).toBe(403)
+    const noOp = await delegatedAdministratorClient.system.accounts[":accountId"].$patch({
+      param: { accountId: scopedPrivilegedAccountId },
+      json: { status: "active" },
+    })
+    expect({ status: noOp.status, body: await noOp.text() }).toMatchObject({ status: 403 })
   })
 })
 
@@ -502,5 +517,182 @@ test("Accountの正常な状態遷移と変更なしでは版と成功監査を�
       .prepare("SELECT token_version FROM system_accounts WHERE id=?1")
       .bind(rootAccountId)
       .first<number>("token_version"),
+  ).toBe(0)
+})
+
+async function accountTargetFixture(mode: "empty" | "privileged" | "shared" | "selfScoped") {
+  const f = await accountMutationFixture()
+  const admin = zAccountId.parse(testAccountId("account-preserved-administrator"))
+  const actorRoleId = crypto.randomUUID()
+  const targetRoleId = crypto.randomUUID()
+  await f.database.batch([
+    f.database
+      .prepare(
+        "INSERT INTO system_accounts(id,status,token_version,created_at,updated_at) VALUES (?1,'active',0,?2,?2)",
+      )
+      .bind(admin, f.at.getTime()),
+    f.database
+      .prepare(
+        "INSERT INTO system_identity_bindings(id,account_id,provider,subject,created_at,activated_at) VALUES (?1,?2,'password','operator@example.com',?3,?3)",
+      )
+      .bind(crypto.randomUUID(), admin, f.at.getTime()),
+    f.database
+      .prepare(
+        "INSERT INTO system_role_bindings(id,account_id,role_id,created_at) VALUES (?1,?2,'af285551-000d-4320-8ea0-bbfbc6c96a81',?3)",
+      )
+      .bind(crypto.randomUUID(), admin, f.at.getTime()),
+    f.database
+      .prepare("UPDATE system_role_bindings SET revoked_at=?1 WHERE account_id=?2")
+      .bind(f.at.getTime(), rootAccountId),
+    f.database
+      .prepare(
+        "INSERT INTO system_iam_roles(id,key,kind,name,created_at,updated_at) VALUES (?1,'example:account_operator','custom','Account operator',?2,?2)",
+      )
+      .bind(actorRoleId, f.at.getTime()),
+    f.database
+      .prepare(
+        "INSERT INTO system_iam_roles(id,key,kind,resource_type,name,created_at,updated_at) VALUES (?1,'example:target_access','custom','example:record','Target access',?2,?2)",
+      )
+      .bind(targetRoleId, f.at.getTime()),
+    f.database
+      .prepare(
+        "INSERT INTO system_iam_role_permissions(role_id,permission_key) VALUES (?1,'iam:write'),(?2,'example:privileged')",
+      )
+      .bind(actorRoleId, targetRoleId),
+    f.database
+      .prepare(
+        "INSERT INTO system_role_bindings(id,account_id,role_id,created_at) VALUES (?1,?2,?3,?4)",
+      )
+      .bind(crypto.randomUUID(), rootAccountId, actorRoleId, f.at.getTime()),
+  ])
+  if (mode === "shared")
+    await f.database
+      .prepare(
+        "INSERT INTO system_iam_role_permissions(role_id,permission_key) VALUES (?1,'example:privileged')",
+      )
+      .bind(actorRoleId)
+      .run()
+  if (mode !== "empty")
+    await f.database
+      .prepare(
+        "INSERT INTO system_role_bindings(id,account_id,role_id,resource_type,resource_id,created_at) VALUES (?1,?2,?3,'example:record','example-record',?4)",
+      )
+      .bind(
+        crypto.randomUUID(),
+        mode === "selfScoped" ? rootAccountId : f.targetId,
+        targetRoleId,
+        f.at.getTime(),
+      )
+      .run()
+  return { ...f, targetRoleId }
+}
+
+for (const mode of ["empty", "privileged", "shared"] satisfies ReadonlyArray<
+  "empty" | "privileged" | "shared"
+>) {
+  test(`Accountの変更なしにも対象のglobal permission包含を要求する: ${mode}`, async () => {
+    const f = await accountTargetFixture(mode)
+    const before = await f.snapshot()
+    const response = await f.mutate("unchanged", "active")
+    expect(response.status).toBe(mode === "privileged" ? 403 : 200)
+    const body = await response.text()
+    if (mode === "privileged") expect(body).not.toContain("example:target_access")
+    else
+      expect(JSON.parse(body)).toMatchObject({ id: f.targetId, status: "active", token_version: 0 })
+    expect(await f.snapshot()).toEqual(before)
+    if (mode !== "privileged") expect((await f.mutate("update", "suspended")).status).toBe(200)
+  })
+}
+
+for (const change of ["version", "status", "roles", "closed"]) {
+  test(`Account変更なし応答は読取後の対象${change}変更を拒否する`, async () => {
+    const f = await accountTargetFixture(change === "roles" ? "privileged" : "empty")
+    const find = spyOn(SystemAccountCatalogRepository.prototype, "find")
+    const original = find.getMockImplementation()
+    if (!original) throw new Error("missing original Account lookup")
+    find.mockImplementation(async function (this: SystemAccountCatalogRepository, ...args) {
+      const found = await original.call(this, ...args)
+      if (args[0] === f.targetId) {
+        if (change === "version")
+          await f.database
+            .prepare("UPDATE system_accounts SET token_version=token_version+1 WHERE id=?1")
+            .bind(f.targetId)
+            .run()
+        if (change === "status")
+          await f.database
+            .prepare(
+              "UPDATE system_accounts SET status='locked',token_version=token_version+1 WHERE id=?1",
+            )
+            .bind(f.targetId)
+            .run()
+        if (change === "roles")
+          await f.database
+            .prepare("UPDATE system_role_bindings SET revoked_at=?1 WHERE account_id=?2")
+            .bind(Date.now(), f.targetId)
+            .run()
+        if (change === "closed")
+          await f.database
+            .prepare(
+              "UPDATE system_accounts SET closed_at=?1,status='suspended',token_version=token_version+1 WHERE id=?2",
+            )
+            .bind(Date.now(), f.targetId)
+            .run()
+      }
+      return found
+    })
+    try {
+      const response = await f.mutate("unchanged", "active")
+      expect(response.status).toBe(403)
+      expect(await response.text()).not.toContain('"role_keys"')
+    } finally {
+      find.mockRestore()
+    }
+  })
+}
+
+test("Account Repositoryの変更なしも対象権限を超えられない", async () => {
+  const f = await accountTargetFixture("privileged")
+  const before = await f.snapshot()
+  expect(
+    await new SystemAccountCatalogRepository({ env: { DB: f.database } }).setStatus(
+      rootAccountId,
+      zAccountId.parse(f.targetId),
+      "active",
+      f.at,
+      [],
+    ),
+  ).toBe("forbidden")
+  expect(await f.snapshot()).toEqual(before)
+})
+
+test("自己のscope付き権限があってもactive no-opを許し自己停止は拒否する", async () => {
+  const f = await accountTargetFixture("selfScoped")
+  const before = await f.snapshot()
+  const response = await f.mutate("unchanged", "active", rootAccountId)
+  expect(response.status).toBe(200)
+  expect(await response.json()).toMatchObject({
+    id: rootAccountId,
+    status: "active",
+    token_version: 0,
+  })
+  expect((await f.mutate("update", "suspended", rootAccountId)).status).toBe(403)
+  expect(await f.snapshot()).toEqual(before)
+})
+
+test("Account更新transaction中の対象権限追加を変更と監査ごと巻き戻す", async () => {
+  const f = await accountTargetFixture("empty")
+  const before = await f.snapshot()
+  await f.database
+    .prepare(
+      `CREATE TRIGGER elevate_account_target AFTER UPDATE OF status ON system_accounts WHEN NEW.id='${f.targetId}' BEGIN INSERT INTO system_role_bindings(id,account_id,role_id,resource_type,resource_id,created_at) VALUES ('${crypto.randomUUID()}','${f.targetId}','${f.targetRoleId}','example:record','example-record',${f.at.getTime()}); END`,
+    )
+    .run()
+  expect((await f.mutate("update", "suspended")).status).toBe(403)
+  expect(await f.snapshot()).toEqual(before)
+  expect(
+    await f.database
+      .prepare("SELECT count(*) AS count FROM system_role_bindings WHERE account_id=?1")
+      .bind(f.targetId)
+      .first<number>("count"),
   ).toBe(0)
 })

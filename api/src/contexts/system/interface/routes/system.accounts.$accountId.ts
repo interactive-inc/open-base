@@ -92,8 +92,11 @@ export const PATCH = systemFactory.createHandlers(
     }
     const body = context.req.valid("json")
     if (before.status === body.status) {
-      const authorization = await repository.revalidateAuthorization()
-      if (PrepareSystemReadAuthorizationAdapter.isRejected(authorization))
+      const authorization = await repository.revalidateAuthorization(actorAccountId.data, before)
+      if (
+        authorization === "forbidden" ||
+        PrepareSystemReadAuthorizationAdapter.isRejected(authorization)
+      )
         throw new SystemForbiddenError()
       if (authorization instanceof Error) throw new SystemAccountUnavailableError()
       return context.json(
@@ -165,8 +168,11 @@ export const PATCH = systemFactory.createHandlers(
     }
 
     if (update === "unchanged") {
-      const authorization = await repository.revalidateAuthorization()
-      if (PrepareSystemReadAuthorizationAdapter.isRejected(authorization))
+      const authorization = await repository.revalidateAuthorization(actorAccountId.data, account)
+      if (
+        authorization === "forbidden" ||
+        PrepareSystemReadAuthorizationAdapter.isRejected(authorization)
+      )
         throw new SystemForbiddenError()
       if (authorization instanceof Error) throw new SystemAccountUnavailableError()
     }

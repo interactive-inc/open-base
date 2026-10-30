@@ -146,8 +146,11 @@ export class SystemAccountCatalogRepository {
     auditStatements: ReadonlyArray<D1PreparedStatement>,
   ): Promise<SystemAccountStatusUpdate | Error> {
     const target = await this.find(targetAccountId)
-    const authorization = await this.revalidateAuthorization()
-    if (authorization instanceof Error) return authorization
+    const authorization = await this.revalidateAuthorization(
+      actorAccountId,
+      target instanceof Error ? null : target,
+    )
+    if (authorization !== null) return authorization
     if (target === null) return "not_found"
     if (target instanceof Error) return target
     if (actorAccountId === targetAccountId && status !== "active") return "forbidden"
@@ -197,6 +200,7 @@ export class SystemAccountCatalogRepository {
         ),
         this.prepareLastRootGuard(),
         ...auditStatements,
+        this.prepareActorAccountGuard(actorAccountId, targetAccountId),
         ...(this.c.assertions ?? []),
       ]
       const executions = await this.c.env.DB.batch(statements)
@@ -217,18 +221,51 @@ export class SystemAccountCatalogRepository {
     }
   }
 
-  /** 保存を伴わない応答も、渡された現在資格のassertionを通す。 */
-  async revalidateAuthorization(): Promise<Error | null> {
+  /** 変更なしでも現在資格・対象への委譲制限・開示するsnapshotを同時に照合する。 */
+  async revalidateAuthorization(
+    actorAccountId: AccountId,
+    target: SystemAccountCatalogView | null,
+  ): Promise<"forbidden" | Error | null> {
     const assertions = this.c.assertions ?? []
-    if (assertions.length === 0) return null
+    const statements = [
+      ...assertions,
+      ...(target === null
+        ? []
+        : [
+            this.prepareActorAccountGuard(actorAccountId, target.id),
+            this.prepareTargetSnapshotGuard(target),
+          ]),
+      ...assertions,
+    ]
+    if (statements.length === 0) return null
     try {
-      const checked = await this.c.env.DB.batch([...assertions])
-      if (checked.length !== assertions.length || checked.some((entry) => !entry.success))
+      const checked = await this.c.env.DB.batch(statements)
+      if (checked.length !== statements.length || checked.some((entry) => !entry.success))
         return new Error("Account authorization revalidation failed")
       return null
     } catch (cause) {
+      if (cause instanceof Error && cause.message.includes("integer overflow")) return "forbidden"
       return cause instanceof Error ? cause : new Error("Account authorization revalidation failed")
     }
+  }
+
+  private prepareTargetSnapshotGuard(target: SystemAccountCatalogView): D1PreparedStatement {
+    return this.c.env.DB.prepare(`SELECT CASE WHEN EXISTS (
+      SELECT 1 FROM system_accounts WHERE id=?1 AND status=?2 AND token_version=?3
+        AND created_at=?4 AND updated_at=?5 AND closed_at IS NULL
+        AND (SELECT json_group_array(role_key) FROM (
+          SELECT role.key AS role_key FROM system_role_bindings binding
+          INNER JOIN system_iam_roles role ON role.id=binding.role_id
+          WHERE binding.account_id=?1 AND binding.revoked_at IS NULL ORDER BY role.key
+        ))=?6
+    ) THEN 1 ELSE abs(-9223372036854775808) END`).bind(
+      target.id,
+      target.status,
+      target.tokenVersion,
+      target.createdAt.getTime(),
+      target.updatedAt.getTime(),
+      JSON.stringify(target.roleKeys),
+    )
   }
 
   private prepareActorAccountGuard(
@@ -258,7 +295,8 @@ export class SystemAccountCatalogRepository {
            WHERE key IN ('system:admin', 'iam:write')
          )
          AND (
-           EXISTS (SELECT 1 FROM actor_permissions WHERE key = 'system:admin')
+           ?1 = ?2
+           OR EXISTS (SELECT 1 FROM actor_permissions WHERE key = 'system:admin')
            OR NOT EXISTS (
              SELECT 1 FROM target_permissions target
              WHERE NOT EXISTS (
