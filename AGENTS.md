@@ -57,7 +57,7 @@
 
 `portless.json` がホスト名の正本。画面とAPIは `https://base.localhost`（APIは `/api` 配下）。直接接続はport 18787。パスキーはIPアドレスのoriginで使えないため、ブラウザではホスト名で開く。OIDCの発行者はHTTPSに限り、手元の開発用IdPだけ `http://localhost` を使える。
 
-- 変更後は `make ci` を実行する。重い検査は同時に一つだけ実行する。
+- 変更後は `vp run check` と `vp run test` を順に実行する。重い検査は同時に一つだけ実行する。整形は `vp run format`、lintのみの実行は `vp run lint` を使う。
 - 型生成、API/CLI/MCP/Webの型検査、formatter/linter、単体テスト、ローカルD1受入を行う。
 - DB判断のunit testは型付きport fakeを使う。SQL・HTTP入口はCloudflareのローカルD1で検証し、D1互換ラッパーを自作しない。
 - SystemとCompanyのmanifestとlockは実ディレクトリ全体を検証する。正当な変更時だけ `--write` で更新する。

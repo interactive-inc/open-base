@@ -34,6 +34,7 @@ import * as companyPersonalDataErasureRequestsRoute from "@/api/routes/company.p
 import * as companyPersonalDataErasureRequestsIdExecuteRoute from "@/api/routes/company.personal-data-erasure-requests.$id.execute"
 import * as companyPersonnelActionRequestsRoute from "@/api/routes/company.personnel-action-requests"
 import * as systemPermissionDefinitionsRoute from "@/api/routes/system.permission-definitions"
+import * as clientProjectRecordsRoute from "@/contexts/client-project/interface/routes/client-project.records"
 import * as companyAccountEmployeeLinksRoute from "@/contexts/company/interface/routes/company.account-employee-links"
 import * as companyAssignmentResourceAdoptionsRoute from "@/contexts/company/interface/routes/company.assignment-resource-adoptions"
 import * as companyAuthorityResolutionsRoute from "@/contexts/company/interface/routes/company.authority-resolutions"
@@ -77,6 +78,8 @@ import * as companyReportingLinesEmployeeCodeRoute from "@/contexts/company/inte
 import * as companyResourceHistoryTypeIdRoute from "@/contexts/company/interface/routes/company.resource-history.$type.$id"
 import * as companyResponsibilityResourceAdoptionsRoute from "@/contexts/company/interface/routes/company.responsibility-resource-adoptions"
 import * as companyWorkforceConnectionCompletionsRoute from "@/contexts/company/interface/routes/company.workforce-connection-completions"
+import * as customerRecordsRoute from "@/contexts/customer/interface/routes/customer.records"
+import * as offeringRecordsRoute from "@/contexts/offering/interface/routes/offering.records"
 import * as performanceReviewCyclesRoute from "@/contexts/performance-review/interface/routes/performance-review.cycles"
 import * as performanceReviewCyclesIdRoute from "@/contexts/performance-review/interface/routes/performance-review.cycles.$id"
 import * as performanceReviewSheetsRoute from "@/contexts/performance-review/interface/routes/performance-review.sheets"
@@ -145,6 +148,8 @@ import * as systemWorkItemsIdResultsRoute from "@system/interface/routes/system.
 import * as systemWorkItemsIdReturnRoute from "@system/interface/routes/system.work-items.$id.return"
 
 const routePart0 = createRouteApp()
+  .get("/client-project/records", ...clientProjectRecordsRoute.GET)
+  .post("/client-project/records", ...clientProjectRecordsRoute.POST)
   .get("/company/account-directory", ...companyAccountDirectoryRoute.GET)
   .get("/company/account-employee-links", ...companyAccountEmployeeLinksRoute.GET)
   .post("/company/account-employee-links", ...companyAccountEmployeeLinksRoute.POST)
@@ -377,6 +382,10 @@ const routePart28 = createRouteApp()
     "/company/workforce-connection-completions",
     ...companyWorkforceConnectionCompletionsRoute.POST,
   )
+  .get("/customer/records", ...customerRecordsRoute.GET)
+  .post("/customer/records", ...customerRecordsRoute.POST)
+  .get("/offering/records", ...offeringRecordsRoute.GET)
+  .post("/offering/records", ...offeringRecordsRoute.POST)
   .get("/performance-review/cycles", ...performanceReviewCyclesRoute.GET)
   .post("/performance-review/cycles", ...performanceReviewCyclesRoute.POST)
   .get("/performance-review/cycles/:id", ...performanceReviewCyclesIdRoute.GET)
@@ -438,12 +447,12 @@ const routePart28 = createRouteApp()
   .post("/system/auth/password/reset", ...systemAuthPasswordResetRoute.POST)
   .patch("/system/auth/password/reset", ...systemAuthPasswordResetRoute.PATCH)
   .get("/system/batch-jobs", ...systemBatchJobsRoute.GET)
+
+const routePart29 = createRouteApp()
   .post("/system/bootstrap", ...systemBootstrapRoute.POST)
   .get("/system/connectors", ...systemConnectorsRoute.GET)
   .post("/system/connectors", ...systemConnectorsRoute.POST)
   .patch("/system/connectors/:connectorId", ...systemConnectorsConnectorIdRoute.PATCH)
-
-const routePart29 = createRouteApp()
   .get("/system/dead-letters", ...systemDeadLettersRoute.GET)
   .post(
     "/system/dead-letters/:deadLetterId/requeue",
@@ -521,6 +530,8 @@ const routePart29 = createRouteApp()
   .post("/system/work-items", ...systemWorkItemsRoute.POST)
   .get("/system/work-items/:id", ...systemWorkItemsIdRoute.GET)
   .post("/system/work-items/:id/accept", ...systemWorkItemsIdAcceptRoute.POST)
+
+const routePart30 = createRouteApp()
   .post("/system/work-items/:id/approve", ...systemWorkItemsIdApproveRoute.POST)
   .post("/system/work-items/:id/cancel", ...systemWorkItemsIdCancelRoute.POST)
   .get(
@@ -528,8 +539,6 @@ const routePart29 = createRouteApp()
     ...systemWorkItemsIdEvidenceAttachmentIdRoute.GET,
   )
   .post("/system/work-items/:id/handovers", ...systemWorkItemsIdHandoversRoute.POST)
-
-const routePart30 = createRouteApp()
   .post("/system/work-items/:id/handovers/accept", ...systemWorkItemsIdHandoversAcceptRoute.POST)
   .post("/system/work-items/:id/handovers/decline", ...systemWorkItemsIdHandoversDeclineRoute.POST)
   .get("/system/work-items/:id/history", ...systemWorkItemsIdHistoryRoute.GET)

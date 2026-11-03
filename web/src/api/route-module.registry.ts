@@ -1,5 +1,8 @@
 import { reviewContextModule } from "@/contexts/performance-review/interface/module"
 import { workExecutionContextModule } from "@/contexts/work-execution/interface/module"
+import { clientProjectContextModule } from "@/contexts/client-project/interface/module"
+import { customerContextModule } from "@/contexts/customer/interface/module"
+import { offeringContextModule } from "@/contexts/offering/interface/module"
 import { systemContextModule } from "@system/interface/module"
 import { companyContextModule } from "@/contexts/company/interface/module"
 import type { ApiRouteModuleRegistration } from "@/api/api-route-module"
@@ -22,6 +25,9 @@ export const ROUTE_MODULE_REGISTRY = [
   companyContextModule,
   reviewContextModule,
   workExecutionContextModule,
+  clientProjectContextModule,
+  customerContextModule,
+  offeringContextModule,
   {
     context: "api",
     tier: "composition",

@@ -18,10 +18,16 @@
   },
   "businessAreaOwners": {
     "performance-review": "performance-review",
+    "client-project": "client-project",
+    "customer": "customer",
+    "offering": "offering",
     "work-execution": "work-execution"
   },
   "routeOwners": {
     "performance-review": "performance-review",
+    "client-project": "client-project",
+    "customer": "customer",
+    "offering": "offering",
     "work-execution": "work-execution"
   }
 }

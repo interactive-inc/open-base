@@ -65,6 +65,8 @@ const companyPersonnelActionRequestsRoute: RouteModuleLoader = () =>
   import("@/api/routes/company.personnel-action-requests")
 const systemPermissionDefinitionsRoute: RouteModuleLoader = () =>
   import("@/api/routes/system.permission-definitions")
+const clientProjectRecordsRoute: RouteModuleLoader = () =>
+  import("@/contexts/client-project/interface/routes/client-project.records")
 const companyAccountEmployeeLinksRoute: RouteModuleLoader = () =>
   import("@/contexts/company/interface/routes/company.account-employee-links")
 const companyAssignmentResourceAdoptionsRoute: RouteModuleLoader = () =>
@@ -151,6 +153,10 @@ const companyResponsibilityResourceAdoptionsRoute: RouteModuleLoader = () =>
   import("@/contexts/company/interface/routes/company.responsibility-resource-adoptions")
 const companyWorkforceConnectionCompletionsRoute: RouteModuleLoader = () =>
   import("@/contexts/company/interface/routes/company.workforce-connection-completions")
+const customerRecordsRoute: RouteModuleLoader = () =>
+  import("@/contexts/customer/interface/routes/customer.records")
+const offeringRecordsRoute: RouteModuleLoader = () =>
+  import("@/contexts/offering/interface/routes/offering.records")
 const performanceReviewCyclesRoute: RouteModuleLoader = () =>
   import("@/contexts/performance-review/interface/routes/performance-review.cycles")
 const performanceReviewCyclesIdRoute: RouteModuleLoader = () =>
@@ -284,6 +290,8 @@ const systemWorkItemsIdReturnRoute: RouteModuleLoader = () =>
   import("@system/interface/routes/system.work-items.$id.return")
 
 const ROUTES: ReadonlyArray<readonly [RouteMethod, string, RouteModuleLoader]> = [
+  ["GET", "/client-project/records", clientProjectRecordsRoute],
+  ["POST", "/client-project/records", clientProjectRecordsRoute],
   ["GET", "/company/account-directory", companyAccountDirectoryRoute],
   ["GET", "/company/account-employee-links", companyAccountEmployeeLinksRoute],
   ["POST", "/company/account-employee-links", companyAccountEmployeeLinksRoute],
@@ -423,6 +431,10 @@ const ROUTES: ReadonlyArray<readonly [RouteMethod, string, RouteModuleLoader]> =
   ],
   ["GET", "/company/workforce-connection-completions", companyWorkforceConnectionCompletionsRoute],
   ["POST", "/company/workforce-connection-completions", companyWorkforceConnectionCompletionsRoute],
+  ["GET", "/customer/records", customerRecordsRoute],
+  ["POST", "/customer/records", customerRecordsRoute],
+  ["GET", "/offering/records", offeringRecordsRoute],
+  ["POST", "/offering/records", offeringRecordsRoute],
   ["GET", "/performance-review/cycles", performanceReviewCyclesRoute],
   ["POST", "/performance-review/cycles", performanceReviewCyclesRoute],
   ["GET", "/performance-review/cycles/:id", performanceReviewCyclesIdRoute],

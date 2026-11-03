@@ -8,11 +8,15 @@
   ],
   "type": "module",
   "scripts": {
+    "dev": "portless",
     "build": "bun run --filter web build",
     "build:api-types": "bun run --filter web build:types",
     "typecheck": "bun run build:api-types && bun run --filter cli check",
     "test:web": "bun run --filter web test",
-    "check": "vp check"
+    "test": "bun run --cwd web test:unit && bun run --cwd web test:d1 && bun run --cwd web test:acceptance && bun test --cwd cli && bun test --cwd mcp",
+    "check": "bun run --cwd web check && bun run --cwd cli check && bun run --cwd mcp check && vp check",
+    "format": "vp fmt",
+    "lint": "vp lint"
   },
   "devDependencies": {
     "vite-plus": "^0.1.24"
