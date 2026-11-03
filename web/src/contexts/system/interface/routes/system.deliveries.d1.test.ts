@@ -241,6 +241,7 @@ describe("System delivery HTTP", () => {
     const deadLetterId = deadLetterBody.dead_letters[0]?.id
     if (deadLetterId === undefined) return
     const requeued = await client.system["dead-letters"][":deadLetterId"].requeue.$post({
+      header: { "x-system-step-up": stepUpToken },
       param: { deadLetterId },
       json: {
         max_attempts: 3,
@@ -250,6 +251,7 @@ describe("System delivery HTTP", () => {
     })
     expect(requeued.status).toBe(201)
     const deadLetterReplay = await client.system["dead-letters"][":deadLetterId"].requeue.$post({
+      header: { "x-system-step-up": stepUpToken },
       param: { deadLetterId },
       json: {
         max_attempts: 3,

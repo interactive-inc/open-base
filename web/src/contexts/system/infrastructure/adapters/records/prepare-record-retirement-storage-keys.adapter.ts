@@ -1,3 +1,7 @@
+import {
+  SystemTaskApprovalGuardAdapter,
+  type SystemTaskApprovalTarget,
+} from "@system/infrastructure/adapters/workflow/system-task-approval-guard.adapter"
 import { z } from "zod"
 import type { SystemD1Context } from "@system/configuration/system-context"
 import { AttachmentKekFingerprintAdapter } from "@system/infrastructure/adapters/attachments/attachment-kek-fingerprint.adapter"
@@ -7,6 +11,7 @@ type Context = SystemD1Context &
   Readonly<{
     env: Readonly<{ ATTACHMENT_KEKS?: string }>
     assertions: ReadonlyArray<D1PreparedStatement>
+    approvalTask?: SystemTaskApprovalTarget
   }>
 
 /** ページ検査時に使った鍵が現在も同じ設定で存在することを確認する。未使用の鍵の追加は妨げない。 */
@@ -36,7 +41,8 @@ export class PrepareRecordRetirementStorageKeysAdapter {
         rows.map((row) => row.version),
       )
       if (fingerprints instanceof Error) return fingerprints
-      const guard = this.c.env.DB.prepare(`SELECT CASE WHEN NOT EXISTS (
+      const guard = new SystemTaskApprovalGuardAdapter(this.c).prepare(
+        `SELECT CASE WHEN NOT EXISTS (
         SELECT 1 FROM system_record_retirement_receipts receipt WHERE receipt.plan_id=?1
           AND (json_type(receipt.snapshot_json,'$.storageKeys') IS NOT 'array' OR EXISTS (
             SELECT 1 FROM json_each(receipt.snapshot_json,'$.storageKeys') expected WHERE NOT EXISTS (
@@ -45,9 +51,8 @@ export class PrepareRecordRetirementStorageKeysAdapter {
                 AND json_extract(current.value,'$.digest') IS json_extract(expected.value,'$.digest')
             )
           ))
-      ) THEN 1 ELSE json_extract('{}','retirement_storage_keys_changed') END`).bind(
-        coverage.planId,
-        JSON.stringify(fingerprints),
+      ) THEN 1 ELSE json_extract('{}','retirement_storage_keys_changed') END`,
+        [coverage.planId, JSON.stringify(fingerprints)],
       )
       const assertions = Object.freeze([...coverage.assertions, guard])
       const checked = await this.c.env.DB.batch([...assertions])

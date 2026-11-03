@@ -79,7 +79,10 @@ describe("System integration HTTP", () => {
       },
     })
 
-    const connector = await client.system.connectors.$post({ json: connectorInput() })
+    const connector = await client.system.connectors.$post({
+      header: { "x-system-step-up": stepUpToken },
+      json: connectorInput(),
+    })
     expect(connector.status).toBe(201)
     const createdAt = clock.value.toISOString()
     const connectorResponse: ReturnType<typeof systemConnectorResponse> = {
@@ -93,7 +96,10 @@ describe("System integration HTTP", () => {
     const createdConnectors = await client.system.connectors.$get()
     expect(await createdConnectors.json()).toEqual({ connectors: [connectorResponse] })
     clock.value = new Date(clock.value.getTime() + 1_000)
-    const connectorReplay = await client.system.connectors.$post({ json: connectorInput() })
+    const connectorReplay = await client.system.connectors.$post({
+      header: { "x-system-step-up": stepUpToken },
+      json: connectorInput(),
+    })
     expect(connectorReplay.status).toBe(200)
     expect(await connectorReplay.json()).toEqual({ connector: connectorResponse, replayed: true })
     const machineCredential = await seedConnectorMachine(fixture, clock.value)
@@ -302,6 +308,7 @@ describe("System integration HTTP", () => {
 
     clock.value = new Date(clock.value.getTime() + 1_000)
     const disabled = await client.system.connectors[":connectorId"].$patch({
+      header: { "x-system-step-up": stepUpToken },
       param: { connectorId: "6f1c2a0e-5b7d-4c3a-9e21-8a4d0b6c7e15" },
       json: {
         name: "Generic",

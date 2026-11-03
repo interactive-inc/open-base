@@ -1,3 +1,5 @@
+import { isSelfRoleBindingAssignment } from "@system/domain/policies/role-binding-assignment.policy"
+import { SystemActorRoleGuardAdapter } from "@system/infrastructure/adapters/iam/system-actor-role-guard.adapter"
 import { SystemLastRootGuardAdapter } from "@system/infrastructure/adapters/iam/system-last-root-guard.adapter"
 import type { AccountId } from "@system/domain/schemas/iam/account-id.schema"
 import type { IamRoleEntity } from "@system/domain/entities/iam-role.entity"
@@ -80,12 +82,16 @@ export class SystemRoleBindingRepository {
     binding: RoleBindingEntity,
     auditStatements: ReadonlyArray<D1PreparedStatement>,
   ): Promise<SystemRoleBindingMutation | Error> {
-    if (actorAccountId === binding.accountId) return "forbidden"
+    if (isSelfRoleBindingAssignment(actorAccountId, binding.accountId)) return "forbidden"
     if (!role.acceptsBindingResource(binding.resource?.type ?? null)) return "conflict"
 
     try {
       const statements = [
-        this.prepareActorRoleGuard(actorAccountId, role.id),
+        new SystemActorRoleGuardAdapter({
+          database: this.c.env.DB,
+          actorAccountId,
+          storedRoleId: role.id,
+        }).prepare(),
         this.c.env.DB.prepare(
           `INSERT INTO system_role_bindings
              (id, account_id, role_id, resource_type, resource_id, created_at, revoked_at)
@@ -149,7 +155,11 @@ export class SystemRoleBindingRepository {
 
     try {
       const statements = [
-        this.prepareActorRoleGuard(actorAccountId, role.id),
+        new SystemActorRoleGuardAdapter({
+          database: this.c.env.DB,
+          actorAccountId,
+          storedRoleId: role.id,
+        }).prepare(),
         this.c.env.DB.prepare(
           `UPDATE system_role_bindings
            SET revoked_at = ?2
@@ -194,39 +204,6 @@ export class SystemRoleBindingRepository {
 
       return caught instanceof Error ? caught : new Error("failed to revoke System role binding")
     }
-  }
-
-  /**
-   * 付与・失効するロールの権限は、事前に読んだRoleEntityではなく保存時点の行で照合する。
-   * 読取後にsystem:adminがロールへ権限を足しても、操作者が持たない権限は渡せない。
-   */
-  private prepareActorRoleGuard(actorAccountId: AccountId, roleId: string): D1PreparedStatement {
-    return this.c.env.DB.prepare(
-      `WITH actor_permissions AS (
-         SELECT DISTINCT permission.permission_key AS key
-         FROM system_accounts account
-         INNER JOIN system_role_bindings binding ON binding.account_id = account.id
-         INNER JOIN system_iam_role_permissions permission ON permission.role_id = binding.role_id
-         WHERE account.id = ?1
-           AND account.status = 'active'
-           AND binding.resource_type IS NULL
-           AND binding.revoked_at IS NULL
-       )
-       SELECT CASE WHEN
-         EXISTS (SELECT 1 FROM actor_permissions WHERE key = 'system:admin')
-         OR (
-           EXISTS (SELECT 1 FROM actor_permissions WHERE key = 'iam:write')
-           AND NOT EXISTS (
-             SELECT 1 FROM system_iam_role_permissions required_permission
-             WHERE required_permission.role_id = ?2
-               AND NOT EXISTS (
-                 SELECT 1 FROM actor_permissions actor
-                 WHERE actor.key = required_permission.permission_key
-               )
-           )
-         )
-       THEN 1 ELSE abs(-9223372036854775808) END AS ok`,
-    ).bind(actorAccountId, roleId)
   }
 
   private prepareLastRootGuard(): D1PreparedStatement {

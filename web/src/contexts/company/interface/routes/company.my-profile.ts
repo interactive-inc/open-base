@@ -1,3 +1,4 @@
+import { isCanonicalEmployeeText } from "@/contexts/company/domain/definitions/is-canonical-employee-text.definition"
 /** /company/my-profile */
 import { UpdateEmployeePhone } from "@/contexts/company/application/employees/update-employee-phone"
 import { CompanyOperationError } from "@/contexts/company/domain/errors"
@@ -72,7 +73,13 @@ export const PUT = factory.createHandlers(
     "json",
     z
       .object({
-        phone: z.string().trim().min(1).max(64).nullable(),
+        phone: z
+          .string()
+          .trim()
+          .min(1)
+          .max(64)
+          .refine((value) => isCanonicalEmployeeText(value, 64))
+          .nullable(),
         profile: z
           .object({
             employeeId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/),

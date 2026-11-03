@@ -24,6 +24,7 @@ import { passwordHashNeedsRehash } from "@system/lib/auth/password-hash-needs-re
 import { SystemPasswordLoginAuditAdapter } from "@system/infrastructure/adapters/audit/system-password-login-audit.adapter"
 import { SystemPasswordCredentialAdapter } from "@system/infrastructure/adapters/auth/system-password-credential.adapter"
 import { verifySystemPassword } from "@system/lib/auth/verify-system-password"
+import type { SystemPasswordSessionPolicy } from "@system/interface/ports/system-password-session-policy"
 import { systemCoreSchema } from "@system/infrastructure/schema/system-core"
 import { zValidator } from "@hono/zod-validator"
 import { drizzle } from "drizzle-orm/d1"
@@ -38,6 +39,9 @@ export type SystemSessionHttpEnvironment = {
     JWT_SECRET?: string
     SYSTEM_SESSION_TTL_SECONDS?: string
     SYSTEM_SESSION_MAX_LIFETIME_SECONDS?: string
+  }
+  Variables: {
+    systemPasswordSessionPolicy?: SystemPasswordSessionPolicy
   }
 }
 
@@ -109,7 +113,16 @@ export const POST = factory.createHandlers(
     if (authentication instanceof Error) {
       throw new SystemSessionUnavailableError()
     }
-    if (authentication.kind === "rejected") {
+    // 追加の認証制約は、共通の試行制限とパスワード照合を通った Account にだけ適用する。
+    const policy = context.var.systemPasswordSessionPolicy
+    const permitted =
+      authentication.kind === "authenticated" && policy !== undefined
+        ? await policy.allows({ accountId: authentication.accountId })
+        : true
+    if (permitted instanceof Error) {
+      throw new SystemSessionUnavailableError()
+    }
+    if (authentication.kind === "rejected" || !permitted) {
       // 未知subjectと誤passwordを同じreasonで監査し、監査不能ならfail closedにする。
       const audited = await new SystemPasswordLoginAuditAdapter({
         env: { DB: database },

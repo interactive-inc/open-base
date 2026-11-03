@@ -43,7 +43,7 @@ test("将来コード・遡及訂正・予約の訂正で人事状態の対象�
           employeeId: f.creator.employeeId,
           organizationIds: [COMPANY_DEFAULT_ORGANIZATION_ID],
           capabilities: [],
-          permissions: ["employee:read"],
+          permissions: ["employee:read", "employee:attributes:read"],
         }),
       )
       c.set("database", f.context.var.database)

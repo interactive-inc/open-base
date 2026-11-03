@@ -99,13 +99,15 @@ describe("System AccountEntity HTTP", () => {
         "x-system-step-up": rootStepUpToken,
       },
     })
-    const unsteppedClient = hc<typeof app>("http://system.test", {
-      fetch: request,
+    const unstepped = await request("/system/accounts", {
+      method: "POST",
       headers: { authorization: `Bearer ${issuance.accessToken}` },
     })
-    expect(Number((await unsteppedClient.system.accounts.$post()).status)).toBe(403)
+    expect(Number(unstepped.status)).toBe(403)
 
-    const created = await client.system.accounts.$post()
+    const created = await client.system.accounts.$post({
+      header: { "x-system-step-up": rootStepUpToken },
+    })
     expect(created.status).toBe(201)
     const createdBody = await created.json()
     expect("id" in createdBody).toBe(true)
@@ -127,6 +129,7 @@ describe("System AccountEntity HTTP", () => {
     expect(await detailed.json()).toMatchObject({ id: createdBody.id, token_version: 0 })
 
     const suspended = await client.system.accounts[":accountId"].$patch({
+      header: { "x-system-step-up": rootStepUpToken },
       param: { accountId: createdBody.id },
       json: { status: "suspended" },
     })
@@ -145,6 +148,7 @@ describe("System AccountEntity HTTP", () => {
     })
 
     const selfSuspension = await client.system.accounts[":accountId"].$patch({
+      header: { "x-system-step-up": rootStepUpToken },
       param: { accountId: rootAccountId },
       json: { status: "suspended" },
     })
@@ -157,7 +161,9 @@ describe("System AccountEntity HTTP", () => {
         .first<Record<string, unknown>>(),
     ).toEqual({ total: 2 })
 
-    const concurrent = await client.system.accounts.$post()
+    const concurrent = await client.system.accounts.$post({
+      header: { "x-system-step-up": rootStepUpToken },
+    })
     expect(concurrent.status).toBe(201)
     const concurrentBody = await concurrent.json()
     expect("id" in concurrentBody).toBe(true)
@@ -172,6 +178,7 @@ describe("System AccountEntity HTTP", () => {
       expect(snapshot).toMatchObject({ id: concurrentBody.id, status: "active", tokenVersion: 0 })
       clock.now = new Date(now.getTime() + 1000)
       const locked = await client.system.accounts[":accountId"].$patch({
+        header: { "x-system-step-up": rootStepUpToken },
         param: { accountId: concurrentBody.id },
         json: { status: "locked" },
       })
@@ -182,6 +189,7 @@ describe("System AccountEntity HTTP", () => {
     })
     try {
       const staleSuspension = await client.system.accounts[":accountId"].$patch({
+        header: { "x-system-step-up": rootStepUpToken },
         param: { accountId: concurrentBody.id },
         json: { status: "suspended" },
       })
@@ -221,6 +229,7 @@ describe("System AccountEntity HTTP", () => {
     ])
     try {
       const failedSuspension = await client.system.accounts[":accountId"].$patch({
+        header: { "x-system-step-up": rootStepUpToken },
         param: { accountId: concurrentBody.id },
         json: { status: "suspended" },
       })
@@ -236,6 +245,7 @@ describe("System AccountEntity HTTP", () => {
     ).toEqual({ status: "locked", token_version: 1 })
 
     const retriedSuspension = await client.system.accounts[":accountId"].$patch({
+      header: { "x-system-step-up": rootStepUpToken },
       param: { accountId: concurrentBody.id },
       json: { status: "suspended" },
     })
@@ -316,6 +326,7 @@ describe("System AccountEntity HTTP", () => {
     const scopedPrivilegeDenial = await delegatedAdministratorClient.system.accounts[
       ":accountId"
     ].$patch({
+      header: { "x-system-step-up": delegatedStepUpToken },
       param: { accountId: scopedPrivilegedAccountId },
       json: { status: "suspended" },
     })

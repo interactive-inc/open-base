@@ -1,3 +1,4 @@
+import { isSelfRoleBindingAssignment } from "@system/domain/policies/role-binding-assignment.policy"
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
 import {
   SystemAccountNotFoundError,
@@ -104,7 +105,7 @@ export const POST = systemFactory.createHandlers(
     if (!targetAccountId.success) {
       throw new SystemAccountNotFoundError()
     }
-    if (actorAccountId.data === targetAccountId.data) {
+    if (isSelfRoleBindingAssignment(actorAccountId.data, targetAccountId.data)) {
       throw new SystemSelfAssignmentForbiddenError()
     }
     const body = context.req.valid("json")

@@ -746,3 +746,66 @@ async function seedLegalEntity(database: D1Database): Promise<void> {
     ),
   ])
 }
+
+for (const character of ["\n", "\t", "\u007f"]) {
+  test(`人物の公開APIは制御文字を保存せず版を進めない（${JSON.stringify(character)}）`, async () => {
+    const database = await createLocalD1Database({ schema: companySql })
+    await seedOrganization(database)
+    const client = createClient(database)
+    for (const attributes of [
+      { officialName: `Example${character}Person` },
+      { officialName: "Example Person", phone: `010${character}12345678` },
+    ]) {
+      expect(
+        Number(
+          (
+            await client.company.people.$post({
+              header: writeHeaders(crypto.randomUUID(), 0),
+              json: { reason: "Confirmed profile", resources: [{ ...person, attributes }] },
+            })
+          ).status,
+        ),
+      ).toBe(400)
+    }
+    expect(
+      Number(
+        (
+          await client.company.employees.$post({
+            header: writeHeaders(crypto.randomUUID(), 0),
+            json: {
+              reason: "Confirmed employee code",
+              resources: [
+                {
+                  organizationId: COMPANY_DEFAULT_ORGANIZATION_ID,
+                  type: "employee",
+                  id: "employee:invalid",
+                  revision: 1,
+                  state: "active",
+                  effectiveFrom: "2026-01-01",
+                  effectiveTo: null,
+                  attributes: { personId: person.id, employeeCode: `EMP${character}001` },
+                },
+              ],
+            },
+          })
+        ).status,
+      ),
+    ).toBe(400)
+    expect(
+      await database
+        .prepare("SELECT revision FROM company_organizations WHERE id = ?1")
+        .bind(COMPANY_DEFAULT_ORGANIZATION_ID)
+        .first<number>("revision"),
+    ).toBe(0)
+    expect(
+      await database
+        .prepare("SELECT count(*) AS total FROM company_resource_revisions")
+        .first<number>("total"),
+    ).toBe(0)
+    expect(
+      await database
+        .prepare("SELECT count(*) AS total FROM company_command_receipts")
+        .first<number>("total"),
+    ).toBe(0)
+  })
+}

@@ -26,6 +26,8 @@ export type CompanyEmploymentDirectoryItem = Readonly<{
 export type CompanyEmploymentDirectory = Readonly<{
   organizationRevision: number
   items: ReadonlyArray<CompanyEmploymentDirectoryItem>
+  /** 有効な期間が無いため items から除いた雇用。呼び出し側が同じ雇用を別の経路で読み直さないために返す。 */
+  omittedEmployments?: ReadonlyArray<Readonly<{ employmentId: string }>>
 }>
 
 /** 雇用・Person氏名・Account対応を同一の会社版と有効日で取得する公開境界。 */
@@ -37,6 +39,8 @@ export async function readCompanyEmploymentDirectory(
     employmentIds?: ReadonlyArray<string>
     includeEndedEmployments?: boolean
     organizationRevision?: number
+    /** 一覧でのみ指定する。既定では有効な期間の無い雇用も読み取り失敗として返す。 */
+    omitEmptyEmployments?: boolean
   }>,
 ): Promise<CompanyEmploymentDirectory | Error> {
   if (!CompanyResourceEntity.isIdentifier(input.organizationId)) {
@@ -63,6 +67,7 @@ export async function readCompanyEmploymentDirectory(
   if (!employments.ok) return asError(employments.cause)
   const organizationRevision = employments.organizationRevision
   const items: CompanyEmploymentDirectoryItem[] = []
+  const omittedEmployments: Array<{ employmentId: string }> = []
 
   for (let index = 0; index < employments.resources.length; index += 100) {
     const group = employments.resources.slice(index, index + 100)
@@ -93,6 +98,7 @@ export async function readCompanyEmploymentDirectory(
         organizationId: input.organizationId,
         employmentIds: group.map((employment) => employment.id),
         organizationRevision,
+        omitEmptyEmployments: input.omitEmptyEmployments,
       }),
     ])
     if (names instanceof Error) return names
@@ -118,6 +124,10 @@ export async function readCompanyEmploymentDirectory(
       const status = employment.readText("status")
       const employmentType = employment.readText("employmentType")
       const startedOn = startsOnByEmployment.get(employment.id)
+      if (startedOn === undefined && input.omitEmptyEmployments === true && employeeId !== null) {
+        omittedEmployments.push({ employmentId: employment.id })
+        continue
+      }
       if (
         employeeId === null ||
         personName === undefined ||
@@ -149,7 +159,11 @@ export async function readCompanyEmploymentDirectory(
     }
     employeeByAccount.set(item.accountId, item.employeeId)
   }
-  return { organizationRevision, items }
+  return {
+    organizationRevision,
+    items,
+    ...(omittedEmployments.length === 0 ? {} : { omittedEmployments }),
+  }
 }
 
 function isEmploymentStatus(value: string | null): value is EmploymentStatus {

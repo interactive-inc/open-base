@@ -125,7 +125,11 @@ async function fixture(firstStartsLater = true, singleDelegation = false) {
     const prepared = await prepare(person)
     if (prepared instanceof CompanyOperationError) throw prepared
     const saved = await new ApproveSystemTask(
-      new SystemD1WorkflowAdapter({ ...c.context, decisionGuards: prepared.guards }),
+      new SystemD1WorkflowAdapter({
+        ...c.context,
+        decisionGuards: prepared.guards,
+        approvalGuards: prepared.approvalGuards,
+      }),
     ).execute({ ...prepared, comment: null, decidedAt: c.at })
     if (saved instanceof Error) throw saved
     return saved
@@ -185,7 +189,11 @@ test("代理人は未判断の委任元が残っていても同じ段階へ二�
   expect(prepared.representedAccountId).toBe(c.second.accountId)
   expect(
     await new ApproveSystemTask(
-      new SystemD1WorkflowAdapter({ ...c.context, decisionGuards: prepared.guards }),
+      new SystemD1WorkflowAdapter({
+        ...c.context,
+        decisionGuards: prepared.guards,
+        approvalGuards: prepared.approvalGuards,
+      }),
     ).execute({ ...prepared, comment: null, decidedAt: c.at }),
   ).toBeInstanceOf(Error)
   const votes = await c.query.listAttestations(c.started.workflowCase.id)

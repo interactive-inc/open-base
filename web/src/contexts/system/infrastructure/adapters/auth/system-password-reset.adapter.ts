@@ -10,6 +10,7 @@ type ResetProps = Readonly<{
   passwordHash: string
   now: Date
   auditStatements: ReadonlyArray<D1PreparedStatement>
+  additionalStatements?: ReadonlyArray<D1PreparedStatement>
 }>
 
 export type SystemPasswordResetMutation = "reset" | "not_found" | "forbidden"
@@ -84,6 +85,7 @@ export class SystemPasswordResetAdapter {
           "DELETE FROM system_totp_login_challenges WHERE account_id = ?1",
         ).bind(props.targetAccountId),
         this.c.env.DB.prepare(invalidation.sql).bind(...invalidation.params),
+        ...(props.additionalStatements ?? []),
         ...props.auditStatements,
       ]
       const executions = await this.c.env.DB.batch(statements)

@@ -1,3 +1,5 @@
+import { createSystemSessionApplications } from "@system/test/create-system-session-applications.test-support"
+import { requireIssuedSystemSession } from "@system/test/require-issued-system-session.test-support"
 import { systemCoreSchema } from "@system/infrastructure/schema/system-core"
 import { drizzle } from "drizzle-orm/d1"
 import { execSql } from "@system/test/local-d1/exec-sql.test-support"
@@ -359,3 +361,95 @@ describe("System Session HTTP の二段階認証", () => {
     expect(await issued.json()).toMatchObject({ account_id: totpAccountId })
   })
 })
+
+for (const mode of ["logout", "known-reuse"] as const) {
+  test(`時刻の古い要求でも新しい後継の失効を確定する（${mode}）`, async () => {
+    const fixture = await SystemSessionTestContext.create()
+    await fixture.database
+      .prepare(
+        "INSERT INTO system_accounts (id, status, token_version, created_at, updated_at) VALUES (?1, 'active', 0, ?2, ?2)",
+      )
+      .bind(accountId, issuedAt.getTime())
+      .run()
+    const applications = createSystemSessionApplications({
+      context: fixture.context,
+      jwtSecret,
+      sessionTtlMilliseconds: 604800000,
+    })
+    if (applications instanceof Error) throw applications
+    const issued = requireIssuedSystemSession(
+      await applications.issue.execute({
+        accountId: zAccountId.parse(accountId),
+        tokenVersion: 0,
+        now: issuedAt,
+        auditContext: { authorizationJson: null, metadataJson: null },
+      }),
+    )
+    const app = createApp()
+    const clientAt = (now: Date) => {
+      const request = (
+        input: Parameters<typeof app.request>[0],
+        init?: Parameters<typeof app.request>[1],
+      ) =>
+        app.request(input, init, {
+          DB: fixture.database,
+          JWT_SECRET: jwtSecret,
+          PEPPER_SECRET: pepper,
+          NOW: now.toISOString(),
+        })
+      return hc<typeof app>("http://system.test", { fetch: request })
+    }
+    const laterTime = new Date(rotatedAt.getTime() + 1000)
+    const rotated = await clientAt(laterTime).system.sessions.$patch({
+      json: { refresh_token: issued.rawToken },
+    })
+    expect(rotated.status).toBe(200)
+    const rotatedBody = await rotated.json()
+    if (!("refresh_token" in rotatedBody))
+      throw new Error("rotation did not return a refresh token")
+    if (mode === "logout") {
+      expect(
+        (
+          await clientAt(rotatedAt).system.sessions.$delete({
+            json: { refresh_token: issued.rawToken },
+          })
+        ).status,
+      ).toBe(204)
+    } else {
+      expect(
+        Number(
+          (
+            await clientAt(rotatedAt).system.sessions.$patch({
+              json: { refresh_token: issued.rawToken },
+            })
+          ).status,
+        ),
+      ).toBe(401)
+    }
+    expect(
+      await fixture.database
+        .prepare("SELECT count(*) AS active FROM system_sessions WHERE revoked_at IS NULL")
+        .first<number>("active"),
+    ).toBe(0)
+    expect(
+      await fixture.database
+        .prepare(
+          "SELECT occurred_at FROM system_audit_events WHERE action = ?1 AND occurred_at = ?2",
+        )
+        .bind(
+          mode === "logout" ? "auth.session.revoke" : "auth.session.rotate",
+          rotatedAt.getTime(),
+        )
+        .first<number>("occurred_at"),
+    ).toBe(rotatedAt.getTime())
+    expect(
+      Number(
+        (
+          await clientAt(new Date(laterTime.getTime() + 1000)).system.sessions.$patch({
+            json: { refresh_token: rotatedBody.refresh_token },
+          })
+        ).status,
+      ),
+    ).toBe(401)
+  })
+}

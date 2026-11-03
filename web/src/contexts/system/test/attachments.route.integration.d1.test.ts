@@ -1,7 +1,7 @@
 import { execSql } from "@system/test/local-d1/exec-sql.test-support"
 import { SignJWT } from "jose"
 import { createSystemIdentityTestKey } from "@system/test/create-system-identity-test-key.test-support"
-import { describe, expect, setDefaultTimeout, test } from "bun:test"
+import { describe, expect, setDefaultTimeout, spyOn, test } from "bun:test"
 import { drizzle } from "drizzle-orm/d1"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { createSystemSessionApplications } from "@system/test/create-system-session-applications.test-support"
@@ -14,6 +14,7 @@ import { createSystemAttachmentTestDatabase } from "@system/test/create-system-a
 import { createSystemAttachmentTestKekEnvironment } from "@system/test/create-system-attachment-test-kek-environment.test-support"
 import { SystemAttachmentTestBucket } from "@system/test/system-attachment-test-bucket.test-support"
 import { AccessTokenService } from "@system/lib/auth/access-token-service"
+import { SystemAuditEventRepository } from "@system/infrastructure/repositories/audit/system-audit-event.repository"
 import { SYSTEM_ACCESS_TOKEN_PROFILE } from "@system/lib/auth/system-access-token-profile"
 
 // ローカルD1のtemplate作成とDBごとの往復を含むため、既定の5秒を超えることがある。
@@ -347,6 +348,76 @@ describe("GET /attachments/:attachmentId", () => {
       byteSize: new TextEncoder().encode("%PDF-1.7 領収書").byteLength,
     })
   })
+
+  test("期限を持つ機械資格も期限前なら本人の添付を読める", async () => {
+    const fixture = await createFixture("agent")
+    const token = await fixture.tokenOf("4f810255-55d5-43c8-b43f-2df5e7bf5a3c")
+    const created = await fixture.request("/attachments", {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+      body: receiptForm(),
+    })
+    const body = await createdBody(created)
+    await fixture.db
+      .prepare("UPDATE system_machine_credentials SET expires_at = ?1")
+      .bind(Date.now() + 60_000)
+      .run()
+    const response = await fixture.request(`/attachments/${body.id}`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(response.status).toBe(200)
+    expect(await response.text()).toContain("領収書")
+    expect(await fixture.auditActions(body.id)).toContain("attachment.read")
+  })
+
+  test.each([...machineKinds])(
+    "最終検査の準備後に%sの資格が期限切れなら平文と監査を残さない",
+    async (kind) => {
+      const fixture = await createFixture(kind)
+      const token = await fixture.tokenOf("4f810255-55d5-43c8-b43f-2df5e7bf5a3c")
+      const created = await fixture.request("/attachments", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` },
+        body: receiptForm(),
+      })
+      expect(created.status).toBe(201)
+      const body = await createdBody(created)
+      const expiresAt = Date.now() + 1000
+      await fixture.db
+        .prepare("UPDATE system_machine_credentials SET expires_at = ?1")
+        .bind(expiresAt)
+        .run()
+      const append = SystemAuditEventRepository.prototype.append
+      let delayed = false
+      const pending = spyOn(SystemAuditEventRepository.prototype, "append").mockImplementation(
+        async function (
+          this: SystemAuditEventRepository,
+          record,
+          assertions,
+          completionAssertions,
+        ) {
+          if (record.action === "attachment.read") {
+            // SQLを組み立てた後、実行する前に期限をまたぐ。DBの時計は実時計のまま使う。
+            expect(record.occurredAtEpochMilliseconds).toBeLessThan(expiresAt)
+            delayed = true
+            await Bun.sleep(Math.max(0, expiresAt - Date.now()) + 30)
+          }
+          return append.call(this, record, assertions, completionAssertions)
+        },
+      )
+      try {
+        const response = await fixture.request(`/attachments/${body.id}`, {
+          headers: { authorization: `Bearer ${token}` },
+        })
+        expect(delayed).toBe(true)
+        expect(response.status).toBe(401)
+        expect(await response.text()).not.toContain("領収書")
+        expect(await fixture.auditActions(body.id)).toEqual([])
+      } finally {
+        pending.mockRestore()
+      }
+    },
+  )
 
   test.each(["revoked", "expired", "connector-disabled"])(
     "本体取得中の機械認証変更%sで開示を拒否する",

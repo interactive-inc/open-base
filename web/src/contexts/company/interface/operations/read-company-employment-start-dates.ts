@@ -2,6 +2,7 @@ import type { CalendarDate } from "@/contexts/company/domain/definitions/calenda
 import { CompanyResourceEntity } from "@/contexts/company/domain/entities/company-resource.entity"
 import { CompanyEmploymentResourceTimelineValue } from "@/contexts/company/domain/values/company-employment-resource-timeline.value"
 import { CompanyEmploymentResourceHistoryAdapter } from "@/contexts/company/infrastructure/adapters/employee/company-employment-resource-history.adapter"
+import { CompanyResourceValidationError } from "@/contexts/company/domain/errors"
 
 /** 訂正後の雇用履歴から、指定した会社版における各雇用の開始日を一括取得する。 */
 export async function readCompanyEmploymentStartDates(
@@ -10,6 +11,8 @@ export async function readCompanyEmploymentStartDates(
     organizationId: string
     employmentIds: ReadonlyArray<string>
     organizationRevision: number
+    /** 一覧用。有効な期間の無い雇用だけを記録して除き、ほかの読み取り失敗は返す。 */
+    omitEmptyEmployments?: boolean
   }>,
 ): Promise<ReadonlyMap<string, CalendarDate> | Error> {
   const employmentIds = [...new Set(input.employmentIds)]
@@ -33,6 +36,19 @@ export async function readCompanyEmploymentStartDates(
     const history = histories.get(employmentId)
     if (history === undefined) return new Error("Company employment history is unavailable")
     const timeline = CompanyEmploymentResourceTimelineValue.create(history)
+    if (
+      input.omitEmptyEmployments === true &&
+      ((timeline instanceof CompanyResourceValidationError &&
+        timeline.code === "invalid_retirement_period") ||
+        (!(timeline instanceof Error) && timeline.startsOn === null))
+    ) {
+      console.warn("Company employment omitted because it has no valid period", {
+        organizationId: input.organizationId,
+        organizationRevision: input.organizationRevision,
+        employmentId,
+      })
+      continue
+    }
     if (timeline instanceof Error) return timeline
     if (timeline.startsOn === null) return new Error("Company employment start is unavailable")
     startsOnByEmployment.set(employmentId, timeline.startsOn)

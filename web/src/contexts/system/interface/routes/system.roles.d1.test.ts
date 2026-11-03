@@ -95,6 +95,7 @@ describe("System Role HTTP", () => {
     })
 
     const created = await client.system.roles.$post({
+      header: { "x-system-step-up": stepUpToken },
       json: {
         key: "example:reader",
         name: "Example reader",
@@ -122,6 +123,7 @@ describe("System Role HTTP", () => {
     expect(await detailed.json()).toMatchObject({ permission_keys: ["example:read"] })
 
     const updated = await client.system.roles[":roleId"].$patch({
+      header: { "x-system-step-up": stepUpToken },
       param: { roleId: createdBody.id },
       json: {
         name: "Company editor",
@@ -136,11 +138,13 @@ describe("System Role HTTP", () => {
     })
 
     const managedDeletion = await client.system.roles[":roleId"].$delete({
+      header: { "x-system-step-up": stepUpToken },
       param: { roleId: "af285551-000d-4320-8ea0-bbfbc6c96a81" },
     })
     expect(Number(managedDeletion.status)).toBe(409)
 
     const deleted = await client.system.roles[":roleId"].$delete({
+      header: { "x-system-step-up": stepUpToken },
       param: { roleId: createdBody.id },
     })
     expect(deleted.status).toBe(204)

@@ -70,14 +70,14 @@ export const POST = factory.createHandlers(
       if (!validation.success) throw new CompanyBodyInvalidError(validation.error)
     },
   ),
+  zValidator("header", z.object({ "idempotency-key": z.string() }), (validation) => {
+    if (!validation.success) throw new CompanyIdempotencyKeyRequiredError()
+  }),
   async (context) => {
     const actor = context.var.companyActor
     if (actor === undefined) throw new CompanyAuthenticationRequiredError()
     if (context.env.DB === undefined) throw new CompanyDatabaseUnavailableError()
-    const operationId = context.req.header("Idempotency-Key")
-    if (operationId === undefined) {
-      throw new CompanyIdempotencyKeyRequiredError()
-    }
+    const operationId = context.req.valid("header")["idempotency-key"]
     const company = {
       env: {
         DB: context.env.DB,

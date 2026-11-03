@@ -73,7 +73,7 @@ function createAudit(props: {
   return audit
 }
 
-function createRotation(): SessionRotationValue {
+function createRotation(rotationTime: Date = rotatedAt): SessionRotationValue {
   const previous = createSession({
     id: SESSION_ID_1,
     tokenHash,
@@ -83,10 +83,10 @@ function createRotation(): SessionRotationValue {
   const successor = createSession({
     id: SESSION_ID_2,
     tokenHash: successorTokenHash,
-    createdAt: rotatedAt,
+    createdAt: rotationTime,
     expiresAt: successorExpiresAt,
   })
-  const rotation = SessionRotationValue.create(previous, successor, rotatedAt)
+  const rotation = SessionRotationValue.create(previous, successor, rotationTime)
 
   if (rotation instanceof Error) throw rotation
 
@@ -439,3 +439,70 @@ describe("SystemSessionRepository", () => {
     expect(await getCount(fixture, "system_audit_events")).toBe(1)
   })
 })
+
+for (const mode of ["logout", "reused"] as const) {
+  test(`後から開始した更新が先に確定してもfamilyを失効する（${mode}）`, async () => {
+    const fixture = await SystemSessionTestContext.create()
+    await insertAccount(fixture)
+    await insertSession(
+      fixture,
+      createSession({ id: SESSION_ID_1, tokenHash, createdAt, expiresAt }),
+    )
+    const repository = new SystemSessionRepository({ context: fixture.context })
+    const newerTime = new Date(rotatedAt.getTime() + 1000)
+    const newerRotation = createRotation(newerTime)
+    expect(
+      await repository.rotateWithAudit(newerRotation, createRotationAudits(newerRotation)),
+    ).toBe("rotated")
+    const newestTime = new Date(newerTime.getTime() + 1000)
+    const next = SessionRotationValue.create(
+      newerRotation.successor,
+      createSession({
+        id: testSerialId("01900062", 3),
+        tokenHash: "c".repeat(64),
+        createdAt: newestTime,
+        expiresAt: successorExpiresAt,
+      }),
+      newestTime,
+    )
+    if (next instanceof Error) throw next
+    expect(await repository.rotateWithAudit(next, createRotationAudits(next))).toBe("rotated")
+    const audits = createRotationAudits(createRotation())
+    const logoutAudit = createAudit({
+      action: "auth.session.revoke",
+      targetId: SESSION_ID_1,
+      outcome: "succeeded",
+      reasonCode: null,
+      occurredAt: rotatedAt,
+    })
+    if (mode === "logout") {
+      expect(
+        await repository.revokeFamilyWithAudit({
+          familyId: newerRotation.previous.familyId,
+          revokedAt: rotatedAt,
+          audit: logoutAudit,
+        }),
+      ).toBeUndefined()
+    } else {
+      expect(await repository.rotateWithAudit(createRotation(), audits)).toBe("reused")
+    }
+    expect(
+      (
+        await fixture.database
+          .prepare("SELECT revoked_at FROM system_sessions WHERE family_id = ?1 ORDER BY id")
+          .bind(familyId)
+          .all()
+      ).results,
+    ).toEqual([
+      { revoked_at: newerTime.getTime() },
+      { revoked_at: newestTime.getTime() },
+      { revoked_at: newestTime.getTime() },
+    ])
+    expect(
+      await fixture.database
+        .prepare("SELECT occurred_at FROM system_audit_events WHERE event_id = ?1")
+        .bind(mode === "logout" ? logoutAudit.eventId : audits.reused.eventId)
+        .first<number>("occurred_at"),
+    ).toBe(rotatedAt.getTime())
+  })
+}

@@ -1,6 +1,10 @@
+import {
+  SystemTaskApprovalGuardAdapter,
+  type SystemTaskApprovalTarget,
+} from "@system/infrastructure/adapters/workflow/system-task-approval-guard.adapter"
 import type { AccountId } from "@system/domain/schemas/iam/account-id.schema"
 
-type Context = Readonly<{ database: D1Database }>
+type Context = Readonly<{ database: D1Database; approvalTask?: SystemTaskApprovalTarget }>
 
 /** 従業員番号は可変。公開対応と移行中の旧対応が指す従業員を保存直前に再検査する。 */
 const snapshotSql = `SELECT json_array(
@@ -77,10 +81,13 @@ export class CompanyAuthoritySnapshotGuardAdapter {
 
       if (snapshot === null) return new Error("Company authority snapshot is unavailable")
 
-      return this.c.database
-        .prepare(`SELECT CASE WHEN snapshot = ?2 THEN 1 ELSE json_extract('', '$') END AS ok
-          FROM (${snapshotSql})`)
-        .bind(references, snapshot)
+      return new SystemTaskApprovalGuardAdapter({
+        env: { DB: this.c.database },
+        approvalTask: this.c.approvalTask,
+      }).prepare(
+        `SELECT CASE WHEN snapshot = ?2 THEN 1 ELSE json_extract('', '$') END AS ok FROM (${snapshotSql})`,
+        [references, snapshot],
+      )
     } catch (cause) {
       return cause instanceof Error
         ? cause

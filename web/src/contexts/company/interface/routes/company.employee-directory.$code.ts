@@ -1,3 +1,4 @@
+import { isCanonicalEmployeeText } from "@/contexts/company/domain/definitions/is-canonical-employee-text.definition"
 /** /company/employee-directory/:code */
 import { UpdateEmployeeName } from "@/contexts/company/application/employees/update-employee-name"
 import { CompanyOperationError } from "@/contexts/company/domain/errors"
@@ -99,7 +100,12 @@ export const PUT = factory.createHandlers(
     "json",
     z
       .object({
-        name: z.string().trim().min(1).max(200),
+        name: z
+          .string()
+          .trim()
+          .min(1)
+          .max(200)
+          .refine((value) => isCanonicalEmployeeText(value, 200)),
         profile: z
           .object({
             employeeId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/),

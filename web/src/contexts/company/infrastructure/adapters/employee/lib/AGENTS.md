@@ -8,6 +8,8 @@
 
 検証は親ディレクトリの `resolve-live-employee-access.adapter.d1.test.ts` と `employee-directory-read.adapter.d1.test.ts` でローカルD1に対して行う。`create-employee-employment-test-database.test-support.ts` は期間境界と不整合の反例を作るテスト専用入口。
 
-`companyEmployeeProfileSql` は、従業員ごとの正本から氏名、従業員 code、連絡先を読む CTE `employee_profiles` を返す。公開履歴へ接続済みの従業員は公開 Person と従業員の resource を読み、会社営業日に有効な版を優先して、無ければ最も新しい版を使う。未接続の従業員は、接続されるまでの原記録である従業員の表を読む。接続済みで有効な resource が無い場合は NULL を返し、表で補わない。検証は同じディレクトリの `company-employee-profile-sql.d1.test.ts` でローカルD1に対して行う。
+`companyEmployeeProfileSql` は、従業員ごとの正本から氏名、従業員 code、連絡先を読む CTE `employee_profiles` を返す。公開履歴へ接続済みの従業員は公開 Person と従業員の resource を読み、会社営業日に有効な版を優先して、無ければ最も新しい版を使う。選んだ従業員の版が取消なら行を返さない。参照先の欠落は NULL を返して不整合の検出に渡し、表で補わない。未接続の従業員は、接続されるまでの原記録である従業員の表を読む。検証は同じディレクトリの `company-employee-profile-sql.d1.test.ts` でローカルD1に対して行う。
 
 `companyEffectiveResourceRevisionSql` は、人物と従業員の版を選ぶ読み取りが共有する条件を返す。正本の時点参照と同じく、同じ発効日では最も新しい版だけを代表にし、訂正のための取消版と、訂正された版を候補から外す。発効日を直した訂正は訂正元と別の発効日を持つので、この条件を通さずに発効日と版の番号だけで選ぶと訂正元が戻る。`companyEmploymentStateSql`、`companyEmployeeProfileSql`、プロフィールの snapshot、Account の表示名がこの条件を使う。検証は `test/employee-profile.integration.d1.test.ts` で、正本と各読み取りの結果を並べて行う。
+
+`toEmployeeSearchKey` は名簿の氏名検索で、比べる両側をそろえる純粋関数（NFKC、ひらがなをカタカナ、空白を除く、小文字）。SQLite は NFKC を持たないので、`CompanyEmployeeDirectoryReadAdapter` が検索語のある一覧だけ読み出した後にこの関数で照合する。検証は同じディレクトリの `to-employee-search-key.test.ts`。

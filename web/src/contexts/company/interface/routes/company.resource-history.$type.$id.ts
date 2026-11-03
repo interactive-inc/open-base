@@ -3,6 +3,7 @@ import { createFactory } from "hono/factory"
 import { z } from "zod"
 import { companyResourceTypes } from "@/contexts/company/domain/catalogs/company-resource-type.catalog"
 import { canReadCompanyResource } from "@/contexts/company/interface/operations/company-resource-read-permission"
+import { redactCompanyResourceReasons } from "@/contexts/company/interface/readers/redact-company-resource-reasons"
 import { CompanySnapshotRevisionError } from "@/contexts/company/domain/errors"
 import { CompanyResourceHistoryRepository } from "@/contexts/company/infrastructure/repositories/core/company-resource-history.repository"
 import type { CompanyHttpEnvironment } from "@/contexts/company/interface/request-environment/company-request-environment"
@@ -71,13 +72,19 @@ export const GET = factory.createHandlers(
     })
     if (page instanceof CompanySnapshotRevisionError) throw new CompanyQueryInvalidError(page)
     if (page instanceof Error) throw new CompanyReadUnavailableError(page)
+    const changes = await redactCompanyResourceReasons({
+      database: context.env.DB,
+      organizationId,
+      actor,
+      changes: page.data.map((row) => row.change),
+    })
     context.header("etag", `"${page.throughRevision}"`)
     return context.json({
       organizationId,
       resourceType: type,
       resourceId: id,
       throughRevision: page.throughRevision,
-      data: page.data,
+      data: page.data.map((row, index) => ({ ...row, change: changes[index]! })),
       hasMore: page.hasMore,
       nextAfterRevision: page.nextAfterRevision,
     })

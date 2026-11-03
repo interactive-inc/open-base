@@ -25,6 +25,7 @@ export type RecordProcedureDecisionContext = SystemD1Context &
           Readonly<{
             action: "approve" | "reject" | "return"
             guards: ReadonlyArray<D1PreparedStatement>
+            approvalGuards?: ReadonlyArray<D1PreparedStatement>
           }>)
       | Error
     >

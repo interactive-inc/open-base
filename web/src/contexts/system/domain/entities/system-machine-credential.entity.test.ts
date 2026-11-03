@@ -35,6 +35,22 @@ describe("SystemMachineCredentialEntity", () => {
     expect(revoked.isUsableAt(new Date("2026-08-31T00:03:00.000Z"))).toBeFalse()
   })
 
+  test("新しい利用時刻より古い失効要求でも時刻を戻さず失効する", () => {
+    const used = createCredential().recordUse(usedAt)
+    if (used instanceof Error) throw used
+    const revoked = used.revoke(new Date(usedAt.getTime() - 1000))
+    if (revoked instanceof Error) throw revoked
+    expect(revoked.status).toBe("revoked")
+    expect(revoked.updatedAt).toEqual(usedAt)
+    expect(revoked.revokedAt).toEqual(usedAt)
+    expect(revoked.lastUsedAt).toEqual(usedAt)
+    expect(revoked.revoke(createdAt)).toBe(revoked)
+  })
+
+  test("作成前の時刻で有効な資格を失効させない", () => {
+    expect(createCredential().revoke(new Date(createdAt.getTime() - 1))).toBeInstanceOf(Error)
+  })
+
   test("期限切れと時刻逆行を拒否する", () => {
     const credential = createCredential()
 

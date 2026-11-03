@@ -1,3 +1,4 @@
+import type { SystemTaskApprovalTarget } from "@system/infrastructure/adapters/workflow/system-task-approval-guard.adapter"
 import { CompanyDecisionParticipantsAdapter } from "@/contexts/company/infrastructure/adapters/organization/company-decision-participants.adapter"
 import { CompanyDecisionHumanAccountsAdapter } from "@/contexts/company/infrastructure/adapters/organization/company-decision-human-accounts.adapter"
 import type { CompanyContext } from "@/contexts/company/configuration/company-context"
@@ -16,6 +17,7 @@ import type { StartSystemProcedureTask } from "@system/domain/policies/decision-
 
 type Context = CompanyContext
 type Input = Readonly<{
+  approvalTask?: SystemTaskApprovalTarget
   step: ApplicationWorkflowStep
   payload: unknown
   subjectEmployeeId: EmployeeId | null
@@ -49,6 +51,7 @@ export class ResolveCompanyGovernanceTaskAdapter {
     if (asOf instanceof Error) return asOf
     const before = await new CompanyAuthoritySnapshotGuardAdapter({
       database: this.c.env.DB,
+      approvalTask: input.approvalTask,
     }).prepare({ employeeCodes: [], accountIds: [] })
     if (before instanceof Error) return before
     const resolved = await new CompanyGovernanceAuthorityResolutionAdapter({
@@ -73,6 +76,7 @@ export class ResolveCompanyGovernanceTaskAdapter {
     )
     const after = await new CompanyAuthoritySnapshotGuardAdapter({
       database: this.c.env.DB,
+      approvalTask: input.approvalTask,
     }).prepare({
       employeeCodes: [],
       accountIds: candidates.map((candidate) => zAccountId.parse(candidate.accountId)),

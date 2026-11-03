@@ -1,3 +1,4 @@
+import { isCanonicalEmployeeText } from "@/contexts/company/domain/definitions/is-canonical-employee-text.definition"
 import {
   employeeProfileVersionSchema,
   type EmployeeProfileVersion,
@@ -45,11 +46,8 @@ export class EmployeeProfileChangeEntity {
       props.reason.length > 1500 ||
       props.reason.trim() !== props.reason ||
       (props.field === "officialName" && props.value === null) ||
-      (props.value !== null &&
-        (props.value.length < 1 ||
-          props.value.length > maximumLength ||
-          props.value.trim() !== props.value ||
-          props.value.includes("\0")))
+      !isCanonicalEmployeeText(props.value, maximumLength) ||
+      !isCanonicalEmployeeText(props.employeeCode, 64)
     ) {
       return new CompanyValidationError("人物情報の変更内容が不正です", "invalid_employee_profile")
     }

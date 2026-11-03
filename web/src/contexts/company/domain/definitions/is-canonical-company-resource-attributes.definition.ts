@@ -1,3 +1,4 @@
+import { isCanonicalEmployeeText } from "@/contexts/company/domain/definitions/is-canonical-employee-text.definition"
 import { isCompanyLocaleAndTimeZone } from "@/contexts/company/domain/definitions/is-company-locale-and-time-zone.definition"
 import type { CompanyResourceType } from "@/contexts/company/domain/catalogs/company-resource-type.catalog"
 import { z } from "zod"
@@ -47,20 +48,23 @@ const resourceAttributeSchemas = {
     .strict(),
   person: z
     .object({
-      officialName: z
-        .string()
-        .trim()
-        .min(1)
-        .max(200)
-        .refine((value) => !value.includes("\0")),
+      officialName: z.string().refine((value) => isCanonicalEmployeeText(value, 200)),
       email: z.email().max(320).nullable().optional(),
-      phone: z.string().trim().min(1).max(64).nullable().optional(),
+      phone: z
+        .string()
+        .refine((value) => isCanonicalEmployeeText(value, 64))
+        .nullable()
+        .optional(),
     })
     .strict(),
   employee: z
     .object({
       personId: identifier,
-      employeeCode: z.string().trim().min(1).max(64).nullable().optional(),
+      employeeCode: z
+        .string()
+        .refine((value) => isCanonicalEmployeeText(value, 64))
+        .nullable()
+        .optional(),
     })
     .strict(),
   employment: z

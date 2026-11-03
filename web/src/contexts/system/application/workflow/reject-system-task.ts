@@ -32,10 +32,6 @@ export class RejectSystemTask {
   async execute(
     command: RejectSystemTaskCommand,
   ): Promise<SystemWorkflowDecisionResult | InvalidSystemWorkflowError | Error> {
-    if (command.nextTask !== null) {
-      return new InvalidSystemWorkflowError("invalid_transition")
-    }
-
     const attestation = HumanAttestationEntity.create({
       id: crypto.randomUUID(),
       caseId: command.caseId,

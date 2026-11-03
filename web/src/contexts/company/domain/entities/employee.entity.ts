@@ -1,3 +1,4 @@
+import { isCanonicalEmployeeText } from "@/contexts/company/domain/definitions/is-canonical-employee-text.definition"
 import { InvalidEmployeeError } from "@/contexts/company/domain/errors"
 import type { EmployeeId } from "@/contexts/company/domain/definitions/workforce-id.definition"
 
@@ -8,17 +9,6 @@ export type EmployeeProps = Readonly<{
   email: string | null
   phone: string | null
 }>
-
-function isCanonicalText(value: string | null, maximumLength: number): boolean {
-  if (value === null) return true
-  if (value.length < 1 || value.length > maximumLength || value.trim() !== value) return false
-
-  for (const character of value) {
-    const codePoint = character.codePointAt(0)
-    if (codePoint !== undefined && (codePoint <= 0x1f || codePoint === 0x7f)) return false
-  }
-  return true
-}
 
 /** Companyで働く人の安定した識別子と正規プロフィールを所有するEntity。 */
 export class EmployeeEntity {
@@ -39,10 +29,10 @@ export class EmployeeEntity {
 
   static restore(props: EmployeeProps): EmployeeEntity | InvalidEmployeeError {
     if (
-      !isCanonicalText(props.officialName, 200) ||
-      !isCanonicalText(props.employeeCode, 64) ||
-      !isCanonicalText(props.email, 320) ||
-      !isCanonicalText(props.phone, 64)
+      !isCanonicalEmployeeText(props.officialName, 200) ||
+      !isCanonicalEmployeeText(props.employeeCode, 64) ||
+      !isCanonicalEmployeeText(props.email, 320) ||
+      !isCanonicalEmployeeText(props.phone, 64)
     ) {
       return new InvalidEmployeeError()
     }

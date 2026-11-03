@@ -18,7 +18,7 @@ import { z } from "zod"
 
 const factory = createFactory<CompanyHttpEnvironment>()
 
-// @authorization permission - 本人またはemployee:readで人事発令履歴を読む
+// @authorization permission - 本人またはemployee:attributes:read・employee:writeで人事発令履歴を読む
 export const GET = factory.createHandlers(
   zValidator("param", z.object({ code: z.string().trim().min(1).max(64) })),
   zValidator(
@@ -36,6 +36,8 @@ export const GET = factory.createHandlers(
   async (context) => {
     const actor = context.var.companyActor
     if (actor === undefined) throw new CompanyAuthenticationRequiredError()
+    const canReadOthers =
+      actor.hasPermission("employee:attributes:read") || actor.hasPermission("employee:write")
     if (context.env.DB === undefined) throw new CompanyDatabaseUnavailableError()
     const companyContext = {
       env: {
@@ -50,10 +52,10 @@ export const GET = factory.createHandlers(
     })
     if (employee instanceof Error) throw new CompanyReadUnavailableError(employee)
     if (employee === null) {
-      if (!actor.hasPermission("employee:read")) throw new CompanyReadForbiddenError()
+      if (!canReadOthers) throw new CompanyReadForbiddenError()
       throw new CompanyEmployeeNotFoundError()
     }
-    if (actor.employeeId !== employee.id && !actor.hasPermission("employee:read")) {
+    if (actor.employeeId !== employee.id && !canReadOthers) {
       throw new CompanyReadForbiddenError()
     }
     const query = context.req.valid("query")

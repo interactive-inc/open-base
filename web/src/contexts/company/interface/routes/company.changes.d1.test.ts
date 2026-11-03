@@ -47,6 +47,7 @@ async function fixture() {
       ('company:a', 3, 'grade', 'a', 2, 'command:three', 'void', '2040-01-01', NULL, 30),
       ('company:b', 1, 'person', 'private:person', 1, 'command:private', 'active', '2020-01-01', NULL, 10);
     ALTER TABLE company_resource_revisions ADD COLUMN actor_account_id TEXT NOT NULL DEFAULT '86adb280-2461-48cf-a05d-f13348222317';
+    ALTER TABLE company_resource_revisions ADD COLUMN attributes_json TEXT NOT NULL DEFAULT '{}';
     ALTER TABLE company_resource_revisions ADD COLUMN reason TEXT NOT NULL DEFAULT 'Confirmed company fact';
     ALTER TABLE company_resource_revisions ADD COLUMN evidence_references_json TEXT NOT NULL DEFAULT '[]';
     ALTER TABLE company_resource_revisions ADD COLUMN corrects_revision INTEGER;

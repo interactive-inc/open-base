@@ -2,6 +2,8 @@ type Context = Readonly<{
   database: D1Database
   /** Identityの失効では、対象がrootである場合だけ検査する。 */
   targetAccountId?: string
+  /** 割当の削除では、対象ロールが現在rootを付与する場合だけ検査する。 */
+  targetRoleId?: string
 }>
 
 /** ログイン可能な有効rootが残ることを、変更と同じbatchで検査する。 */
@@ -24,6 +26,11 @@ export class SystemLastRootGuardAdapter {
              AND binding.revoked_at IS NULL
              AND permission.permission_key = 'system:admin'
          )
+       ) OR (
+         ?2 IS NOT NULL AND NOT EXISTS (
+           SELECT 1 FROM system_iam_role_permissions
+           WHERE role_id = ?2 AND permission_key = 'system:admin'
+         )
        ) OR EXISTS (
          SELECT 1
          FROM system_accounts account
@@ -40,6 +47,6 @@ export class SystemLastRootGuardAdapter {
            AND permission.permission_key = 'system:admin'
        ) THEN 1 ELSE json_extract('', '$') END AS ok`,
       )
-      .bind(this.c.targetAccountId ?? null)
+      .bind(this.c.targetAccountId ?? null, this.c.targetRoleId ?? null)
   }
 }

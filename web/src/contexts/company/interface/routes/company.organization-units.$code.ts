@@ -73,6 +73,9 @@ export const GET = factory.createHandlers(
 
 // @authorization permission - org:writeで組織単位の訂正revisionを追記する
 export const PUT = factory.createHandlers(
+  zValidator("header", z.object({ "idempotency-key": z.string() }), (validation) => {
+    if (!validation.success) throw new CompanyIdempotencyKeyRequiredError()
+  }),
   zValidator("param", z.object({ code: z.string().trim().min(1).max(64) }), (validation) => {
     if (!validation.success) throw new CompanyQueryInvalidError(validation.error)
   }),
@@ -92,10 +95,7 @@ export const PUT = factory.createHandlers(
     const actor = context.var.companyActor
     if (actor === undefined) throw new CompanyAuthenticationRequiredError()
     if (context.env.DB === undefined) throw new CompanyDatabaseUnavailableError()
-    const operationId = context.req.header("Idempotency-Key")
-    if (operationId === undefined) {
-      throw new CompanyIdempotencyKeyRequiredError()
-    }
+    const operationId = context.req.valid("header")["idempotency-key"]
     const company = {
       env: {
         DB: context.env.DB,
@@ -134,6 +134,9 @@ export const PUT = factory.createHandlers(
 
 // @authorization permission - org:writeで組織単位の無効化revisionを追記する
 export const DELETE = factory.createHandlers(
+  zValidator("header", z.object({ "idempotency-key": z.string() }), (validation) => {
+    if (!validation.success) throw new CompanyIdempotencyKeyRequiredError()
+  }),
   zValidator("param", z.object({ code: z.string().trim().min(1).max(64) }), (validation) => {
     if (!validation.success) throw new CompanyQueryInvalidError(validation.error)
   }),
@@ -151,10 +154,7 @@ export const DELETE = factory.createHandlers(
     const actor = context.var.companyActor
     if (actor === undefined) throw new CompanyAuthenticationRequiredError()
     if (context.env.DB === undefined) throw new CompanyDatabaseUnavailableError()
-    const operationId = context.req.header("Idempotency-Key")
-    if (operationId === undefined) {
-      throw new CompanyIdempotencyKeyRequiredError()
-    }
+    const operationId = context.req.valid("header")["idempotency-key"]
     const company = {
       env: {
         DB: context.env.DB,

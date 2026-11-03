@@ -104,17 +104,18 @@ export class SystemMachineCredentialEntity {
     })
   }
 
+  /** 通常利用の時刻更新に負けず、保存済みの時刻を保ったまま資格を失効する。 */
   revoke(at: Date): SystemMachineCredentialEntity | InvalidSystemPrincipalError {
     if (this.status === "revoked") return this
-    if (at.getTime() < this.#updatedAtEpochMilliseconds) {
+    if (at.getTime() < this.#createdAtEpochMilliseconds) {
       return new InvalidSystemPrincipalError("update_before_last_update")
     }
 
     return SystemMachineCredentialEntity.create({
       ...this.toProps(),
       status: "revoked",
-      updatedAt: at,
-      revokedAt: at,
+      updatedAt: new Date(Math.max(at.getTime(), this.#updatedAtEpochMilliseconds)),
+      revokedAt: new Date(Math.max(at.getTime(), this.#updatedAtEpochMilliseconds)),
     })
   }
 

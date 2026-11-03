@@ -32,6 +32,16 @@ function resource(
 }
 
 describe("版付き雇用と業務の期間履歴", () => {
+  test.each(["2025-12-31", "2026-01-01"])("入社日以前の%sからの退職を拒否する", (date) => {
+    const initial = resource(1, "2026-01-01")
+    expect(
+      CompanyEmploymentResourceTimelineValue.create([
+        initial,
+        resource(2, date, { attributes: { ...initial.attributes, status: "TERMINATED" } }),
+      ]),
+    ).toMatchObject({ code: "invalid_retirement_period" })
+  })
+
   test("訂正された旧形式を履歴へ残し、同じ発効日の訂正版だけを現在の期間へ使う", () => {
     const old = {
       ...resource(1, "2026-01-01").toProps(),

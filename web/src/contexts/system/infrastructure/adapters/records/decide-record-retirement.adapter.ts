@@ -1,3 +1,4 @@
+import { SystemTaskApprovalGuardAdapter } from "@system/infrastructure/adapters/workflow/system-task-approval-guard.adapter"
 import type { RecordRetirementDecisionContext } from "@system/configuration/record-retirement-decision-context"
 import type { SystemReadAuthentication } from "@system/domain/definitions/system-read-authentication.definition"
 import { RecordRetirementDecisionError } from "@system/application/records/errors"
@@ -78,8 +79,15 @@ export class DecideRecordRetirementAdapter {
     )
       return new RecordRetirementDecisionError("not_found")
     const prepareApproval = async (assertions: ReadonlyArray<D1PreparedStatement>) => {
-      if (action !== "approve") return assertions
-      const context = { env: this.c.env, assertions }
+      const context = {
+        env: this.c.env,
+        assertions,
+        approvalTask: {
+          caseId: proposal.caseId,
+          taskKey: input.body.decision_target.task_key,
+          round: input.body.decision_target.task_round,
+        },
+      }
       const target = { planId: source.id, planDigest: value.props.plan.digest }
       const retained = await new PrepareRecordRetirementRetentionAdapter(context).prepare(
         target,
@@ -97,18 +105,30 @@ export class DecideRecordRetirementAdapter {
       if (originals instanceof Error) return originals
       const keys = await new PrepareRecordRetirementStorageKeysAdapter(context).prepare(target)
       if (keys instanceof Error) return keys
-      return [...assertions, ...retained.assertions, ...originals.assertions, ...keys.assertions]
+      return [...retained.assertions, ...originals.assertions, ...keys.assertions].filter(
+        (statement) => !assertions.includes(statement),
+      )
+    }
+    const approvalAssertions = async (assertions: ReadonlyArray<D1PreparedStatement>) => {
+      const prepared = await prepareApproval(assertions)
+      return prepared instanceof Error
+        ? [
+            new SystemTaskApprovalGuardAdapter({
+              env: this.c.env,
+              approvalTask: {
+                caseId: proposal.caseId,
+                taskKey: input.body.decision_target.task_key,
+                round: input.body.decision_target.task_round,
+              },
+            }).prepare("SELECT json_extract('{}','record_retirement_approval_unavailable')"),
+          ]
+        : prepared
     }
     const body = input.body
     const target = body.decision_target
     if (proposal.version !== target.proposal_version || proposal.digest !== target.proposal_digest)
       return new RecordRetirementDecisionError("conflict")
-    if (
-      proposal.status === "pending" ||
-      (action === "approve" &&
-        (proposal.status === "approved" || proposal.status === "executed")) ||
-      (action === "reject" && (proposal.status === "rejected" || proposal.status === "returned"))
-    ) {
+    if (["pending", "approved", "executed", "rejected", "returned"].includes(proposal.status)) {
       const attestations = await query.listAttestations(proposal.caseId)
       if (attestations instanceof Error) return new RecordRetirementDecisionError("unavailable")
       const original = attestations.find(
@@ -147,15 +167,17 @@ export class DecideRecordRetirementAdapter {
         })
         if (qualification instanceof Error || qualification.guards.length === 0)
           return new RecordRetirementDecisionError("forbidden")
-        const approvalGuards = await prepareApproval([
+        const approvalGuards = await approvalAssertions([
           ...assertions,
           ...qualification.guards,
           guard(now),
         ])
-        if (approvalGuards instanceof Error) return new RecordRetirementDecisionError("conflict")
-        const verified = await new VerifyRecordProcedureReplayAdapter(this.c).execute(
-          approvalGuards,
-        )
+        const verified = await new VerifyRecordProcedureReplayAdapter(this.c).execute([
+          ...assertions,
+          ...qualification.guards,
+          guard(now),
+          ...approvalGuards,
+        ])
         if (verified instanceof Error) return new RecordRetirementDecisionError("conflict")
         return { status: proposal.status === "executed" ? "approved" : proposal.status }
       }
@@ -187,11 +209,11 @@ export class DecideRecordRetirementAdapter {
         : !["reject", "return"].includes(decision.action))
     )
       return new RecordRetirementDecisionError("conflict")
-    const approvalGuards = await prepareApproval([...technical, ...decision.guards])
-    if (approvalGuards instanceof Error) return new RecordRetirementDecisionError("conflict")
+    const approvalGuards = await approvalAssertions([...technical, ...decision.guards])
     const writer = new SystemD1WorkflowAdapter({
       env: this.c.env,
-      decisionGuards: approvalGuards,
+      decisionGuards: [...technical, ...decision.guards],
+      approvalGuards: [...(decision.approvalGuards ?? []), ...approvalGuards],
     })
     const command = { ...decision, comment: body.comment, decidedAt: at }
     const operation = {

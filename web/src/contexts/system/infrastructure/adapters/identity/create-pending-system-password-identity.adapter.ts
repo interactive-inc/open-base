@@ -139,9 +139,10 @@ export class CreatePendingSystemPasswordIdentityAdapter {
           .bind(challengeId, input.tokenHash, accountId.data, identityId.data, now, expiresAt),
         database
           .prepare(
+            // 設定待ちの追加は既存の認証情報に影響しないため、セッションの世代を進めない。
             `UPDATE system_accounts
-           SET token_version = token_version + 1, updated_at = max(updated_at, ?2)
-           WHERE id = ?1 AND status = 'active' AND token_version < 9007199254740991`,
+           SET updated_at = max(updated_at, ?2)
+           WHERE id = ?1 AND status = 'active'`,
           )
           .bind(accountId.data, now),
         database.prepare("SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('', '$') END"),

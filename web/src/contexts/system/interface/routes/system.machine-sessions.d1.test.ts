@@ -307,6 +307,92 @@ describe("System machine access token", () => {
     })
   }
 
+  test.each(["before-read", "before-batch", "other-revocation"])(
+    "失効要求より新しい%sが先に確定しても機械資格を止められる",
+    async (order) => {
+      const context = await createFixture()
+      const token = await issuedToken(await context.issue())
+      const requestedAt = context.clock.at
+      const laterAt = new Date(requestedAt.getTime() + 5000)
+      const repository = new SystemMachineCredentialRepository(context.fixture.context)
+      const interleave = async () => {
+        context.clock.at = laterAt
+        if (order === "other-revocation") {
+          expect(
+            await repository.revoke(
+              adminAccountId,
+              "9a98bc39-03b1-4115-9d64-7bd9817b3a8d",
+              "ad6a0f96-902f-4999-84f6-2b9eb703c2ed",
+              laterAt,
+              [],
+            ),
+          ).toBe("revoked")
+        } else {
+          await issuedToken(await context.issue())
+        }
+      }
+      if (order === "before-read") await interleave()
+      const database =
+        order === "before-read"
+          ? context.fixture.context.env.DB
+          : interleavedDatabase(context.fixture.context.env.DB, interleave)
+      const result = await new SystemMachineCredentialRepository({ env: { DB: database } }).revoke(
+        adminAccountId,
+        "9a98bc39-03b1-4115-9d64-7bd9817b3a8d",
+        "ad6a0f96-902f-4999-84f6-2b9eb703c2ed",
+        requestedAt,
+        [],
+      )
+      expect(result).toBe(order === "other-revocation" ? "unchanged" : "revoked")
+      const row = await context.fixture.database
+        .prepare(
+          "SELECT status, updated_at, revoked_at, last_used_at FROM system_machine_credentials WHERE id = ?1",
+        )
+        .bind("ad6a0f96-902f-4999-84f6-2b9eb703c2ed")
+        .first<{ status: string; updated_at: number; revoked_at: number; last_used_at: number }>()
+      expect(row).toMatchObject({
+        status: "revoked",
+        updated_at: laterAt.getTime(),
+        revoked_at: laterAt.getTime(),
+      })
+      expect(row?.last_used_at).toBeLessThanOrEqual(row?.updated_at ?? 0)
+      expect((await context.read(token)).status).toBe(401)
+      expect((await context.issue()).status).toBe(401)
+      expect(
+        await repository.revoke(
+          adminAccountId,
+          "9a98bc39-03b1-4115-9d64-7bd9817b3a8d",
+          "ad6a0f96-902f-4999-84f6-2b9eb703c2ed",
+          requestedAt,
+          [],
+        ),
+      ).toBe("unchanged")
+    },
+  )
+
+  test("失効の監査に失敗した場合は資格の状態と時刻を戻す", async () => {
+    const context = await createFixture()
+    const token = await issuedToken(await context.issue())
+    const select = () =>
+      context.fixture.database
+        .prepare(
+          "SELECT status, updated_at, revoked_at, last_used_at FROM system_machine_credentials WHERE id = ?1",
+        )
+        .bind("ad6a0f96-902f-4999-84f6-2b9eb703c2ed")
+        .first<Record<string, unknown>>()
+    const before = await select()
+    const result = await new SystemMachineCredentialRepository(context.fixture.context).revoke(
+      adminAccountId,
+      "9a98bc39-03b1-4115-9d64-7bd9817b3a8d",
+      "ad6a0f96-902f-4999-84f6-2b9eb703c2ed",
+      context.clock.at,
+      [context.fixture.database.prepare("SELECT json_extract('', '$')")],
+    )
+    expect(result).toBeInstanceOf(Error)
+    expect(await select()).toEqual(before)
+    expect((await context.read(token)).status).toBe(200)
+  })
+
   test("同じ利用時刻を読んだ2つの認証は、先に確定した認証があっても両方成功する", async () => {
     const { fixture, clock, hash } = await createFixture()
     const laterUse = clock.at.getTime() + 5_000

@@ -240,11 +240,11 @@ export class SystemMachineCredentialRepository {
         new SystemActorPrincipalGuardAdapter(this.c).prepare(actorAccountId, principalId),
         this.c.env.DB.prepare(
           `UPDATE system_machine_credentials
-           SET status = 'revoked', updated_at = ?2, revoked_at = ?2
-           WHERE id = ?1 AND status = 'active' AND updated_at = ?3`,
-        ).bind(credential.id, now.getTime(), credential.updatedAt.getTime()),
+           SET status = 'revoked', updated_at = max(updated_at, ?2), revoked_at = max(updated_at, ?2)
+           WHERE id = ?1 AND principal_id = ?3 AND status = 'active'`,
+        ).bind(credential.id, now.getTime(), principalId),
         this.c.env.DB.prepare(
-          "SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('', '$') END AS ok",
+          "SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('{}', 'machine_credential_revoke_changed') END AS ok",
         ),
         ...auditStatements,
       ]
@@ -257,10 +257,33 @@ export class SystemMachineCredentialRepository {
       if (caught instanceof Error && caught.message.includes("integer overflow")) {
         return "forbidden"
       }
+      if (this.isRevocationConflict(caught)) {
+        const concurrent = await this.c.env.DB.prepare(
+          "SELECT id FROM system_machine_credentials WHERE id = ?1 AND principal_id = ?2 AND status = 'revoked'",
+        )
+          .bind(credentialId, principalId)
+          .first<{ id: string }>()
+          .catch(() => null)
+        if (concurrent !== null) return "unchanged"
+      }
       return caught instanceof Error
         ? caught
         : new Error("failed to revoke System machine credential")
     }
+  }
+
+  private isRevocationConflict(cause: unknown): boolean {
+    const visited = new Set<Error>()
+    for (let error = cause; error instanceof Error && !visited.has(error); error = error.cause) {
+      if (
+        /(?:bad JSON path:|JSON path error near)\s*['"]machine_credential_revoke_changed['"]/i.test(
+          error.message,
+        )
+      )
+        return true
+      visited.add(error)
+    }
+    return false
   }
 
   private restore(row: CredentialRow): SystemMachineCredentialEntity | Error {

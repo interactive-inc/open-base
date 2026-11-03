@@ -96,6 +96,7 @@ describe("System Role Binding HTTP", () => {
     })
 
     const created = await client.system.accounts[":accountId"]["role-bindings"].$post({
+      header: { "x-system-step-up": stepUpToken },
       param: { accountId: targetAccountId },
       json: { role_id: "04635707-bd54-47ea-81d4-38426e3ce8a2", resource: null },
     })
@@ -124,6 +125,7 @@ describe("System Role Binding HTTP", () => {
     expect(listedBody.total).toBe(1)
 
     const selfAssignment = await client.system.accounts[":accountId"]["role-bindings"].$post({
+      header: { "x-system-step-up": stepUpToken },
       param: { accountId: rootAccountId },
       json: { role_id: "04635707-bd54-47ea-81d4-38426e3ce8a2", resource: null },
     })
@@ -132,6 +134,7 @@ describe("System Role Binding HTTP", () => {
     const selfRevocation = await client.system.accounts[":accountId"]["role-bindings"][
       ":bindingId"
     ].$delete({
+      header: { "x-system-step-up": stepUpToken },
       param: { accountId: rootAccountId, bindingId: "f16b950f-c6db-4760-8994-95cc8065169d" },
     })
     expect(Number(selfRevocation.status)).toBe(403)
@@ -139,6 +142,7 @@ describe("System Role Binding HTTP", () => {
     const revoked = await client.system.accounts[":accountId"]["role-bindings"][
       ":bindingId"
     ].$delete({
+      header: { "x-system-step-up": stepUpToken },
       param: { accountId: targetAccountId, bindingId: createdBody.id },
     })
     expect(revoked.status).toBe(204)

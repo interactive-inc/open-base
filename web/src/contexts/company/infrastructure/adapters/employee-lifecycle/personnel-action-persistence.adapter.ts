@@ -20,6 +20,7 @@ import { isAbortedByGuard } from "@/contexts/company/infrastructure/adapters/emp
 import {
   CompanyValidationError,
   CompanyConflictError,
+  CompanyForbiddenError,
   CompanyOperationError,
   CompanyUnexpectedError,
 } from "@/contexts/company/domain/errors"
@@ -29,6 +30,8 @@ import type { ProposalDigest } from "@system/domain/schemas/workflow/system-case
 import { SystemD1AuthorizedExecutionAdapter } from "@system/infrastructure/adapters/workflow/system-d1-authorized-execution.adapter"
 import { CompanyPersonnelResourceJournalAdapter } from "@/contexts/company/infrastructure/adapters/employee-lifecycle/company-personnel-resource-journal.adapter"
 import { COMPANY_DEFAULT_ORGANIZATION_ID } from "@/contexts/company/domain/definitions/company-organization-identity.definition"
+import { isSystemHumanOperationAuthorizationRejected } from "@system/interface/operations/is-system-human-operation-authorization-rejected"
+import { SystemMachineOperationAuthorizationAdapter } from "@system/infrastructure/adapters/iam/system-machine-operation-authorization.adapter"
 
 type CurrentLifecycleProjection = {
   status: "active" | "leave" | "retired"
@@ -669,6 +672,7 @@ export class PersonnelActionPersistenceAdapter {
     const prepared = await this.prepareResult(props)
     if (prepared instanceof CompanyOperationError) return prepared
     const { statements, action } = prepared
+    statements.unshift(...(this.c.var.directPersonnelActionAssertions ?? []))
 
     try {
       const results = await this.c.env.DB.batch(statements)
@@ -679,6 +683,11 @@ export class PersonnelActionPersistenceAdapter {
 
       return action
     } catch (cause) {
+      if (
+        isSystemHumanOperationAuthorizationRejected(cause) ||
+        SystemMachineOperationAuthorizationAdapter.rejected(cause)
+      )
+        return new CompanyForbiddenError("人事発令の権限を確認してください。", "forbidden")
       if (isEmploymentEmployerReferenceInvalid(cause))
         return new CompanyValidationError(
           "雇用期間を覆う雇用主法人を確認できません",

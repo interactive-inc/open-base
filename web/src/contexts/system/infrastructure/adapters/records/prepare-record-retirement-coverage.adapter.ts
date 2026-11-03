@@ -1,10 +1,18 @@
+import {
+  SystemTaskApprovalGuardAdapter,
+  type SystemTaskApprovalTarget,
+} from "@system/infrastructure/adapters/workflow/system-task-approval-guard.adapter"
 import { z } from "zod"
 import type { SystemD1Context } from "@system/configuration/system-context"
 import { RecordRetirementVerificationPlanRepository } from "@system/infrastructure/repositories/records/record-retirement-verification-plan.repository"
 import { RecordRetirementVerificationReceiptRepository } from "@system/infrastructure/repositories/records/record-retirement-verification-receipt.repository"
 import { RecordSourceFreezeRepository } from "@system/infrastructure/repositories/records/record-source-freeze.repository"
 
-type Context = SystemD1Context & Readonly<{ assertions: ReadonlyArray<D1PreparedStatement> }>
+type Context = SystemD1Context &
+  Readonly<{
+    assertions: ReadonlyArray<D1PreparedStatement>
+    approvalTask?: SystemTaskApprovalTarget
+  }>
 const completedSql = `SELECT 1 FROM system_record_retirement_plans plan
   JOIN system_record_source_freezes freeze ON freeze.id=plan.freeze_id AND freeze.revision=1
   JOIN system_record_retirement_receipts terminal ON terminal.plan_id=plan.id AND terminal.ordinal=?3
@@ -62,14 +70,17 @@ export class PrepareRecordRetirementCoverageAdapter {
       terminal.snapshot.planDigest !== plan.digest
     )
       return new Error("retirement verification is incomplete")
-    const guard = this.c.env.DB.prepare(`SELECT CASE WHEN EXISTS (${completedSql}) THEN 1
-      ELSE json_extract('{}','retirement_verification_changed') END`).bind(
-      plan.snapshot.id,
-      plan.digest,
-      plan.totalPages,
-      terminal.snapshot.id,
-      terminal.digest,
-      JSON.stringify(plan.snapshot),
+    const guard = new SystemTaskApprovalGuardAdapter(this.c).prepare(
+      `SELECT CASE WHEN EXISTS (${completedSql}) THEN 1
+      ELSE json_extract('{}','retirement_verification_changed') END`,
+      [
+        plan.snapshot.id,
+        plan.digest,
+        plan.totalPages,
+        terminal.snapshot.id,
+        terminal.digest,
+        JSON.stringify(plan.snapshot),
+      ],
     )
     const assertions = Object.freeze([...generation.assertions, guard])
     try {

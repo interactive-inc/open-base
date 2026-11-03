@@ -8,7 +8,10 @@ import {
 import { systemFactory } from "@system/interface/request-environment/system-factory"
 
 /** 高リスク操作の直前に、現在のAccountへ束縛した短命な再認証grantを検証する。 */
-export const requireSystemStepUp = systemFactory.createMiddleware(async (context, next) => {
+export const requireSystemStepUp = systemFactory.createMiddleware<{
+  // 生のヘッダーを下で検証するため、契約には必須入力だけを宣言する。
+  in: { header: { "x-system-step-up": string } }
+}>(async (context, next) => {
   const rawToken = context.req.header("x-system-step-up")
   if (rawToken === undefined || !/^[0-9a-f]{64}$/.test(rawToken)) {
     throw new SystemStepUpRequiredError()
