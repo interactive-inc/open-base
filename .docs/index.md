@@ -11,3 +11,7 @@
 
 - [目標管理と評価](features/performance-review.md)
 - 起動と検証、配備は[README](../README.md)を参照する。
+
+## 設計案
+
+- [AI業務実行台帳](features/work-execution-design.md)
