@@ -74,6 +74,7 @@ describe("System Principal HTTP", () => {
     })
 
     const createdPrincipal = await client.system.principals.$post({
+      header: { "x-system-step-up": rawStepUp },
       json: { kind: "agent", name: "Automation agent" },
     })
     expect(createdPrincipal.status).toBe(201)
@@ -84,6 +85,7 @@ describe("System Principal HTTP", () => {
     const createdCredential = await client.system.principals[":principalId"][
       "machine-credentials"
     ].$post({
+      header: { "x-system-step-up": rawStepUp },
       param: { principalId: principalBody.principal.id },
       json: { name: "Primary", expires_at: null, reason: "initial provisioning" },
     })
@@ -125,6 +127,7 @@ describe("System Principal HTTP", () => {
     const revoked = await client.system.principals[":principalId"]["machine-credentials"][
       ":credentialId"
     ].$delete({
+      header: { "x-system-step-up": rawStepUp },
       param: {
         principalId: principalBody.principal.id,
         credentialId: credentialBody.credential.id,
@@ -176,8 +179,12 @@ describe("System Principal HTTP", () => {
     if (operator instanceof Error) throw operator
     if (root instanceof Error) throw root
     // 403はhandlerが例外で返すためclientの型に現れない。状態コードは数値で比べる。
-    const issue = async (client: CredentialClient, principalId: string): Promise<number> => {
+    const issue = async (
+      { client, rawStepUp }: CredentialClient,
+      principalId: string,
+    ): Promise<number> => {
       const response = await client.system.principals[":principalId"]["machine-credentials"].$post({
+        header: { "x-system-step-up": rawStepUp },
         param: { principalId },
         json: { name: "Primary", expires_at: null, reason: "provisioning" },
       })
@@ -229,7 +236,10 @@ function createCredentialApp() {
     .post("/system/principals/:principalId/machine-credentials", ...credentialsPOST)
 }
 
-type CredentialClient = ReturnType<typeof hc<ReturnType<typeof createCredentialApp>>>
+type CredentialClient = Readonly<{
+  client: ReturnType<typeof hc<ReturnType<typeof createCredentialApp>>>
+  rawStepUp: string
+}>
 
 async function createCredentialClient(
   fixture: SystemSessionTestContext,
@@ -248,7 +258,7 @@ async function createCredentialClient(
     .run()
   const app = createCredentialApp()
 
-  return hc<typeof app>("http://system.test", {
+  const client = hc<typeof app>("http://system.test", {
     fetch: (input: Parameters<typeof app.request>[0], init?: Parameters<typeof app.request>[1]) =>
       app.request(input, init, {
         DB: fixture.context.env.DB,
@@ -257,6 +267,7 @@ async function createCredentialClient(
       }),
     headers: { authorization: `Bearer ${accessToken}`, "x-system-step-up": rawStepUp },
   })
+  return { client, rawStepUp }
 }
 
 async function seedRoot(fixture: SystemSessionTestContext): Promise<void> {

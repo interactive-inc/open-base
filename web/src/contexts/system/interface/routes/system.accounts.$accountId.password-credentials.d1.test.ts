@@ -20,7 +20,12 @@ const oldPassword = "old correct horse battery staple"
 const newPassword = "new correct horse battery staple"
 const now = new Date("2026-01-01T00:00:00.000Z")
 
-async function createFixture() {
+async function createFixture(
+  prepareAdditional?: (
+    database: D1Database,
+    accountId: string,
+  ) => ReadonlyArray<D1PreparedStatement>,
+) {
   const fixture = await SystemSessionTestContext.create()
   await execSql(
     fixture.database,
@@ -54,6 +59,10 @@ async function createFixture() {
     .createApp()
     .use("*", async (context, next) => {
       context.set("now", () => now)
+      if (prepareAdditional !== undefined)
+        context.set("preparePasswordCredentialReset", (accountId) =>
+          prepareAdditional(fixture.database, accountId),
+        )
       await next()
     })
     .onError((error, context) =>
@@ -80,6 +89,54 @@ async function createFixture() {
         { DB: fixture.database, JWT_SECRET: jwtSecret, PEPPER_SECRET: pepper },
       ),
   }
+}
+
+for (const failsDeletion of [false, true]) {
+  test(`合成側の認証手段の削除も再設定と同時に保存し、途中失敗は全体を戻す（失敗 ${failsDeletion}）`, async () => {
+    const fixture = await createFixture((database, accountId) => [
+      database.prepare("DELETE FROM external_credentials WHERE account_id = ?1").bind(accountId),
+    ])
+    const oldHash = await seedIdentities(fixture.database)
+    await execSql(
+      fixture.database,
+      `CREATE TABLE external_credentials (account_id TEXT PRIMARY KEY); INSERT INTO external_credentials (account_id) VALUES ('${targetAccountId}');`,
+    )
+    if (failsDeletion)
+      await execSql(
+        fixture.database,
+        "CREATE TRIGGER reject_external_credential_delete BEFORE DELETE ON external_credentials BEGIN SELECT RAISE(ABORT, 'forced'); END;",
+      )
+
+    expect((await fixture.reset()).status).toBe(failsDeletion ? 503 : 204)
+    expect(
+      await fixture.database
+        .prepare("SELECT COUNT(*) AS count FROM external_credentials")
+        .first<{ count: number }>(),
+    ).toEqual({ count: failsDeletion ? 1 : 0 })
+    expect(
+      await fixture.database
+        .prepare("SELECT token_version FROM system_accounts WHERE id = ?1")
+        .bind(targetAccountId)
+        .first<{ token_version: number }>(),
+    ).toEqual({ token_version: failsDeletion ? 0 : 1 })
+    if (!failsDeletion) return
+
+    expect(
+      await fixture.database
+        .prepare(
+          "SELECT DISTINCT password_hash FROM system_password_credentials WHERE identity_id IN (SELECT id FROM system_identity_bindings WHERE account_id = ?1)",
+        )
+        .bind(targetAccountId)
+        .all(),
+    ).toMatchObject({ results: [{ password_hash: oldHash }] })
+    await execSql(fixture.database, "DROP TRIGGER reject_external_credential_delete;")
+    expect((await fixture.reset()).status).toBe(204)
+    expect(
+      await fixture.database
+        .prepare("SELECT COUNT(*) AS count FROM external_credentials")
+        .first<{ count: number }>(),
+    ).toEqual({ count: 0 })
+  })
 }
 
 async function seedIdentities(database: D1Database) {

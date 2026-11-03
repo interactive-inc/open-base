@@ -6,6 +6,8 @@ type LifecycleAssignment = Readonly<{
   assignmentType: "primary" | "concurrent"
   positionTitle: string | null
   managerEmployeeCode: string | null
+  managerEmployeeCodes: ReadonlyArray<string>
+  managerEmployeeIds: ReadonlyArray<string>
   startsOn: string
   endsOn: string | null
 }>
@@ -20,6 +22,8 @@ export function toLifecycleAssignmentResponse(assignment: LifecycleAssignment) {
     assignment_type: assignment.assignmentType,
     position_title: assignment.positionTitle,
     manager_employee_code: assignment.managerEmployeeCode,
+    manager_employee_codes: assignment.managerEmployeeCodes,
+    manager_employee_ids: assignment.managerEmployeeIds,
     starts_on: assignment.startsOn,
     ends_on: assignment.endsOn,
   }

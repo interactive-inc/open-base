@@ -14,7 +14,7 @@ import { COMPANY_DEFAULT_ORGANIZATION_ID } from "@/contexts/company/domain/defin
 
 const factory = createFactory<CompanyHttpEnvironment>()
 
-// @authorization permission - 既定organizationのemployee:readで追記順の人事発令を読む
+// @authorization permission - 既定organizationのemployee:attributes:readまたはemployee:writeで追記順の人事発令を読む
 export const GET = factory.createHandlers(
   zValidator(
     "query",
@@ -42,7 +42,7 @@ export const GET = factory.createHandlers(
     if (actor === undefined) throw new CompanyAuthenticationRequiredError()
     if (
       !actor.canAccessOrganization(COMPANY_DEFAULT_ORGANIZATION_ID) ||
-      !actor.hasPermission("employee:read")
+      !(actor.hasPermission("employee:attributes:read") || actor.hasPermission("employee:write"))
     )
       throw new CompanyReadForbiddenError()
     if (context.env.DB === undefined) throw new CompanyDatabaseUnavailableError()

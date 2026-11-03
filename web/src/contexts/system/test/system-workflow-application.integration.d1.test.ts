@@ -5,6 +5,7 @@ import { describe, expect, setDefaultTimeout, test } from "bun:test"
 import { CancelSystemProcedure } from "@system/application/workflow/cancel-system-procedure"
 import { ApproveSystemTask } from "@system/application/workflow/approve-system-task"
 import { RejectSystemTask } from "@system/application/workflow/reject-system-task"
+import { ReturnSystemTask } from "@system/application/workflow/return-system-task"
 import type { SystemDecisionTaskBundle } from "@system/domain/definitions/workflow/system-decision-task-bundle.definition"
 import { StartSystemProcedure } from "@system/application/workflow/start-system-procedure"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
@@ -741,6 +742,175 @@ describe("System workflow application", () => {
       await fixture.database.prepare("SELECT status FROM system_cases").first<string>("status"),
     ).toBe("approved")
   })
+
+  test.each(
+    [false, true].flatMap((hasNextTask) =>
+      [
+        [0, 1, 2],
+        [0, 2, 1],
+        [1, 0, 2],
+        [1, 2, 0],
+        [2, 0, 1],
+        [2, 1, 0],
+      ].map((order) => ({ hasNextTask, order })),
+    ),
+  )(
+    "合議は投票順によらず参加定足数で承認し、次段階を飛ばさない: %j",
+    async ({ hasNextTask, order }) => {
+      const fixture = await createFixture()
+      const at = new Date(200)
+      const accountIds = [
+        "e8bd8dd1-e8a4-4bea-8588-11cca10715ea",
+        "af28da7a-a120-4992-a8e2-992c936d18f1",
+        "97d4c99b-22e3-4895-a7c9-255873cd66da",
+      ].map((id) => zAccountId.parse(id))
+      const started = await new StartSystemProcedure({ writer: fixture.writer }).run({
+        seriesId: crypto.randomUUID(),
+        version: 1,
+        procedureKey: "change",
+        procedureRevision: 1,
+        body: { reason: "Council decision" },
+        createdByAccountId: zAccountId.parse("3d1063a4-6a8f-4d72-af2a-90c6e9594c0e"),
+        supersedesProposalId: null,
+        createdAt: at,
+        firstTask: {
+          key: "review",
+          requiredApprovals: 2,
+          requiredParticipants: 3,
+          negativeDecisionRule: "approval-impossible",
+          openedAt: at,
+          dueAt: null,
+          candidates: accountIds.map((id) => candidate(id, at)),
+          excludedAccountIds: [],
+        },
+      })
+      if (started instanceof Error) throw started
+      const next = hasNextTask
+        ? nextTask(started.workflowCase.id, started.proposal.digest, new Date(230))
+        : null
+      for (const [index, voter] of order.entries()) {
+        const accountId = accountIds[voter]
+        if (accountId === undefined) throw new Error("candidate missing")
+        const service =
+          voter === 2 ? new RejectSystemTask(fixture.writer) : new ApproveSystemTask(fixture.writer)
+        const result = await service.execute({
+          caseId: started.workflowCase.id,
+          taskKey: "review",
+          round: 1,
+          actorAccountId: accountId,
+          representedAccountId: accountId,
+          delegationId: null,
+          proposalDigest: started.proposal.digest,
+          comment: null,
+          decidedAt: new Date(210 + index * 10),
+          nextTask: next,
+        })
+        expect(result).toEqual({
+          caseStatus: index < 2 || hasNextTask ? "pending" : "approved",
+          taskOutcome: index < 2 ? "pending" : "approved",
+        })
+        const tasks = await new SystemD1ProposalAdapter({
+          env: { DB: fixture.database },
+        }).listTasks(started.workflowCase.id)
+        if (tasks instanceof Error) throw tasks
+        expect(tasks).toHaveLength(index === 2 && hasNextTask ? 2 : 1)
+      }
+      const attestations = await new SystemD1ProposalAdapter({
+        env: { DB: fixture.database },
+      }).listAttestations(started.workflowCase.id)
+      if (attestations instanceof Error) throw attestations
+      expect(attestations.filter((item) => item.action === "reject")).toHaveLength(1)
+      if (next !== null) {
+        const accountId = next.task.candidateAccountIds[0]
+        if (accountId === undefined) throw new Error("final candidate missing")
+        expect(
+          await new ApproveSystemTask(fixture.writer).execute({
+            caseId: started.workflowCase.id,
+            taskKey: next.task.key,
+            round: next.task.round,
+            actorAccountId: accountId,
+            representedAccountId: accountId,
+            delegationId: null,
+            proposalDigest: started.proposal.digest,
+            comment: null,
+            decidedAt: new Date(240),
+            nextTask: null,
+          }),
+        ).toEqual({ caseStatus: "approved", taskOutcome: "approved" })
+      }
+    },
+  )
+
+  test.each([
+    {
+      rule: "approval-impossible",
+      actions: ["reject", "reject"],
+      outcomes: ["pending", "rejected"],
+    },
+    { rule: "any-reject", actions: ["reject"], outcomes: ["rejected"] },
+    { rule: "approval-impossible", actions: ["return"], outcomes: ["returned"] },
+  ] as const)(
+    "承認不能と即時否決と差戻しの条件を維持する: %j",
+    async ({ rule, actions, outcomes }) => {
+      const fixture = await createFixture()
+      const at = new Date(200)
+      const accountIds = [
+        "e8bd8dd1-e8a4-4bea-8588-11cca10715ea",
+        "af28da7a-a120-4992-a8e2-992c936d18f1",
+        "97d4c99b-22e3-4895-a7c9-255873cd66da",
+      ].map((id) => zAccountId.parse(id))
+      const started = await new StartSystemProcedure({ writer: fixture.writer }).run({
+        seriesId: crypto.randomUUID(),
+        version: 1,
+        procedureKey: "change",
+        procedureRevision: 1,
+        body: { reason: "Council negative decision" },
+        createdByAccountId: zAccountId.parse("3d1063a4-6a8f-4d72-af2a-90c6e9594c0e"),
+        supersedesProposalId: null,
+        createdAt: at,
+        firstTask: {
+          key: "review",
+          requiredApprovals: 2,
+          requiredParticipants: 3,
+          negativeDecisionRule: rule,
+          openedAt: at,
+          dueAt: null,
+          candidates: accountIds.map((id) => candidate(id, at)),
+          excludedAccountIds: [],
+        },
+      })
+      if (started instanceof Error) throw started
+      for (const [index, action] of actions.entries()) {
+        const accountId = accountIds[index]
+        if (accountId === undefined) throw new Error("candidate missing")
+        const service =
+          action === "return"
+            ? new ReturnSystemTask(fixture.writer)
+            : new RejectSystemTask(fixture.writer)
+        const result = await service.execute({
+          caseId: started.workflowCase.id,
+          taskKey: "review",
+          round: 1,
+          actorAccountId: accountId,
+          representedAccountId: accountId,
+          delegationId: null,
+          proposalDigest: started.proposal.digest,
+          comment: null,
+          decidedAt: new Date(210 + index * 10),
+          nextTask:
+            action === "return"
+              ? null
+              : nextTask(started.workflowCase.id, started.proposal.digest, new Date(220)),
+        })
+        expect(result).toEqual({ caseStatus: outcomes[index], taskOutcome: outcomes[index] })
+        const tasks = await new SystemD1ProposalAdapter({
+          env: { DB: fixture.database },
+        }).listTasks(started.workflowCase.id)
+        if (tasks instanceof Error) throw tasks
+        expect(tasks).toHaveLength(1)
+      }
+    },
+  )
 
   test("停止Accountの候補と判断を原子的に拒否する", async () => {
     const fixture = await createFixture()

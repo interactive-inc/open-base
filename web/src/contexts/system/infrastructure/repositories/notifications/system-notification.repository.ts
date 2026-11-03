@@ -56,6 +56,7 @@ export type ListSystemNotificationsProps = Readonly<{
   read: boolean | null
   limit: number
   offset: number
+  visibleDeliveryIds?: ReadonlyArray<string> | null
 }>
 
 export type MarkNotificationDeliveryReadProps = Readonly<{
@@ -207,6 +208,7 @@ export class SystemNotificationRepository {
              WHERE delivery.recipient_account_id = ?1
                AND delivery.dismissed_at IS NULL
                AND (?2 IS NULL OR (delivery.read_at IS NOT NULL) = ?2)
+               AND (?5 IS NULL OR delivery.id IN (SELECT value FROM json_each(?5)))
              ORDER BY delivery.delivered_at DESC, delivery.id DESC
              LIMIT ?3 OFFSET ?4`,
           )
@@ -215,6 +217,7 @@ export class SystemNotificationRepository {
             props.read === null ? null : props.read ? 1 : 0,
             props.limit,
             props.offset,
+            props.visibleDeliveryIds == null ? null : JSON.stringify(props.visibleDeliveryIds),
           ),
         database
           .prepare(
@@ -222,9 +225,14 @@ export class SystemNotificationRepository {
              FROM system_notification_deliveries
              WHERE recipient_account_id = ?1
                AND dismissed_at IS NULL
-               AND (?2 IS NULL OR (read_at IS NOT NULL) = ?2)`,
+               AND (?2 IS NULL OR (read_at IS NOT NULL) = ?2)
+               AND (?3 IS NULL OR id IN (SELECT value FROM json_each(?3)))`,
           )
-          .bind(props.recipientAccountId, props.read === null ? null : props.read ? 1 : 0),
+          .bind(
+            props.recipientAccountId,
+            props.read === null ? null : props.read ? 1 : 0,
+            props.visibleDeliveryIds == null ? null : JSON.stringify(props.visibleDeliveryIds),
+          ),
       ])
 
       if (results.length !== 2 || results.some((result) => !result.success)) {
@@ -286,14 +294,21 @@ export class SystemNotificationRepository {
     }
   }
 
-  async countUnreadForAccount(recipientAccountId: AccountId): Promise<number | Error> {
+  async countUnreadForAccount(
+    recipientAccountId: AccountId,
+    visibleDeliveryIds: ReadonlyArray<string> | null = null,
+  ): Promise<number | Error> {
     try {
       const total = await this.c.context.env.DB.prepare(
         `SELECT count(*) AS total
            FROM system_notification_deliveries
-           WHERE recipient_account_id = ?1 AND read_at IS NULL AND dismissed_at IS NULL`,
+           WHERE recipient_account_id = ?1 AND read_at IS NULL AND dismissed_at IS NULL
+             AND (?2 IS NULL OR id IN (SELECT value FROM json_each(?2)))`,
       )
-        .bind(recipientAccountId)
+        .bind(
+          recipientAccountId,
+          visibleDeliveryIds === null ? null : JSON.stringify(visibleDeliveryIds),
+        )
         .first<number>("total")
 
       return typeof total === "number" && Number.isSafeInteger(total) && total >= 0

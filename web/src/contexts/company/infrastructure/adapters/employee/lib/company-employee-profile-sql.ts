@@ -4,8 +4,9 @@ import { companyEffectiveResourceRevisionSql } from "@/contexts/company/infrastr
  * ?1 の会社営業日に、従業員ごとの正本から氏名、従業員 code、連絡先を読む CTE を返す。
  *
  * 公開履歴へ接続済みの従業員は、公開した Person と従業員の resource から読む。退職者と入社前の従業員も
- * 対象にするので、会社営業日に有効な版を優先し、無ければ最も新しい版を使う。最も新しい版が取消なら
- * 値は NULL になる。訂正された版は、正本の時点参照と同じ規則で候補から外す。
+ * 対象にするので、会社営業日に有効な版を優先し、無ければ最も新しい版を使う。選んだ従業員の版が
+ * 取消なら行を返さない（取消の従業員は先に 1 度だけ集めて外し、従業員ごとに探さない）。参照先が欠けた場合は
+ * NULL を返す。訂正された版は正本と同じ規則で候補から外す。
  * 公開履歴へ未接続の従業員は、接続されるまで従業員の表が唯一の原記録なので表を読む。
  *
  * 利用側は最後の CTE `employee_profiles` に対して SELECT を続ける。
@@ -25,6 +26,13 @@ export function companyEmployeeProfileSql(): string {
   connected_employees AS (
     SELECT employee_id, organization_id, resource_id FROM company_workforce_resource_bindings
     WHERE resource_type = 'employee'
+  ),
+  voided_employees AS (
+    SELECT DISTINCT binding.employee_id
+    FROM connected_employees AS binding
+    JOIN ranked_profiles AS resource ON resource.organization_id = binding.organization_id
+      AND resource.resource_type = 'employee' AND resource.resource_id = binding.resource_id
+    WHERE resource.profile_rank = 1 AND resource.state = 'void'
   ),
   published_employees AS (
     SELECT connected.employee_id AS id,
@@ -51,5 +59,7 @@ export function companyEmployeeProfileSql(): string {
     LEFT JOIN (SELECT DISTINCT employee_id FROM connected_employees) AS connected
       ON connected.employee_id = employee.id
     LEFT JOIN published_employees AS published ON published.id = employee.id
+    LEFT JOIN voided_employees AS voided ON voided.employee_id = employee.id
+    WHERE voided.employee_id IS NULL
   )`
 }

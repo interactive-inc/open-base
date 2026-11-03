@@ -1,3 +1,4 @@
+import { isCanonicalEmployeeText } from "@/contexts/company/domain/definitions/is-canonical-employee-text.definition"
 import { canReadCompanyResource } from "@/contexts/company/interface/operations/company-resource-read-permission"
 import { resolveCompanyRecordedAt } from "@/contexts/company/interface/request-environment/resolve-company-recorded-at"
 /** /company/people */
@@ -183,9 +184,16 @@ export const POST = factory.createHandlers(
                   .trim()
                   .min(1)
                   .max(200)
-                  .refine((value) => !value.includes("\0")),
+                  .refine((value) => isCanonicalEmployeeText(value, 200)),
                 email: z.email().max(320).nullable().optional(),
-                phone: z.string().trim().min(1).max(64).nullable().optional(),
+                phone: z
+                  .string()
+                  .trim()
+                  .min(1)
+                  .max(64)
+                  .refine((value) => isCanonicalEmployeeText(value, 64))
+                  .nullable()
+                  .optional(),
               })
               .strict(),
           }),

@@ -15,6 +15,12 @@ import { restoreWorkforceId } from "@/contexts/company/domain/definitions/restor
 import { CompanyEmployeeDirectoryReadAdapter } from "@/contexts/company/infrastructure/adapters/employee/employee-directory-read.adapter"
 import { readCompanyEmploymentStartDates } from "@/contexts/company/interface/operations/read-company-employment-start-dates"
 import { ResolveLiveEmployeeAccessAdapter } from "@/contexts/company/infrastructure/adapters/employee/resolve-live-employee-access.adapter"
+import { OrganizationWorkforceSnapshotAdapter } from "@/contexts/company/infrastructure/adapters/workforce/organization-workforce-snapshot.adapter"
+import { ReadCanonicalOrganizationStateAdapter } from "@/contexts/company/infrastructure/adapters/organization/read-canonical-organization-state.adapter"
+import type { CompanyHttpEnvironment } from "@/contexts/company/interface/request-environment/company-request-environment"
+import { GET as GET_ORGANIZATION_TREE } from "@/contexts/company/interface/routes/company.organization-tree"
+import { GET as GET_DIRECT_REPORTS } from "@/contexts/company/interface/routes/company.my-direct-reports"
+import { GET as GET_REPORTING_LINES } from "@/contexts/company/interface/routes/company.reporting-lines.$employeeCode"
 import { POST as POST_PEOPLE } from "@/contexts/company/interface/routes/company.people"
 import { POST as POST_EMPLOYEES } from "@/contexts/company/interface/routes/company.employees"
 import { POST as POST_ORGANIZATION_CHANGES } from "@/contexts/company/interface/routes/company.organization-changes"
@@ -45,9 +51,10 @@ const employeeId = restoreWorkforceId(
   deterministicCompanyId("test-employee", "resource"),
 )
 const organizationId = COMPANY_DEFAULT_ORGANIZATION_ID
+const otherEmployeeId = restoreWorkforceId("employee", "956ba876-937f-459d-b143-0e2f29d25f74")
 const actor = CompanyActorValue.restore({
   accountId: "5b3d7ccc-33e7-4afb-935e-d89535c31674",
-  employeeId: "956ba876-937f-459d-b143-0e2f29d25f74",
+  employeeId: otherEmployeeId,
   organizationIds: [organizationId],
   capabilities: ["company:read", "company:write"],
   permissions: ["employee:read", "org:write", "employee:write"],
@@ -87,12 +94,17 @@ const employment: Resource = {
 
 async function fixture(companyActor = actor) {
   const database = await createLocalD1Database({ schema: schemaSql })
-  const app = new Hono<{
-    Bindings: { DB: D1Database }
-    Variables: { companyActor: CompanyActorValue }
-  }>()
+  const app = new Hono<CompanyHttpEnvironment>()
   app.use("*", async (c, next) => {
     c.set("companyActor", companyActor)
+    c.set("database", drizzle(database))
+    c.set("auditContext", {
+      requestId: "workforce-test",
+      clientName: "api",
+      clientIp: null,
+      externalRequestId: null,
+    })
+    c.set("companyClock", () => new Date(c.env.NOW ?? "2026-06-01T00:00:00Z"))
     await next()
   })
   app.onError((error, c) => {
@@ -107,6 +119,9 @@ async function fixture(companyActor = actor) {
     .post("/company/employment-start-corrections", ...POST_EMPLOYMENT_START_CORRECTIONS)
     .get("/company/employment-start-corrections", ...GET_EMPLOYMENT_START_CORRECTIONS)
     .get("/company/employments", ...GET_EMPLOYMENTS)
+    .get("/company/organization-tree", ...GET_ORGANIZATION_TREE)
+    .get("/company/my-direct-reports", ...GET_DIRECT_REPORTS)
+    .get("/company/reporting-lines/:employeeCode", ...GET_REPORTING_LINES)
   const write = (
     resource: Resource,
     expectedRevision: number,
@@ -181,6 +196,16 @@ async function fixture(companyActor = actor) {
     database,
     write,
     writeBatch,
+    readOrganization: (path: string, date = "2026-06-01") =>
+      app.request(path, {}, { ...context(`${date}T00:00:00Z`).env }),
+    workforce: (date = "2026-06-01") =>
+      new OrganizationWorkforceSnapshotAdapter(lifecycleContext).readAllSnapshot(
+        restoreCalendarDate(date),
+      ),
+    organization: (date = "2026-06-01") =>
+      new ReadCanonicalOrganizationStateAdapter(lifecycleContext).readCanonicalOrganizationState(
+        restoreCalendarDate(date),
+      ),
     correctStart: (
       startsOn: string,
       expectedRevision: number,
@@ -282,6 +307,51 @@ async function fixture(companyActor = actor) {
       expect((await write(employment, 2)).status).toBe(201)
     },
   }
+}
+
+async function registerOtherEmployee(f: Awaited<ReturnType<typeof fixture>>, revision: number) {
+  const otherPerson = {
+    ...person,
+    id: "person:other",
+    attributes: { officialName: "Other Person" },
+  }
+  const otherEmployee = {
+    ...employee,
+    id: otherEmployeeId,
+    attributes: { personId: otherPerson.id, employeeCode: "OTHER-001" },
+  }
+  const otherEmployment = {
+    ...employment,
+    id: deterministicCompanyId("test-employment", "other"),
+    attributes: { ...employment.attributes, employeeId: otherEmployee.id },
+  }
+  for (const resource of [otherPerson, otherEmployee, otherEmployment]) {
+    expect((await f.write(resource, revision)).status).toBe(201)
+    revision += 1
+  }
+  return revision
+}
+
+async function expectOtherEmployeeReadable(f: Awaited<ReturnType<typeof fixture>>) {
+  const tree = await f.readOrganization("/company/organization-tree")
+  const reports = await f.readOrganization("/company/my-direct-reports")
+  const lines = await f.readOrganization("/company/reporting-lines/OTHER-001")
+  expect([tree.status, reports.status, lines.status]).toEqual([200, 200, 200])
+  const snapshot = await f.workforce()
+  if (!snapshot.ok) throw snapshot.cause
+  expect(snapshot.schedules.map((schedule) => schedule.employee.id)).toEqual([otherEmployeeId])
+  expect(await f.organization()).toMatchObject({
+    kind: "found",
+    employees: [{ employeeId: actor.employeeId, status: "ACTIVE" }],
+  })
+  expect(await tree.json()).toMatchObject([])
+  expect(await reports.json()).toMatchObject({ data: [] })
+  expect(await lines.json()).toMatchObject([
+    { employee_id: actor.employeeId, employee_name: "Other Person", depth: 0 },
+  ])
+  expect((await f.readOrganization("/company/reporting-lines/RESOURCE-001")).status).toBe(404)
+  expect(await f.directory("2026-06-01T00:00:00Z")).toBeNull()
+  expect(await f.access("2026-06-01T00:00:00Z")).toBeNull()
 }
 
 describe("公開Company APIから実際の従業員台帳と在籍判定まで", () => {
@@ -1442,11 +1512,19 @@ describe("公開Company APIから実際の従業員台帳と在籍判定まで",
         employment: { status: scenario.status },
       })
       expect(await f.access(scenario.now)).toMatchObject({ status: scenario.status })
+      expect(await f.organization(scenario.now.slice(0, 10))).toMatchObject({ kind: "found" })
     }
     expect(await f.directory("2026-09-30T15:00:00Z")).toMatchObject({
       employment: { status: "TERMINATED" },
     })
     expect(await f.access("2026-09-30T15:00:00Z")).toBeNull()
+    expect(await f.organization("2026-10-01")).toMatchObject({
+      kind: "found",
+      employees: [{ employeeId, status: "TERMINATED" }],
+    })
+    expect(
+      (await f.readOrganization("/company/reporting-lines/RESOURCE-001", "2026-10-01")).status,
+    ).toBe(404)
   })
 
   test("同じ発効日の訂正と取消を読み、古い状態を復活させない", async () => {
@@ -1464,7 +1542,105 @@ describe("公開Company APIから実際の従業員台帳と在籍判定まで",
     expect(await f.directory("2026-06-01T00:00:00Z")).toMatchObject({ employment: null })
     expect((await f.write({ ...employee, revision: 2, state: "void" }, 6)).status).toBe(201)
     expect(await f.directory("2026-06-01T00:00:00Z")).toBeNull()
+    await registerOtherEmployee(f, 7)
+    await expectOtherEmployeeReadable(f)
   })
+
+  test("依存のない従業員を公開APIで取り消しても別の在籍者の全社参照を止めない", async () => {
+    const f = await fixture()
+    expect((await f.write(person, 0)).status).toBe(201)
+    expect((await f.write(employee, 1)).status).toBe(201)
+    const revision = await registerOtherEmployee(f, 2)
+    expect((await f.readOrganization("/company/reporting-lines/OTHER-001")).status).toBe(200)
+    expect((await f.write({ ...employee, revision: 2, state: "void" }, revision)).status).toBe(201)
+    await expectOtherEmployeeReadable(f)
+  })
+
+  test("将来の取消版は過去のプロフィールを消さず発効日から全社候補を外す", async () => {
+    const f = await fixture()
+    expect((await f.write(person, 0)).status).toBe(201)
+    expect((await f.write(employee, 1)).status).toBe(201)
+    expect(
+      (await f.write({ ...employee, revision: 2, state: "void", effectiveFrom: "2026-10-01" }, 2))
+        .status,
+    ).toBe(201)
+    const past = await f.workforce("2026-09-30")
+    expect(past).toMatchObject({
+      ok: true,
+      schedules: [{ employee: { id: employeeId, officialName: "Example Person" } }],
+    })
+    expect(await f.workforce("2026-10-01")).toEqual({ ok: true, schedules: [] })
+    expect(await f.organization("2026-10-01")).toMatchObject({ kind: "found", employees: [] })
+    expect(await f.directory("2026-09-30T00:00:00Z")).toMatchObject({
+      officialName: "Example Person",
+    })
+    expect(await f.directory("2026-10-01T00:00:00Z")).toBeNull()
+  })
+
+  test.each([
+    {
+      name: "期間終了",
+      effectiveFrom: "2026-01-01",
+      effectiveTo: "2026-04-01",
+      validOn: "2026-03-01",
+    },
+    { name: "将来予約", effectiveFrom: "2026-10-01", effectiveTo: null, validOn: "2026-10-01" },
+  ])("$name の従業員は履歴のプロフィールを保ち当日の資格を与えない", async (scenario) => {
+    const f = await fixture()
+    expect((await f.write(person, 0)).status).toBe(201)
+    expect(
+      (
+        await f.write(
+          { ...employee, effectiveFrom: scenario.effectiveFrom, effectiveTo: scenario.effectiveTo },
+          1,
+        )
+      ).status,
+    ).toBe(201)
+    expect(await f.workforce()).toMatchObject({
+      ok: true,
+      schedules: [{ employee: { id: employeeId, officialName: "Example Person" } }],
+    })
+    expect(await f.organization()).toMatchObject({ kind: "found" })
+    expect(await f.directory("2026-06-01T00:00:00Z")).toBeNull()
+    expect(await f.access("2026-06-01T00:00:00Z")).toBeNull()
+    expect(await f.directory(`${scenario.validOn}T00:00:00Z`)).toMatchObject({
+      officialName: "Example Person",
+    })
+    expect((await f.readOrganization("/company/reporting-lines/RESOURCE-001")).status).toBe(404)
+  })
+
+  test.each(["person", "employee"] as const)(
+    "%s の参照先欠落を正規の取消と誤認せず不整合として拒否する",
+    async (type) => {
+      const f = await fixture()
+      await f.initialize()
+      await registerOtherEmployee(f, 3)
+      // 正規の公開操作では作れない欠落を注入し、取消だけを除外していることを確かめる。
+      await execSql(f.database, "DROP TRIGGER company_resource_revisions_no_delete")
+      await f.database
+        .prepare(
+          "DELETE FROM company_resource_revisions WHERE resource_type = ?1 AND resource_id = ?2",
+        )
+        .bind(type, type === "person" ? person.id : employee.id)
+        .run()
+      const snapshot = await f.workforce()
+      if (!snapshot.ok) throw snapshot.cause
+      expect(
+        snapshot.schedules.find((schedule) => schedule.employee.id === employeeId)?.employee
+          .officialName,
+      ).toBe("")
+      expect(await f.organization()).toMatchObject({ code: "invalid_employee" })
+      for (const path of [
+        "/company/organization-tree",
+        "/company/my-direct-reports",
+        "/company/reporting-lines/OTHER-001",
+      ]) {
+        const response = await f.readOrganization(path)
+        expect(response.status).toBe(503)
+        expect(await response.json()).toMatchObject({ code: "company_read_unavailable" })
+      }
+    },
+  )
 
   test("将来の氏名変更と従業員番号は発効日前後で切り替わる", async () => {
     const f = await fixture()

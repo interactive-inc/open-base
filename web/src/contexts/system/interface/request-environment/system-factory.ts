@@ -9,10 +9,13 @@ import type {
   SystemExternalIdentityContext,
   SystemJwtSecretContext,
   SystemPasswordHashContext,
+  SystemPasswordCredentialResetContext,
   SystemRequestAuditContext,
   SystemSessionConfigurationContext,
 } from "@system/configuration/system-context"
 import { createFactory } from "hono/factory"
+import type { SystemNotificationVisibility } from "@system/interface/ports/system-notification-visibility"
+import type { SystemPasswordSessionPolicy } from "@system/interface/ports/system-password-session-policy"
 
 type SystemInterfaceContext = SystemDatabaseContext &
   SystemD1Context &
@@ -22,10 +25,17 @@ type SystemInterfaceContext = SystemDatabaseContext &
   SystemBootstrapContext &
   SystemJwtSecretContext &
   SystemPasswordHashContext &
+  SystemPasswordCredentialResetContext &
   SystemSessionConfigurationContext &
   SystemRequestAuditContext &
   SystemEmailContext &
-  SystemExternalIdentityContext
+  SystemExternalIdentityContext &
+  Readonly<{
+    var: Readonly<{
+      systemNotificationVisibility?: SystemNotificationVisibility
+      systemPasswordSessionPolicy?: SystemPasswordSessionPolicy
+    }>
+  }>
 
 /** System InterfaceがHonoを利用するための、製品APIから独立した最小Env。 */
 export type SystemHonoEnv = Readonly<{

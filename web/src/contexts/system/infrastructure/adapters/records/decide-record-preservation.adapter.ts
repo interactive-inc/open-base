@@ -74,12 +74,7 @@ export class DecideRecordPreservationAdapter {
     const target = body.decision_target
     if (proposal.version !== target.proposal_version || proposal.digest !== target.proposal_digest)
       return new RecordPreservationDecisionError("conflict")
-    if (
-      proposal.status === "pending" ||
-      (action === "approve" &&
-        (proposal.status === "approved" || proposal.status === "executed")) ||
-      (action === "reject" && (proposal.status === "rejected" || proposal.status === "returned"))
-    ) {
+    if (["pending", "approved", "executed", "rejected", "returned"].includes(proposal.status)) {
       const attestations = await query.listAttestations(proposal.caseId)
       if (attestations instanceof Error) return new RecordPreservationDecisionError("unavailable")
       const original = attestations.find(
@@ -149,6 +144,7 @@ export class DecideRecordPreservationAdapter {
     const writer = new SystemD1WorkflowAdapter({
       env: this.c.env,
       decisionGuards: [...technical, ...decision.guards],
+      approvalGuards: decision.approvalGuards,
     })
     const command = { ...decision, comment: body.comment, decidedAt: at }
     const operation = {

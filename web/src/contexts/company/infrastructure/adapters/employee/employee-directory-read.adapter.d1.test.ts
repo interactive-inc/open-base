@@ -426,6 +426,50 @@ describe("Company directoryの在籍時点", () => {
     expect(await directory(database, "2026-12-01T00:00:00Z").findForEmployeeIds([])).toEqual([])
   })
 
+  test("検索語があるときは、照合に当たらない職員の不整合や氏名の欠けで検索全体を止めない", async () => {
+    const database = await createEmployeeEmploymentTestDatabase()
+    const reader = directory(database, "2026-09-01T00:00:00Z")
+    const listed = await reader.list(page)
+    if (listed instanceof Error) throw listed
+    const name = listed.employees[0]!.officialName
+    const batch = database.batch.bind(database)
+    const withBroken = spyOn(database, "batch").mockImplementation(
+      async <T>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]> => {
+        const results = await batch<T>(statements)
+        const rows = results[1]
+        const first = rows?.results[0]
+        if (rows === undefined || first === undefined) return results
+        const broken = {
+          ...(first as Record<string, unknown>),
+          id: "employee:broken",
+          official_name: "不整合 職員",
+          employment_valid: 0,
+        }
+        const unnamed = {
+          ...(first as Record<string, unknown>),
+          id: "employee:unnamed",
+          official_name: null,
+          employee_code: "UNNAMED-1",
+        }
+        return results.map((result, index) =>
+          index === 1
+            ? { ...result, results: [...result.results, broken as T, unnamed as T] }
+            : result,
+        )
+      },
+    )
+    try {
+      const found = await reader.list({ ...page, query: name.replace(/\s/g, "") })
+      expect(found).toMatchObject({ employees: [{ officialName: name }], total: 1 })
+      expect(await reader.list({ ...page, query: "該当なし" })).toEqual({ employees: [], total: 0 })
+      expect(await reader.list({ ...page, query: "不整合" })).toBeInstanceOf(Error)
+      // 氏名の欠けた行は、番号で当たったときだけ検査して拒否する。
+      expect(await reader.list({ ...page, query: "UNNAMED" })).toBeInstanceOf(Error)
+    } finally {
+      withBroken.mockRestore()
+    }
+  })
+
   test("Employee ID一括参照の一部が欠けた場合は成功分だけを返さない", async () => {
     const database = await createEmployeeEmploymentTestDatabase()
     const batch = database.batch.bind(database)

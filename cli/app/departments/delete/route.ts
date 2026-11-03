@@ -41,16 +41,14 @@ export default factory.createHandlers(
 
     const client = await createClient()
 
-    const response = await client.company["organization-units"][":code"].$delete(
-      {
-        param: { code: query.code },
-        json: {
-          expected_organization_revision: query["organization-revision"],
-          expected_as_of: query["as-of"],
-        },
+    const response = await client.company["organization-units"][":code"].$delete({
+      header: { "idempotency-key": query["idempotency-key"] },
+      param: { code: query.code },
+      json: {
+        expected_organization_revision: query["organization-revision"],
+        expected_as_of: query["as-of"],
       },
-      { headers: { "Idempotency-Key": query["idempotency-key"] } },
-    )
+    })
 
     if (response.status !== 204) {
       throw new UsageError("部署ノードの削除に失敗しました")

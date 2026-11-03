@@ -15,6 +15,7 @@ type DecisionStateRow = Readonly<{
 type Context = SystemD1Context &
   Readonly<{
     decisionGuards?: ReadonlyArray<D1PreparedStatement>
+    approvalGuards?: ReadonlyArray<D1PreparedStatement>
     decisionEffects?: ReadonlyArray<D1PreparedStatement>
     cancelGuards?: ReadonlyArray<D1PreparedStatement>
     cancelEffects?: ReadonlyArray<D1PreparedStatement>
@@ -311,53 +312,46 @@ export class SystemD1WorkflowAdapter implements SystemWorkflowWriter {
         abortWhenPreviousStatementChangedNoRows(database),
         database
           .prepare(
-            `UPDATE system_decision_tasks
-             SET outcome = CASE
-                   WHEN ?5 = 'return' THEN 'returned'
-                   WHEN ?5 = 'reject' THEN 'rejected'
-                   ELSE 'approved'
-                 END,
-                 closed_at = ?6
+            `WITH votes AS (
+               SELECT count(*) AS participant_count,
+                      count(*) FILTER (WHERE action = 'approve') AS approval_count,
+                      count(*) FILTER (WHERE action = 'reject') AS rejection_count,
+                      count(*) FILTER (WHERE action = 'return') AS return_count
+               FROM system_human_attestations
+               WHERE case_id = ?1 AND task_key = ?2 AND round = ?3
+             ), decision AS (
+               SELECT CASE
+                 WHEN votes.return_count > 0 THEN 'returned'
+                 WHEN votes.rejection_count > 0 AND (
+                   task.negative_decision_rule = 'any-reject'
+                   OR votes.rejection_count > (
+                     SELECT count(*) FROM system_decision_task_candidates
+                     WHERE case_id = ?1 AND task_key = ?2 AND round = ?3
+                   ) - task.required_approvals
+                 ) THEN 'rejected'
+                 WHEN votes.approval_count >= task.required_approvals
+                   AND votes.participant_count >= task.required_participants THEN 'approved'
+                 ELSE NULL
+               END AS outcome
+               FROM system_decision_tasks AS task CROSS JOIN votes
+               WHERE task.case_id = ?1 AND task.task_key = ?2 AND task.round = ?3
+                 AND task.proposal_digest = ?4
+             )
+             UPDATE system_decision_tasks
+             SET outcome = (SELECT outcome FROM decision), closed_at = ?5
              WHERE case_id = ?1 AND task_key = ?2 AND round = ?3
                AND proposal_digest = ?4
                AND outcome IS NULL
-               AND (
-                 ?5 = 'return'
-                 OR (
-                   ?5 = 'reject'
-                   AND (
-                     negative_decision_rule = 'any-reject'
-                     OR (
-                       SELECT count(*) FROM system_human_attestations
-                       WHERE case_id = ?1 AND task_key = ?2 AND round = ?3
-                         AND action = 'reject'
-                     ) > (
-                       SELECT count(*) FROM system_decision_task_candidates
-                       WHERE case_id = ?1 AND task_key = ?2 AND round = ?3
-                     ) - required_approvals
-                   )
-                 )
-                 OR (
-                   ?5 = 'approve'
-                   AND (
-                     SELECT count(*) FROM system_human_attestations
-                     WHERE case_id = ?1 AND task_key = ?2 AND round = ?3 AND action = 'approve'
-                   ) >= required_approvals
-                   AND (
-                     SELECT count(*) FROM system_human_attestations
-                     WHERE case_id = ?1 AND task_key = ?2 AND round = ?3
-                   ) >= required_participants
-                 )
-               )`,
+               AND (SELECT outcome FROM decision) IS NOT NULL`,
           )
           .bind(
             attestation.caseId,
             attestation.taskKey,
             attestation.round,
             attestation.proposalDigest,
-            attestation.action,
             input.decidedAt.getTime(),
           ),
+        ...(this.c.approvalGuards ?? []),
         ...this.prepareNextTaskStatements(input),
         database
           .prepare(

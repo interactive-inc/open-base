@@ -45,23 +45,34 @@ function rejectedIds(label: string, uuid: string): ReadonlyArray<string> {
 
 describe("System integration identifier HTTP", () => {
   test("ConnectorはUUIDではない主キーを400で拒否し、UUIDの主キーで作成する", async () => {
-    const { client, fixture } = await createClient()
+    const { client, fixture, stepUpToken } = await createClient()
 
     for (const id of rejectedIds("connector", connectorId)) {
-      const rejected = await client.system.connectors.$post({ json: connectorInput(id) })
+      const rejected = await client.system.connectors.$post({
+        header: { "x-system-step-up": stepUpToken },
+        json: connectorInput(id),
+      })
       expect({ id, status: Number(rejected.status) }).toEqual({ id, status: 400 })
     }
     expect(await countRows(fixture, "system_connectors")).toBe(0)
 
-    const created = await client.system.connectors.$post({ json: connectorInput(connectorId) })
+    const created = await client.system.connectors.$post({
+      header: { "x-system-step-up": stepUpToken },
+      json: connectorInput(connectorId),
+    })
     expect(created.status).toBe(201)
     expect(await countRows(fixture, "system_connectors")).toBe(1)
   })
 
   test("交換はUUIDではない主キーとConnectorの参照を400で拒否し、UUIDの主キーで作成する", async () => {
-    const { client, fixture } = await createClient()
+    const { client, fixture, stepUpToken } = await createClient()
     expect(
-      (await client.system.connectors.$post({ json: connectorInput(connectorId) })).status,
+      (
+        await client.system.connectors.$post({
+          header: { "x-system-step-up": stepUpToken },
+          json: connectorInput(connectorId),
+        })
+      ).status,
     ).toBe(201)
 
     for (const id of rejectedIds("exchange", exchangeId)) {
@@ -87,9 +98,14 @@ describe("System integration identifier HTTP", () => {
   })
 
   test("照合はUUIDではないrunとassertionの主キーを400で拒否し、UUIDの主キーで作成する", async () => {
-    const { client, fixture } = await createClient()
+    const { client, fixture, stepUpToken } = await createClient()
     expect(
-      (await client.system.connectors.$post({ json: connectorInput(connectorId) })).status,
+      (
+        await client.system.connectors.$post({
+          header: { "x-system-step-up": stepUpToken },
+          json: connectorInput(connectorId),
+        })
+      ).status,
     ).toBe(201)
     expect(
       (
@@ -134,13 +150,19 @@ describe("System integration identifier HTTP", () => {
   })
 
   test("Connectorを指すPrincipalの参照も、UUIDではない値を400で拒否し、UUIDで作成する", async () => {
-    const { client, fixture } = await createClient()
+    const { client, fixture, stepUpToken } = await createClient()
     expect(
-      (await client.system.connectors.$post({ json: connectorInput(connectorId) })).status,
+      (
+        await client.system.connectors.$post({
+          header: { "x-system-step-up": stepUpToken },
+          json: connectorInput(connectorId),
+        })
+      ).status,
     ).toBe(201)
 
     for (const id of rejectedIds("connector", connectorId)) {
       const rejected = await client.system.principals.$post({
+        header: { "x-system-step-up": stepUpToken },
         json: { kind: "connector", name: "Connector machine", connector_id: id },
       })
       expect({ id, status: Number(rejected.status) }).toEqual({ id, status: 400 })
@@ -148,6 +170,7 @@ describe("System integration identifier HTTP", () => {
     expect(await countRows(fixture, "system_principals")).toBe(0)
 
     const created = await client.system.principals.$post({
+      header: { "x-system-step-up": stepUpToken },
       json: { kind: "connector", name: "Connector machine", connector_id: connectorId },
     })
     expect(created.status).toBe(201)
@@ -155,13 +178,14 @@ describe("System integration identifier HTTP", () => {
   })
 
   test("URLで受け取るConnectorと交換の参照も、UUIDではない値を400で拒否する", async () => {
-    const { client } = await createClient()
+    const { client, stepUpToken } = await createClient()
 
     for (const id of rejectedIds("connector", connectorId)) {
       const listed = await client.system["integration-exchanges"].$get({
         query: { connector_id: id },
       })
       const updated = await client.system.connectors[":connectorId"].$patch({
+        header: { "x-system-step-up": stepUpToken },
         param: { connectorId: id },
         json: { name: "Generic", status: "disabled", expected_revision: 1, reason: "maintenance" },
       })
@@ -255,7 +279,7 @@ async function createClient() {
     },
   })
 
-  return { client, fixture }
+  return { client, fixture, stepUpToken }
 }
 
 async function countRows(fixture: SystemSessionTestContext, table: string): Promise<number> {

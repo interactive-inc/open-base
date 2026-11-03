@@ -23,6 +23,8 @@ import { zValidator } from "@hono/zod-validator"
 import { createFactory } from "hono/factory"
 import { z } from "zod"
 import { COMPANY_DEFAULT_ORGANIZATION_ID } from "@/contexts/company/domain/definitions/company-organization-identity.definition"
+import { prepareSystemHumanOperationAuthorization } from "@system/interface/operations/prepare-system-human-operation-authorization"
+import { SystemMachineOperationAuthorizationAdapter } from "@system/infrastructure/adapters/iam/system-machine-operation-authorization.adapter"
 
 const factory = createFactory<CompanyHttpEnvironment>()
 const requestSchema = z.object({
@@ -39,7 +41,8 @@ export const POST = factory.createHandlers(
   }),
   async (context) => {
     const actor = context.var.companyActor
-    if (actor === undefined) throw new CompanyAuthenticationRequiredError()
+    if (actor === undefined || context.var.accountTokenVersion === undefined)
+      throw new CompanyAuthenticationRequiredError()
     if (
       !actor.hasPermission("employee:write") ||
       (!actor.organizationIds.includes(COMPANY_DEFAULT_ORGANIZATION_ID) &&
@@ -56,13 +59,40 @@ export const POST = factory.createHandlers(
     if (idempotencyKey === undefined) {
       throw new CompanyIdempotencyKeyRequiredError()
     }
+    const machineActor = context.var.accountMachineActor
+    const now = context.var.companyClock?.() ?? new Date(context.env.NOW ?? Date.now())
+    const authorization =
+      machineActor == null
+        ? await prepareSystemHumanOperationAuthorization({
+            database: context.env.DB,
+            accountId: actor.accountId,
+            tokenVersion: context.var.accountTokenVersion,
+            sessionFamilyId: context.var.accountSessionFamilyId ?? null,
+            permissions: ["employee:write"],
+            now,
+          })
+        : await new SystemMachineOperationAuthorizationAdapter({
+            env: { DB: context.env.DB },
+          }).prepare({
+            actor: machineActor,
+            resource: null,
+            permissions: ["employee:write"],
+            now,
+          })
+    if (authorization === "forbidden") throw new CompanyAccessDeniedError()
+    if (authorization instanceof Error) throw new CompanyReadUnavailableError(authorization)
     const companyContext = {
       env: {
         DB: context.env.DB,
         COMPANY_TIME_ZONE: context.env.COMPANY_TIME_ZONE,
         NOW: context.env.NOW,
       },
-      var: { database: context.var.database, auditContext: context.var.auditContext },
+      var: {
+        database: context.var.database,
+        auditContext: context.var.auditContext,
+        directPersonnelActionAssertions:
+          "assertions" in authorization ? authorization.assertions : authorization,
+      },
     }
     const body = context.req.valid("json")
     const action = await resolvePersonnelActionInput(

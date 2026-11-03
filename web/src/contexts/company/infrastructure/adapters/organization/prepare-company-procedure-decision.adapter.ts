@@ -1,3 +1,4 @@
+import { SystemTaskApprovalGuardAdapter } from "@system/infrastructure/adapters/workflow/system-task-approval-guard.adapter"
 import type { CompanyContext } from "@/contexts/company/configuration/company-context"
 import type { EmployeeId } from "@/contexts/company/domain/definitions/workforce-id.definition"
 import {
@@ -171,8 +172,14 @@ export class PrepareCompanyProcedureDecisionAdapter {
     if (!caseId.success) return new CompanyUnexpectedError("案件IDが不正です")
     let nextTask: SystemDecisionTaskBundle | null = null
     let nextGuards: ReadonlyArray<D1PreparedStatement> = []
-    if (action === "approve") {
+    // 保存時の票集計で承認に変わる反対票にも、次段階を用意しておく。
+    if (
+      action === "approve" ||
+      (action === "reject" && task.negativeDecisionRule === "approval-impossible")
+    ) {
+      const approvalTask = { caseId: proposal.caseId, taskKey: task.key, round: task.round }
       const next = await new ResolveCompanyProcedureTaskAdapter({
+        approvalTask,
         c: this.c,
         policy,
         payload: parsed.payload,
@@ -191,18 +198,29 @@ export class PrepareCompanyProcedureDecisionAdapter {
         targetDepartmentCode: input.targetDepartmentCode,
         excludedEmployeeIds: input.excludedEmployeeIds,
       }).resolveCompanyProcedureTask()
-      if (next instanceof Error) return new CompanyForbiddenError("次の判断段階を解決できません")
-      if (next !== null) {
+      if (next instanceof Error) {
+        nextGuards = [
+          new SystemTaskApprovalGuardAdapter({ env: this.c.env, approvalTask }).prepare(
+            "SELECT json_extract('{}','next_decision_task_unavailable')",
+          ),
+        ]
+      } else if (next !== null) {
         const bundle = createSystemDecisionTask({
           task: next.task,
           caseId: caseId.data,
           createdByAccountId: proposal.createdByAccountId,
           proposalDigest: proposal.digest,
         })
-        if (bundle instanceof Error)
-          return new CompanyUnexpectedError("次の判断段階が不正です", { cause: bundle })
-        nextTask = bundle
-        nextGuards = next.guards
+        if (bundle instanceof Error) {
+          nextGuards = [
+            new SystemTaskApprovalGuardAdapter({ env: this.c.env, approvalTask }).prepare(
+              "SELECT json_extract('{}','next_decision_task_unavailable')",
+            ),
+          ]
+        } else {
+          nextTask = bundle
+          nextGuards = next.guards
+        }
       }
     }
     return {
@@ -215,7 +233,8 @@ export class PrepareCompanyProcedureDecisionAdapter {
       action,
       proposalDigest: proposal.digest,
       nextTask,
-      guards: [guard, ...nextGuards],
+      guards: [guard],
+      approvalGuards: nextGuards,
     }
   }
 

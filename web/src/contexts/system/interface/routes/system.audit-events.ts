@@ -67,7 +67,7 @@ export const GET = systemFactory.createHandlers(
       })
       if (
         deniedAudit instanceof Error ||
-        (await auditRepository.append(deniedAudit)) instanceof Error
+        (await auditRepository.writeDenied(deniedAudit)) instanceof Error
       ) {
         throw new SystemAuditUnavailableError()
       }

@@ -17,6 +17,7 @@ import { checkPublicEmployeeBindings } from "@/contexts/company/infrastructure/a
 import { publicEmployeeBindingStatement } from "@/contexts/company/infrastructure/adapters/employee/lib/public-employee-binding-statement"
 import { z } from "zod"
 import { zAccountId, type AccountId } from "@system/domain/schemas/iam/account-id.schema"
+import { toEmployeeSearchKey } from "@/contexts/company/infrastructure/adapters/employee/lib/to-employee-search-key"
 
 const employeeDirectoryRow = z.object({
   id: z.string(),
@@ -291,12 +292,6 @@ export class CompanyEmployeeDirectoryReadAdapter {
 
     const conditions: string[] = []
     const values: Array<string | number> = [businessDate]
-    if (input.query !== null) {
-      conditions.push(
-        "(instr(lower(employee.official_name), lower(?)) > 0 OR instr(lower(coalesce(employee.employee_code, '')), lower(?)) > 0)",
-      )
-      values.push(input.query, input.query)
-    }
     if (input.organizationUnit !== null) {
       conditions.push("(unit.code = ? OR unit.official_name = ?)")
       values.push(input.organizationUnit, input.organizationUnit)
@@ -315,8 +310,8 @@ export class CompanyEmployeeDirectoryReadAdapter {
         publicEmployeeBindingStatement(this.c.env.DB),
         this.c.env.DB.prepare(
           `${companyEmployeeDirectorySql()} ${this.selectSql()} ${source}
-           ORDER BY employee.employee_code, employee.id LIMIT ? OFFSET ?`,
-        ).bind(...values, input.limit, input.offset),
+           ORDER BY employee.employee_code, employee.id${input.query === null ? " LIMIT ? OFFSET ?" : ""}`,
+        ).bind(...values, ...(input.query === null ? [input.limit, input.offset] : [])),
         this.c.env.DB.prepare(
           `${companyEmployeeDirectorySql()} SELECT count(*) AS total ${source}`,
         ).bind(...values),
@@ -331,13 +326,41 @@ export class CompanyEmployeeDirectoryReadAdapter {
       const total = z.object({ total: z.number().int().nonnegative() }).safeParse(count.results[0])
       if (!total.success) return total.error
 
-      const employees: CompanyEmployeeDirectoryEntry[] = []
-      for (const row of rows.results) {
+      if (input.query === null) {
+        const employees: CompanyEmployeeDirectoryEntry[] = []
+        for (const row of rows.results) {
+          const employee = this.restore(row)
+          if (employee instanceof Error) return employee
+          employees.push(employee)
+        }
+        return { employees, total: total.data.total }
+      }
+
+      // SQLite は NFKC を持たないため、氏名と番号を共通の規則で照合してから件数とページを決める。
+      // 照合に当たった行だけを検査し、検索の対象外の行の不整合で検索全体を止めない。
+      const query = input.query
+      const nameSearch = toEmployeeSearchKey(query)
+      const codeSearch = query.toLowerCase()
+      const matched = rows.results.filter((row) => {
+        const names = z
+          .object({ official_name: z.unknown(), employee_code: z.unknown() })
+          .safeParse(row)
+        if (!names.success) return false
+        const name = names.data.official_name
+        const code = names.data.employee_code
+        // 読み取れない氏名は一致扱いにしない。番号で当たった行は、ページに入れば後で検査する。
+        return (
+          (typeof name === "string" && toEmployeeSearchKey(name).includes(nameSearch)) ||
+          (typeof code === "string" && code.toLowerCase().includes(codeSearch))
+        )
+      })
+      const page: CompanyEmployeeDirectoryEntry[] = []
+      for (const row of matched.slice(input.offset, input.offset + input.limit)) {
         const employee = this.restore(row)
         if (employee instanceof Error) return employee
-        employees.push(employee)
+        page.push(employee)
       }
-      return { employees, total: total.data.total }
+      return { employees: page, total: matched.length }
     } catch (cause) {
       return cause instanceof Error ? cause : new Error("failed to list Company employee directory")
     }

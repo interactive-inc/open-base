@@ -46,7 +46,7 @@ export async function prepareSystemAuditDisclosure(
     })
     if (
       audit instanceof Error ||
-      (await new SystemAuditEventRepository(context).append(audit)) instanceof Error
+      (await new SystemAuditEventRepository(context).writeDenied(audit)) instanceof Error
     )
       throw new SystemAuditDisclosureHttpError({
         status: 503,

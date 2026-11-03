@@ -97,6 +97,8 @@ export const PATCH = systemFactory.createHandlers(
       passwordHash,
       now,
       auditStatements,
+      additionalStatements:
+        context.var.preparePasswordCredentialReset?.(targetAccountId.data) ?? [],
     })
     if (reset instanceof Error) {
       throw new SystemPasswordUnavailableError()

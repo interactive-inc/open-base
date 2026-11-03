@@ -1,3 +1,4 @@
+import { isCanonicalEmployeeText } from "@/contexts/company/domain/definitions/is-canonical-employee-text.definition"
 import { canReadCompanyResource } from "@/contexts/company/interface/operations/company-resource-read-permission"
 import { resolveCompanyRecordedAt } from "@/contexts/company/interface/request-environment/resolve-company-recorded-at"
 /** /company/employees */
@@ -179,7 +180,14 @@ export const POST = factory.createHandlers(
             attributes: z
               .object({
                 personId: z.string().regex(/^\S{1,255}$/),
-                employeeCode: z.string().trim().min(1).max(64).nullable().optional(),
+                employeeCode: z
+                  .string()
+                  .trim()
+                  .min(1)
+                  .max(64)
+                  .refine((value) => isCanonicalEmployeeText(value, 64))
+                  .nullable()
+                  .optional(),
               })
               .strict(),
           }),

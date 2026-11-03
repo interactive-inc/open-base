@@ -43,18 +43,16 @@ export default factory.createHandlers(
 
     const client = await createClient()
 
-    const response = await client.company["organization-units"][":code"].$put(
-      {
-        param: { code: query.code },
-        json: {
-          expected_organization_revision: query["organization-revision"],
-          expected_as_of: query["as-of"],
-          name: query.name,
-          parent_code: query.parent ?? null,
-        },
+    const response = await client.company["organization-units"][":code"].$put({
+      header: { "idempotency-key": query["idempotency-key"] },
+      param: { code: query.code },
+      json: {
+        expected_organization_revision: query["organization-revision"],
+        expected_as_of: query["as-of"],
+        name: query.name,
+        parent_code: query.parent ?? null,
       },
-      { headers: { "Idempotency-Key": query["idempotency-key"] } },
-    )
+    })
 
     const department = await response.json()
 

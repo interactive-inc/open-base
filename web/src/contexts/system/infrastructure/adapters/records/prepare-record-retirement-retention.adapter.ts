@@ -1,7 +1,15 @@
+import {
+  SystemTaskApprovalGuardAdapter,
+  type SystemTaskApprovalTarget,
+} from "@system/infrastructure/adapters/workflow/system-task-approval-guard.adapter"
 import type { SystemD1Context } from "@system/configuration/system-context"
 import { PrepareRecordRetirementCoverageAdapter } from "@system/infrastructure/adapters/records/prepare-record-retirement-coverage.adapter"
 
-type Context = SystemD1Context & Readonly<{ assertions: ReadonlyArray<D1PreparedStatement> }>
+type Context = SystemD1Context &
+  Readonly<{
+    assertions: ReadonlyArray<D1PreparedStatement>
+    approvalTask?: SystemTaskApprovalTarget
+  }>
 
 /** 全検査ページの保全先について元の承認済み保持を再検査する。原記録や開示資格の検査は行わない。 */
 export class PrepareRecordRetirementRetentionAdapter {
@@ -14,7 +22,8 @@ export class PrepareRecordRetirementRetentionAdapter {
       return new Error("retirement retention time invalid")
     const coverage = await new PrepareRecordRetirementCoverageAdapter(this.c).prepare(input)
     if (coverage instanceof Error) return coverage
-    const guard = this.c.env.DB.prepare(`WITH evaluation AS (
+    const guard = new SystemTaskApprovalGuardAdapter(this.c).prepare(
+      `WITH evaluation AS (
       SELECT max(?2,CAST((julianday('now')-2440587.5)*86400000 AS INTEGER)) AS at
     ) SELECT CASE WHEN NOT EXISTS (
       SELECT 1 FROM system_record_retirement_plans plan
@@ -36,9 +45,8 @@ export class PrepareRecordRetirementRetentionAdapter {
         OR attachment.wrapped_dek IS NULL OR attachment.wrapped_dek_iv IS NULL
         OR attachment.plaintext_sha256 IS NOT hold.plaintext_sha256
       )
-    ) THEN 1 ELSE json_extract('{}','record_retirement_retention_changed') END`).bind(
-      coverage.planId,
-      at.getTime(),
+    ) THEN 1 ELSE json_extract('{}','record_retirement_retention_changed') END`,
+      [coverage.planId, at.getTime()],
     )
     const assertions = Object.freeze([...coverage.assertions, guard])
     try {

@@ -1,7 +1,15 @@
+import {
+  SystemTaskApprovalGuardAdapter,
+  type SystemTaskApprovalTarget,
+} from "@system/infrastructure/adapters/workflow/system-task-approval-guard.adapter"
 import type { SystemD1Context } from "@system/configuration/system-context"
 import { PrepareRecordRetirementCoverageAdapter } from "@system/infrastructure/adapters/records/prepare-record-retirement-coverage.adapter"
 
-type Context = SystemD1Context & Readonly<{ assertions: ReadonlyArray<D1PreparedStatement> }>
+type Context = SystemD1Context &
+  Readonly<{
+    assertions: ReadonlyArray<D1PreparedStatement>
+    approvalTask?: SystemTaskApprovalTarget
+  }>
 
 /** 検査した原添付が同じ停止世代で保護されていることを検査する。ストレージ本体の再取得は行わない。 */
 export class PrepareRecordRetirementSourceAttachmentsAdapter {
@@ -12,7 +20,8 @@ export class PrepareRecordRetirementSourceAttachmentsAdapter {
   async prepare(input: unknown) {
     const coverage = await new PrepareRecordRetirementCoverageAdapter(this.c).prepare(input)
     if (coverage instanceof Error) return coverage
-    const guard = this.c.env.DB.prepare(`SELECT CASE WHEN NOT EXISTS (
+    const guard = new SystemTaskApprovalGuardAdapter(this.c).prepare(
+      `SELECT CASE WHEN NOT EXISTS (
       SELECT 1 FROM system_record_retirement_receipts receipt
       JOIN system_record_coverage_pages page ON page.id=receipt.coverage_page_id
       JOIN json_each(page.snapshot_json,'$.records') item
@@ -23,8 +32,8 @@ export class PrepareRecordRetirementSourceAttachmentsAdapter {
         AND (json_extract(item.value,'$.source.formatVersion') IS NOT 1
           OR pin.receipt_id IS NULL OR attachment.id IS NULL OR attachment.status<>'linked'
           OR attachment.wrapped_dek IS NULL OR attachment.wrapped_dek_iv IS NULL OR attachment.erased_at IS NOT NULL)
-    ) THEN 1 ELSE json_extract('{}','record_retirement_source_attachment_changed') END`).bind(
-      coverage.planId,
+    ) THEN 1 ELSE json_extract('{}','record_retirement_source_attachment_changed') END`,
+      [coverage.planId],
     )
     const assertions = Object.freeze([...coverage.assertions, guard])
     try {

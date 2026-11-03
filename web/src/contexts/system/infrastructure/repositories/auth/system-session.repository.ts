@@ -182,15 +182,14 @@ export class SystemSessionRepository {
       const auditStatements = new SystemAuditEventRepository(this.c.context).prepareAppend(
         props.audit,
       )
+      // 監査には要求時刻を残し、失効時刻は先に確定した更新・後継の作成時刻より前へ戻さない。
       const results = await database.batch([
         database
           .prepare(
             `UPDATE system_sessions
-             SET revoked_at = ?1
+             SET revoked_at = max(created_at, coalesce(rotated_at, created_at), ?1)
              WHERE family_id = ?2
-               AND revoked_at IS NULL
-               AND created_at <= ?1
-               AND (rotated_at IS NULL OR rotated_at <= ?1)`,
+               AND revoked_at IS NULL`,
           )
           .bind(props.revokedAt.getTime(), props.familyId),
         ...auditStatements,
@@ -302,7 +301,7 @@ export class SystemSessionRepository {
 
     return this.c.context.env.DB.prepare(
       `UPDATE system_sessions
-       SET revoked_at = ?1
+       SET revoked_at = max(created_at, coalesce(rotated_at, created_at), ?1)
        WHERE family_id = ?2 AND revoked_at IS NULL
          AND EXISTS (
            SELECT 1 FROM system_audit_events WHERE event_id IN (?3, ?4)

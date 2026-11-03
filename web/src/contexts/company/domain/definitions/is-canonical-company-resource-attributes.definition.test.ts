@@ -40,3 +40,23 @@ test("契約区分・実在日・終了境界・閉じた属性契約を検査�
     ).toBe(false)
   }
 })
+
+for (const character of ["\n", "\t", "\u007f"]) {
+  test(`保存するプロフィールは読み出しと同じ制御文字を拒否する（${JSON.stringify(character)}）`, () => {
+    expect(
+      isCanonicalCompanyResourceAttributes("person", { officialName: `Example${character}Person` }),
+    ).toBe(false)
+    expect(
+      isCanonicalCompanyResourceAttributes("person", {
+        officialName: "Example Person",
+        phone: `010${character}12345678`,
+      }),
+    ).toBe(false)
+    expect(
+      isCanonicalCompanyResourceAttributes("employee", {
+        personId: "person:example",
+        employeeCode: `EMP${character}001`,
+      }),
+    ).toBe(false)
+  })
+}

@@ -1,3 +1,9 @@
+import { OrganizationResourceAdoptionEntity } from "@/contexts/company/domain/entities/organization-resource-adoption.entity"
+import { OrganizationResourceAdoptionSnapshotAdapter } from "@/contexts/company/infrastructure/adapters/organization/organization-resource-adoption-snapshot.adapter"
+import { OrganizationResourceAdoptionRepository } from "@/contexts/company/infrastructure/repositories/organization/organization-resource-adoption.repository"
+import * as employeeTextValidation from "@/contexts/company/domain/definitions/is-canonical-employee-text.definition"
+import { CurrentOrganizationReadModelAdapter } from "@/contexts/company/infrastructure/adapters/organization/current-organization-read-model.adapter"
+import { POST as POST_PEOPLE } from "@/contexts/company/interface/routes/company.people"
 import { execSql } from "@system/test/local-d1/exec-sql.test-support"
 import { describe, expect, setDefaultTimeout, spyOn, test } from "bun:test"
 import { testAccountId } from "@system/test/system-test-id.test-support"
@@ -28,7 +34,10 @@ import type { CompanyHttpEnvironment } from "@/contexts/company/interface/reques
 import { CompanyHTTPException } from "@/contexts/company/interface/errors"
 import { createLocalD1Database } from "@system/test/local-d1/create-local-d1-database.test-support"
 import { COMPANY_TEST_MIGRATIONS_DIR } from "@/contexts/company/test/migrations-directory.test-support"
-import { COMPANY_DEFAULT_ORGANIZATION_ID } from "@/contexts/company/domain/definitions/company-organization-identity.definition"
+import {
+  COMPANY_DEFAULT_ORGANIZATION_ID,
+  COMPANY_ROOT_ORGANIZATION_UNIT_ID,
+} from "@/contexts/company/domain/definitions/company-organization-identity.definition"
 
 // ローカルD1のtemplate作成とDBごとの往復を含むため、既定の5秒を超えることがある。
 setDefaultTimeout(30_000)
@@ -84,6 +93,7 @@ async function fixture() {
     .put("/company/employee-directory/:code", ...PUT_NAME)
     .get("/company/my-profile", ...GET_PHONE)
     .put("/company/my-profile", ...PUT_PHONE)
+    .post("/company/people", ...POST_PEOPLE)
   const initial = CompanyResourceChangeEntity.create({
     commandId: "profile:initial",
     expectedRevision: 0,
@@ -1091,5 +1101,216 @@ describe("人物の発効日を訂正した後の読み取りと保存", () => {
       staffName: "Example Person",
       accountName: "Example Person",
     })
+  })
+})
+
+for (const character of ["\n", "\t", "\u007f"]) {
+  test(`一般職員の電話番号に制御文字を保存せず版と投影を保つ（${JSON.stringify(character)}）`, async () => {
+    const context = await fixture()
+    context.actors.current = CompanyActorValue.restore({
+      accountId: context.actor.accountId,
+      employeeId,
+      organizationIds: [COMPANY_DEFAULT_ORGANIZATION_ID],
+      capabilities: [],
+      permissions: [],
+    })
+    const profile = await context.version()
+    const counts = await context.counts()
+    const employee = await context.rows()
+    const response = await context.write({ phone: `010${character}12345678`, profile })
+    expect(response.status).toBe(400)
+    expect(await context.counts()).toEqual(counts)
+    expect(await context.rows()).toEqual(employee)
+    expect((await context.read()).status).toBe(200)
+  })
+}
+
+async function readOrganization(context: Awaited<ReturnType<typeof fixture>>) {
+  return new CurrentOrganizationReadModelAdapter({
+    env: {
+      DB: context.database,
+      COMPANY_TIME_ZONE: "Asia/Tokyo",
+      NOW: context.clock.now.toISOString(),
+    },
+    var: {
+      database: drizzle(context.database),
+      auditContext: {
+        requestId: "profile-validation",
+        clientName: "api",
+        clientIp: null,
+        externalRequestId: null,
+      },
+    },
+  }).loadCurrentOrganization()
+}
+
+test("過去に保存された不正な電話番号は、有効な新しい人物の版で訂正して組織の参照を復旧できる", async () => {
+  const context = await fixture()
+  const rootSnapshot = await new OrganizationResourceAdoptionSnapshotAdapter(context.database).find(
+    COMPANY_ROOT_ORGANIZATION_UNIT_ID,
+  )
+  if (rootSnapshot === null || rootSnapshot instanceof Error)
+    throw new Error("missing root snapshot")
+  const adoption = OrganizationResourceAdoptionEntity.create({
+    commandId: "profile:root",
+    organizationUnitId: COMPANY_ROOT_ORGANIZATION_UNIT_ID,
+    expectedRevision: 1,
+    snapshotDigest: rootSnapshot.props.digest,
+    observedOn: "2026-06-02",
+    reason: "Confirmed organization history",
+    actorAccountId: context.actor.accountId,
+    recordedAt: context.clock.now.getTime(),
+    initializationConfirmation: {
+      startsOn: "2020-01-01",
+      evidenceReferences: [
+        { context: "company", kind: "confirmed-test-history", id: "root-start", version: "1" },
+      ],
+    },
+  })
+  if (adoption instanceof Error) throw adoption
+  const adopted = await new OrganizationResourceAdoptionRepository({
+    env: context.environment,
+  }).adopt(adoption)
+  if (adopted instanceof Error) throw adopted
+  const otherEmployeeId = "a05c2a5c-f2b1-45e2-9f8e-1f567f660f24"
+  const other = CompanyResourceChangeEntity.create({
+    commandId: "profile:other",
+    expectedRevision: adopted.organizationRevision,
+    actorAccountId: context.actor.accountId,
+    reason: "Confirmed other employee",
+    recordedAt: context.clock.now.getTime(),
+    resources: [
+      {
+        organizationId: COMPANY_DEFAULT_ORGANIZATION_ID,
+        type: "person",
+        id: "person:other",
+        revision: 1,
+        state: "active",
+        effectiveFrom: restoreCalendarDate("2026-01-01"),
+        effectiveTo: null,
+        attributes: { officialName: "Other Person", phone: "010-2000-2000" },
+      },
+      {
+        organizationId: COMPANY_DEFAULT_ORGANIZATION_ID,
+        type: "employee",
+        id: otherEmployeeId,
+        revision: 1,
+        state: "active",
+        effectiveFrom: restoreCalendarDate("2026-01-01"),
+        effectiveTo: null,
+        attributes: { personId: "person:other", employeeCode: "OTHER-002" },
+      },
+      {
+        organizationId: COMPANY_DEFAULT_ORGANIZATION_ID,
+        type: "employment",
+        id: "ca3c67d9-3a55-4e12-8d22-3cdce0bd86d2",
+        revision: 1,
+        state: "active",
+        effectiveFrom: restoreCalendarDate("2026-01-01"),
+        effectiveTo: null,
+        attributes: { employeeId: otherEmployeeId, status: "ACTIVE", employmentType: "FULL_TIME" },
+      },
+      {
+        organizationId: COMPANY_DEFAULT_ORGANIZATION_ID,
+        type: "organization-unit",
+        id: "ef423e42-6eba-48db-8587-41b2505874cd",
+        revision: 1,
+        state: "active",
+        effectiveFrom: restoreCalendarDate("2026-01-01"),
+        effectiveTo: null,
+        attributes: {
+          organizationUnitId: "f37f8fe2-8cf4-488f-bb08-d8f8daa7b4ab",
+          code: "OTHER",
+          officialName: "Other Unit",
+          kind: "DEPARTMENT",
+          parentOrganizationUnitId: COMPANY_ROOT_ORGANIZATION_UNIT_ID,
+        },
+      },
+      {
+        organizationId: COMPANY_DEFAULT_ORGANIZATION_ID,
+        type: "assignment",
+        id: "6bca3222-3a4f-4c18-a680-788a9026cb47",
+        revision: 1,
+        state: "active",
+        effectiveFrom: restoreCalendarDate("2026-01-01"),
+        effectiveTo: null,
+        attributes: {
+          employeeId: otherEmployeeId,
+          employmentId: "ca3c67d9-3a55-4e12-8d22-3cdce0bd86d2",
+          organizationUnitId: "f37f8fe2-8cf4-488f-bb08-d8f8daa7b4ab",
+          assignmentType: "PRIMARY",
+          positionTitle: null,
+        },
+      },
+    ],
+  })
+  if (other instanceof Error) throw other
+  expect(
+    await new D1CompanyResourceRepository({ database: context.database }).write(other),
+  ).toMatchObject({ kind: "applied" })
+  const beforeOrganization = await readOrganization(context)
+  if (beforeOrganization instanceof Error) throw beforeOrganization
+  expect(beforeOrganization.employeesByCode.get("OTHER-002")?.name).toBe("Other Person")
+  const beforeCounts = await context.counts()
+  if (beforeCounts === null) throw new Error("missing revision counts")
+  const profile = await context.version()
+  // 過去の緩い入力検証で保存された状態を、実際の保存経路で準備する。
+  const oldValidation = spyOn(employeeTextValidation, "isCanonicalEmployeeText").mockReturnValue(
+    true,
+  )
+  try {
+    expect((await context.write({ phone: "010\n12345678", profile })).status).toBe(200)
+  } finally {
+    oldValidation.mockRestore()
+  }
+  expect(await readOrganization(context)).toBeInstanceOf(Error)
+  context.actors.current = CompanyActorValue.restore({
+    accountId: context.actor.accountId,
+    employeeId: null,
+    organizationIds: [COMPANY_DEFAULT_ORGANIZATION_ID],
+    capabilities: ["company:workforce:update"],
+    permissions: [],
+  })
+  const corrected = await context.app.request(
+    "/company/people",
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-company-organization-id": COMPANY_DEFAULT_ORGANIZATION_ID,
+        "if-match": JSON.stringify(profile.organizationRevision + 1),
+        "idempotency-key": "repair-profile",
+      },
+      body: JSON.stringify({
+        reason: "Confirmed corrected phone",
+        resources: [
+          {
+            organizationId: COMPANY_DEFAULT_ORGANIZATION_ID,
+            type: "person",
+            id: "person:profile",
+            revision: 3,
+            state: "active",
+            effectiveFrom: profile.effectiveOn,
+            effectiveTo: null,
+            attributes: {
+              officialName: "例示 太郎",
+              email: "you@example.com",
+              phone: "010-1234-5678",
+            },
+          },
+        ],
+      }),
+    },
+    context.environment,
+  )
+  expect(corrected.status).toBe(201)
+  expect(await context.rows()).toMatchObject({ official_name: "例示 太郎", phone: "010-1234-5678" })
+  const repairedOrganization = await readOrganization(context)
+  if (repairedOrganization instanceof Error) throw repairedOrganization
+  expect(repairedOrganization.employeesByCode.get("OTHER-002")?.name).toBe("Other Person")
+  expect(await context.counts()).toEqual({
+    revisions: beforeCounts.revisions + 2,
+    receipts: beforeCounts.receipts + 2,
+    organization_revision: beforeCounts.organization_revision + 2,
   })
 })

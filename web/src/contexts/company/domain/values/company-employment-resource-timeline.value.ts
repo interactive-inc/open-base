@@ -77,7 +77,12 @@ export class CompanyEmploymentResourceTimelineValue {
     for (const entry of effective.entries()) {
       const resource = entry[1]
       const status = resource.readText("status")
-      if (resource.state === "void" || status === "TERMINATED") continue
+      if (resource.state === "void") continue
+      if (status === "TERMINATED") {
+        if (periods.length === 0)
+          return new CompanyResourceValidationError("invalid_retirement_period")
+        continue
+      }
       if (status !== "ACTIVE" && status !== "ON_LEAVE")
         return new CompanyResourceValidationError("invalid_resource")
       const nextStart = effective[entry[0] + 1]?.effectiveFrom ?? null

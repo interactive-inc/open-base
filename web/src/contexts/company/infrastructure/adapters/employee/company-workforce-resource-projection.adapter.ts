@@ -1,3 +1,4 @@
+import { isCanonicalEmployeeText } from "@/contexts/company/domain/definitions/is-canonical-employee-text.definition"
 import type { CompanyResourceChangeEntity } from "@/contexts/company/domain/entities/company-resource-change.entity"
 import type { CompanyResourceEntity } from "@/contexts/company/domain/entities/company-resource.entity"
 import { CompanyResourceValidationError } from "@/contexts/company/domain/errors"
@@ -153,11 +154,22 @@ export class CompanyWorkforceResourceProjectionAdapter {
     for (const resource of finalLinks.values()) {
       if (resource.organizationId !== COMPANY_DEFAULT_ORGANIZATION_ID)
         return new CompanyResourceValidationError("invalid_resource")
-      if (resource.state === "void" || resource.effectiveTo !== null) continue
       const accountId = resource.readText("accountId")
       const employeeId = resource.readText("employeeId")
       if (accountId === null || employeeId === null)
         return new CompanyResourceValidationError("invalid_resource")
+      // 終了・取消済みの既存の対応は保全し、新しい対応は保存時点でも未削除のAccountだけに作る。
+      const historical = resource.state === "void" || resource.effectiveTo !== null
+      statements.push(
+        this.c
+          .prepare(`SELECT CASE WHEN EXISTS (
+          SELECT 1 FROM system_accounts WHERE id = ?1 AND closed_at IS NULL
+        ) OR (?3 = 1 AND EXISTS (
+          SELECT 1 FROM company_account_employee_links WHERE account_id = ?1 AND employee_id = ?2
+        )) THEN 1 ELSE json_extract('{}', 'company account link account is closed') END AS ok`)
+          .bind(accountId, employeeId, Number(historical)),
+      )
+      if (historical) continue
       statements.push(
         this.c
           .prepare(`INSERT INTO company_account_employee_links (account_id, employee_id)
@@ -180,14 +192,14 @@ export class CompanyWorkforceResourceProjectionAdapter {
       const phone = resource.readNullableText("phone")
       return (
         name !== null &&
-        name.length <= 200 &&
-        (phone === null || phone === undefined || phone.length <= 64)
+        isCanonicalEmployeeText(name, 200) &&
+        (phone === undefined || isCanonicalEmployeeText(phone, 64))
       )
     }
     if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(resource.id)) return false
     if (resource.type === "employee") {
       const code = resource.readNullableText("employeeCode")
-      return code === null || code === undefined || code.length <= 64
+      return code === undefined || isCanonicalEmployeeText(code, 64)
     }
     const employmentType = resource.readText("employmentType")
     const name = resource.readNullableText("officialName")

@@ -1,4 +1,6 @@
-import { expect, setDefaultTimeout, test } from "bun:test"
+import { SystemTaskApprovalGuardAdapter } from "@system/infrastructure/adapters/workflow/system-task-approval-guard.adapter"
+import { ResolveCompanyProcedureTaskAdapter } from "@/contexts/company/infrastructure/adapters/organization/resolve-company-procedure-task.adapter"
+import { afterEach, expect, setDefaultTimeout, spyOn, test } from "bun:test"
 import { createGovernanceTaskTestContext } from "@/contexts/company/test/governance-task.test-support"
 import { ResolveCompanyGovernanceTaskAdapter } from "@/contexts/company/infrastructure/adapters/organization/resolve-company-governance-task.adapter"
 import { PrepareCompanyProcedureDecisionAdapter } from "@/contexts/company/infrastructure/adapters/organization/prepare-company-procedure-decision.adapter"
@@ -14,12 +16,25 @@ import { SystemD1ProposalAdapter } from "@system/infrastructure/adapters/workflo
 import { SystemD1WorkflowAdapter } from "@system/infrastructure/adapters/workflow/system-d1-workflow.adapter"
 import { StartSystemProcedure } from "@system/application/workflow/start-system-procedure"
 import { ApproveSystemTask } from "@system/application/workflow/approve-system-task"
+import { RejectSystemTask } from "@system/application/workflow/reject-system-task"
+import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 
 // ローカルD1のtemplate作成とDBごとの往復を含むため、既定の5秒を超えることがある。
 setDefaultTimeout(30_000)
 
-async function fixture() {
+async function fixture(requiredParticipants = 2) {
   const c = await createGovernanceTaskTestContext()
+  if (requiredParticipants !== 2) {
+    const body = c.resources.find((resource) => resource.type === "collective-body")
+    if (body === undefined) throw new Error("collective body missing")
+    await c.write([
+      {
+        ...body,
+        revision: 2,
+        attributes: { ...body.attributes, quorumValue: requiredParticipants },
+      },
+    ])
+  }
   const first = c.people[1]
   const second = c.people[2]
   if (first === undefined || second === undefined) throw new Error("reviewers missing")
@@ -74,7 +89,7 @@ async function fixture() {
     if (proposal instanceof Error || proposal === null) throw proposal
     return proposal
   }
-  const prepare = async (person: typeof first) => {
+  const prepare = async (person: typeof first, action: "approve" | "reject" = "approve") => {
     const proposal = await read()
     return new PrepareCompanyProcedureDecisionAdapter(c.context).prepare({
       proposal,
@@ -89,7 +104,7 @@ async function fixture() {
       subjectEmployeeId: c.creator.employeeId,
       targetDepartmentCode: null,
       excludedEmployeeIds: new Set([c.creator.employeeId]),
-      action: "approve",
+      action,
       decidedAt: c.at,
     })
   }
@@ -97,7 +112,11 @@ async function fixture() {
     const prepared = await prepare(person)
     if (prepared instanceof CompanyOperationError) throw prepared
     const saved = await new ApproveSystemTask(
-      new SystemD1WorkflowAdapter({ ...c.context, decisionGuards: prepared.guards }),
+      new SystemD1WorkflowAdapter({
+        ...c.context,
+        decisionGuards: prepared.guards,
+        approvalGuards: prepared.approvalGuards,
+      }),
     ).execute({ ...prepared, comment: null, decidedAt: c.at })
     if (saved instanceof Error) throw saved
     return saved
@@ -129,10 +148,268 @@ test("準備後の会社資格変更は判断と後続段階を巻き戻す", as
   ])
   expect(
     await new ApproveSystemTask(
-      new SystemD1WorkflowAdapter({ ...c.context, decisionGuards: prepared.guards }),
+      new SystemD1WorkflowAdapter({
+        ...c.context,
+        decisionGuards: prepared.guards,
+        approvalGuards: prepared.approvalGuards,
+      }),
     ).execute({ ...prepared, comment: null, decidedAt: c.at }),
   ).toBeInstanceOf(Error)
   expect(await c.prepare(c.first)).toBeInstanceOf(CompanyForbiddenError)
   expect(await c.query.listAttestations(c.started.workflowCase.id)).toEqual([])
   expect(await c.query.listTasks(c.started.workflowCase.id)).toHaveLength(1)
 })
+
+test("最後の反対票で参加定足数を満たすと、次段階を開始し最終段階だけ案件を承認する", async () => {
+  const c = await fixture(3)
+  const third = c.people[3]
+  if (third === undefined) throw new Error("third reviewer missing")
+  for (const taskKey of [c.step.key, c.finalStep.key]) {
+    expect((await c.read()).currentTaskKey).toBe(taskKey)
+    expect(await c.approve(c.first)).toEqual({ caseStatus: "pending", taskOutcome: "pending" })
+    expect(await c.approve(c.second)).toEqual({ caseStatus: "pending", taskOutcome: "pending" })
+    const prepared = await c.prepare(third, "reject")
+    if (prepared instanceof Error) throw prepared
+    expect(prepared.action).toBe("reject")
+    expect(prepared.nextTask?.task.key ?? null).toBe(
+      taskKey === c.step.key ? c.finalStep.key : null,
+    )
+    const result = await new RejectSystemTask(
+      new SystemD1WorkflowAdapter({
+        ...c.context,
+        decisionGuards: prepared.guards,
+        approvalGuards: prepared.approvalGuards,
+      }),
+    ).execute({ ...prepared, comment: "Opposed", decidedAt: c.at })
+    expect(result).toEqual({
+      caseStatus: taskKey === c.step.key ? "pending" : "approved",
+      taskOutcome: "approved",
+    })
+  }
+  expect((await c.read()).status).toBe("approved")
+  const attestations = await c.query.listAttestations(c.started.workflowCase.id)
+  if (attestations instanceof Error) throw attestations
+  expect(attestations.filter((item) => item.action === "reject")).toHaveLength(2)
+})
+
+test("反対票の準備後に賛成票が増えても、成立した合議の次段階を飛ばさない", async () => {
+  const c = await fixture(3)
+  const third = c.people[3]
+  if (third === undefined) throw new Error("third reviewer missing")
+  expect(await c.approve(c.first)).toEqual({ caseStatus: "pending", taskOutcome: "pending" })
+  const prepared = await c.prepare(third, "reject")
+  if (prepared instanceof Error) throw prepared
+  expect(prepared.nextTask?.task.key).toBe(c.finalStep.key)
+  expect(await c.approve(c.second)).toEqual({ caseStatus: "pending", taskOutcome: "pending" })
+  expect(
+    await new RejectSystemTask(
+      new SystemD1WorkflowAdapter({
+        ...c.context,
+        decisionGuards: prepared.guards,
+        approvalGuards: prepared.approvalGuards,
+      }),
+    ).execute({ ...prepared, comment: null, decidedAt: c.at }),
+  ).toEqual({
+    caseStatus: "pending",
+    taskOutcome: "approved",
+  })
+  expect((await c.read()).currentTaskKey).toBe(c.finalStep.key)
+})
+
+// 次段階だけの障害を差し込み、現在の判断者の資格検査は実際に通す。
+afterEach(() => {
+  restoreNext?.()
+  restoreNext = undefined
+})
+let restoreNext: (() => void) | undefined
+
+test.each(["pending", "rejected", "approved"] as const)(
+  "次段階の候補が101人でも反対票は承認になるときだけ巻き戻す: %s",
+  async (outcome) => {
+    const c = await fixture(3)
+    const third = c.people[3]
+    if (third === undefined) throw new Error("third reviewer missing")
+    const original = ResolveCompanyProcedureTaskAdapter.prototype.resolveCompanyProcedureTask
+    const resolver = spyOn(
+      ResolveCompanyProcedureTaskAdapter.prototype,
+      "resolveCompanyProcedureTask",
+    ).mockImplementation(async function (this: ResolveCompanyProcedureTaskAdapter) {
+      const next = await original.call(this)
+      if (next === null || next instanceof Error) throw new Error("next task missing")
+      const candidate = next.task.candidates[0]
+      if (candidate === undefined) throw new Error("next candidate missing")
+      // 会社側の解決は成功させ、共通基盤の候補数上限で段階の作成を失敗させる。
+      return {
+        ...next,
+        task: {
+          ...next.task,
+          candidates: Array.from({ length: 101 }, () => ({
+            ...candidate,
+            accountId: zAccountId.parse(crypto.randomUUID()),
+          })),
+        },
+      }
+    })
+    restoreNext = () => resolver.mockRestore()
+    const prepared = await c.prepare(third, "reject")
+    expect(prepared).not.toBeInstanceOf(Error)
+    if (prepared instanceof Error) throw prepared
+    expect(prepared.nextTask).toBeNull()
+    resolver.mockRestore()
+    if (outcome === "rejected") {
+      const first = await c.prepare(c.first, "reject")
+      if (first instanceof Error) throw first
+      expect(
+        await new RejectSystemTask(
+          new SystemD1WorkflowAdapter({
+            ...c.context,
+            decisionGuards: first.guards,
+            approvalGuards: first.approvalGuards,
+          }),
+        ).execute({ ...first, comment: null, decidedAt: c.at }),
+      ).toEqual({ caseStatus: "pending", taskOutcome: "pending" })
+    } else if (outcome === "approved") {
+      await c.approve(c.first)
+      await c.approve(c.second)
+    }
+    const result = await new RejectSystemTask(
+      new SystemD1WorkflowAdapter({
+        ...c.context,
+        decisionGuards: prepared.guards,
+        approvalGuards: prepared.approvalGuards,
+      }),
+    ).execute({ ...prepared, comment: null, decidedAt: c.at })
+    if (outcome === "approved") expect(result).toBeInstanceOf(Error)
+    else expect(result).toEqual({ caseStatus: outcome, taskOutcome: outcome })
+    const attestations = await c.query.listAttestations(c.started.workflowCase.id)
+    if (attestations instanceof Error) throw attestations
+    expect(attestations).toHaveLength(outcome === "pending" ? 1 : 2)
+    expect(attestations.filter((item) => item.action === "reject")).toHaveLength(
+      outcome === "approved" ? 0 : outcome === "rejected" ? 2 : 1,
+    )
+    expect(await c.query.listTasks(c.started.workflowCase.id)).toHaveLength(1)
+    const proposal = await c.read()
+    expect(proposal.status).toBe(outcome === "rejected" ? "rejected" : "pending")
+    expect(proposal.currentTaskKey).toBe(outcome === "rejected" ? null : c.step.key)
+  },
+)
+
+test.each([false, true])(
+  "次段階を解決できなくても反対票の保留・否決を保存する: %s",
+  async (alreadyRejected) => {
+    const c = await fixture(3)
+    if (alreadyRejected) {
+      const prepared = await c.prepare(c.first, "reject")
+      if (prepared instanceof Error) throw prepared
+      expect(
+        await new RejectSystemTask(
+          new SystemD1WorkflowAdapter({
+            ...c.context,
+            decisionGuards: prepared.guards,
+            approvalGuards: prepared.approvalGuards,
+          }),
+        ).execute({ ...prepared, comment: null, decidedAt: c.at }),
+      ).toEqual({ caseStatus: "pending", taskOutcome: "pending" })
+    }
+    const resolver = spyOn(
+      ResolveCompanyProcedureTaskAdapter.prototype,
+      "resolveCompanyProcedureTask",
+    ).mockResolvedValue(new Error("next authority unavailable"))
+    restoreNext = () => resolver.mockRestore()
+    const prepared = await c.prepare(c.second, "reject")
+    expect(prepared).not.toBeInstanceOf(Error)
+    if (prepared instanceof Error) throw prepared
+    const result = await new RejectSystemTask(
+      new SystemD1WorkflowAdapter({
+        ...c.context,
+        decisionGuards: prepared.guards,
+        approvalGuards: prepared.approvalGuards,
+      }),
+    ).execute({ ...prepared, comment: null, decidedAt: c.at })
+    const outcome = alreadyRejected ? "rejected" : "pending"
+    expect(result).toEqual({ caseStatus: outcome, taskOutcome: outcome })
+    expect(await c.query.listAttestations(c.started.workflowCase.id)).toHaveLength(
+      alreadyRejected ? 2 : 1,
+    )
+    expect(await c.query.listTasks(c.started.workflowCase.id)).toHaveLength(1)
+  },
+)
+
+test("次段階の解決失敗は準備後の賛成票で承認に変わる反対票を巻き戻す", async () => {
+  const c = await fixture(3)
+  const third = c.people[3]
+  if (third === undefined) throw new Error("third reviewer missing")
+  expect(await c.approve(c.first)).toEqual({ caseStatus: "pending", taskOutcome: "pending" })
+  const resolver = spyOn(
+    ResolveCompanyProcedureTaskAdapter.prototype,
+    "resolveCompanyProcedureTask",
+  ).mockResolvedValue(new Error("next authority unavailable"))
+  restoreNext = () => resolver.mockRestore()
+  const prepared = await c.prepare(third, "reject")
+  expect(prepared).not.toBeInstanceOf(Error)
+  if (prepared instanceof Error) throw prepared
+  resolver.mockRestore()
+  expect(await c.approve(c.second)).toEqual({ caseStatus: "pending", taskOutcome: "pending" })
+  expect(
+    await new RejectSystemTask(
+      new SystemD1WorkflowAdapter({
+        ...c.context,
+        decisionGuards: prepared.guards,
+        approvalGuards: prepared.approvalGuards,
+      }),
+    ).execute({ ...prepared, comment: null, decidedAt: c.at }),
+  ).toBeInstanceOf(Error)
+  expect(await c.query.listAttestations(c.started.workflowCase.id)).toHaveLength(2)
+  expect((await c.read()).currentTaskKey).toBe(c.step.key)
+})
+
+test.each([false, true])(
+  "次段階の資格検査の失敗は反対票による承認時だけ保存を止める: %s",
+  async (approving) => {
+    const c = await fixture(3)
+    const third = c.people[3]
+    if (third === undefined) throw new Error("third reviewer missing")
+    const original = ResolveCompanyProcedureTaskAdapter.prototype.resolveCompanyProcedureTask
+    const resolver = spyOn(
+      ResolveCompanyProcedureTaskAdapter.prototype,
+      "resolveCompanyProcedureTask",
+    ).mockImplementation(async function (this: ResolveCompanyProcedureTaskAdapter) {
+      const next = await original.call(this)
+      if (next === null || next instanceof Error) return next
+      return {
+        ...next,
+        guards: [
+          new SystemTaskApprovalGuardAdapter({
+            env: c.context.env,
+            approvalTask: {
+              caseId: c.started.workflowCase.id,
+              taskKey: c.step.key,
+              round: 1,
+            },
+          }).prepare("SELECT json_extract('{}','next_qualification_changed')"),
+        ],
+      }
+    })
+    restoreNext = () => resolver.mockRestore()
+    const prepared = await c.prepare(third, "reject")
+    if (prepared instanceof Error) throw prepared
+    resolver.mockRestore()
+    if (approving) {
+      await c.approve(c.first)
+      await c.approve(c.second)
+    }
+    const result = await new RejectSystemTask(
+      new SystemD1WorkflowAdapter({
+        ...c.context,
+        decisionGuards: prepared.guards,
+        approvalGuards: prepared.approvalGuards,
+      }),
+    ).execute({ ...prepared, comment: null, decidedAt: c.at })
+    if (approving) expect(result).toBeInstanceOf(Error)
+    else expect(result).toEqual({ caseStatus: "pending", taskOutcome: "pending" })
+    expect(await c.query.listAttestations(c.started.workflowCase.id)).toHaveLength(
+      approving ? 2 : 1,
+    )
+    expect(await c.query.listTasks(c.started.workflowCase.id)).toHaveLength(1)
+  },
+)

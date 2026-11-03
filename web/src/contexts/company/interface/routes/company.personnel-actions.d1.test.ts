@@ -21,8 +21,8 @@ async function fixture() {
   let actor: CompanyActorValue | undefined = CompanyActorValue.restore({
     ...f.creator,
     organizationIds: [COMPANY_DEFAULT_ORGANIZATION_ID],
-    capabilities: ["company:admin"],
-    permissions: ["employee:read"],
+    capabilities: ["company:read"],
+    permissions: ["employee:read", "employee:attributes:read"],
   })
   const app = new Hono<CompanyHttpEnvironment>()
     .use("*", async (c, next) => {
@@ -164,7 +164,7 @@ test("会社台帳の読取権限だけ・別organization・未認証では発�
       ...f.creator,
       organizationIds: ["01900060-0000-7000-8000-12268fccf2cc"],
       capabilities: ["company:read"],
-      permissions: ["employee:read"],
+      permissions: ["employee:attributes:read"],
     },
   ]
   for (const value of actors) {

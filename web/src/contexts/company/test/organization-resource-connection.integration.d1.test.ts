@@ -118,10 +118,10 @@ async function createOrganizationFixture(
     return response
   }
   const create = (code: string, key = `create:${code}`) =>
-    writes["organization-units"].$post(
-      { json: { code, name: code, parent_code: null } },
-      { headers: { "idempotency-key": operationKey(key) } },
-    )
+    writes["organization-units"].$post({
+      header: { "idempotency-key": operationKey(key) },
+      json: { code, name: code, parent_code: null },
+    })
   const observe = async (code: string) => {
     const response = await reads["organization-units"][":code"].$get({ param: { code } })
     expect(Number(response.status)).toBe(200)
@@ -134,10 +134,11 @@ async function createOrganizationFixture(
     }
   }
   const rename = async (code: string, name: string, key: string = crypto.randomUUID()) =>
-    writes["organization-units"][":code"].$put(
-      { param: { code }, json: { name, parent_code: null, ...(await observe(code)) } },
-      { headers: { "idempotency-key": operationKey(key) } },
-    )
+    writes["organization-units"][":code"].$put({
+      header: { "idempotency-key": operationKey(key) },
+      param: { code },
+      json: { name, parent_code: null, ...(await observe(code)) },
+    })
   const snapshot = async (asOf = "2026-09-07") => {
     const response = await reads["organization-snapshots"].$get({
       header: { "x-company-organization-id": COMPANY_DEFAULT_ORGANIZATION_ID },
@@ -342,6 +343,20 @@ describe("organization resources and the company period ledger", () => {
     expect(
       Number((await f.adopt({ ...input, reason: "Different request" }, "history-adoption")).status),
     ).toBe(409)
+  })
+
+  test("保存先の形でない操作IDは、組織を保存せず入力の誤りとして断る", async () => {
+    const f = await fixture()
+    await f.connect()
+    const before = await f.state()
+    for (const key of ["smoke", "A8D9AFB7-6C37-41BD-A661-E97CF1D26265"]) {
+      const response = await f.writes["organization-units"].$post({
+        header: { "idempotency-key": key },
+        json: { code: "MALFORMED", name: "MALFORMED", parent_code: null },
+      })
+      expect(Number(response.status)).toBe(422)
+    }
+    expect(await f.state()).toEqual(before)
   })
 
   test("既存の新設・更新と公開APIの更新が同じ組織を変更し、再送で履歴を増やさない", async () => {
@@ -730,13 +745,11 @@ describe("organization resources and the company period ledger", () => {
     expect(
       Number(
         (
-          await f.writes["organization-units"][":code"].$put(
-            {
-              param: { code: "PERIODS" },
-              json: { name: "Old screen", parent_code: null, ...beforeDateChange },
-            },
-            { headers: { "idempotency-key": operationKey("stale-future-period") } },
-          )
+          await f.writes["organization-units"][":code"].$put({
+            header: { "idempotency-key": operationKey("stale-future-period") },
+            param: { code: "PERIODS" },
+            json: { name: "Old screen", parent_code: null, ...beforeDateChange },
+          })
         ).status,
       ),
     ).toBe(409)
@@ -750,10 +763,11 @@ describe("organization resources and the company period ledger", () => {
     expect(
       Number(
         (
-          await f.writes["organization-units"][":code"].$delete(
-            { param: { code: "PERIODS" }, json: await f.observe("PERIODS") },
-            { headers: { "idempotency-key": operationKey("cancel-future-period") } },
-          )
+          await f.writes["organization-units"][":code"].$delete({
+            header: { "idempotency-key": operationKey("cancel-future-period") },
+            param: { code: "PERIODS" },
+            json: await f.observe("PERIODS"),
+          })
         ).status,
       ),
     ).toBe(204)

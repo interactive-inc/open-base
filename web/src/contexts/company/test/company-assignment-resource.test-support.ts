@@ -26,6 +26,13 @@ export async function createCompanyAssignmentResourceTestContext(
   organizationHistory: "initialization" | "confirmed" = "initialization",
 ) {
   const base = await createGovernanceTaskTestContext(databaseOverride)
+  // 公開の直接発令は、入口で検証したtoken版と現在の権限を保存時にも使う。
+  await base.database
+    .prepare(`INSERT OR IGNORE INTO system_iam_role_permissions (role_id, permission_key)
+    SELECT role_id, 'employee:write' FROM system_role_bindings WHERE account_id = ?1
+      AND resource_type IS NULL AND resource_id IS NULL`)
+    .bind(base.creator.accountId)
+    .run()
   let actor: CompanyActorValue | undefined = CompanyActorValue.restore({
     ...base.creator,
     organizationIds: [COMPANY_DEFAULT_ORGANIZATION_ID],
@@ -34,6 +41,7 @@ export async function createCompanyAssignmentResourceTestContext(
   const app = new Hono<CompanyHttpEnvironment>()
   app.use("*", async (context, next) => {
     if (actor !== undefined) context.set("companyActor", actor)
+    context.set("accountTokenVersion", 0)
     context.set("companyClock", () => base.at)
     context.set("database", base.context.var.database)
     context.set("auditContext", base.context.var.auditContext)

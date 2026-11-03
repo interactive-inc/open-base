@@ -1,3 +1,4 @@
+import type { SystemTaskApprovalTarget } from "@system/infrastructure/adapters/workflow/system-task-approval-guard.adapter"
 import { applicableWorkflowSteps } from "@/contexts/company/domain/policies/company-procedure-applicable-steps.policy"
 import { ResolveCompanyGovernanceTaskAdapter } from "@/contexts/company/infrastructure/adapters/organization/resolve-company-governance-task.adapter"
 import { dueAt } from "@/contexts/company/domain/definitions/company-procedure-due-at.definition"
@@ -33,6 +34,7 @@ export type ResolvedCompanyProcedureTask = Readonly<{
 /** Company policyを評価し、Systemへ渡せるAccount候補とopaque資格証拠だけを返す。 */
 async function resolveCompanyProcedureTask(
   input: Readonly<{
+    approvalTask?: SystemTaskApprovalTarget
     c: CompanyContext
     policy: CompanyProcedureDecisionPolicy
     payload: unknown
@@ -73,6 +75,7 @@ async function resolveConfiguredTask(
     const deadline = dueAt(activatedAt, step.due_days)
     const governance = await new ResolveCompanyGovernanceTaskAdapter(input.c).resolve({
       step,
+      approvalTask: input.approvalTask,
       payload: input.payload,
       subjectEmployeeId:
         input.authoritySubjectEmployeeId === undefined
@@ -100,6 +103,7 @@ async function resolveConfiguredTask(
   )
   const before = await new CompanyAuthoritySnapshotGuardAdapter({
     database: input.c.env.DB,
+    approvalTask: input.approvalTask,
   }).prepare({
     employeeCodes,
     accountIds: [],
@@ -122,6 +126,7 @@ async function resolveConfiguredTask(
   if (snapshot instanceof Error) return snapshot
   const after = await new CompanyAuthoritySnapshotGuardAdapter({
     database: input.c.env.DB,
+    approvalTask: input.approvalTask,
   }).prepare({
     employeeCodes,
     accountIds: snapshot.candidates.map((candidate) => candidate.accountId),
@@ -163,6 +168,7 @@ async function resolveConfiguredTask(
   }
 }
 type ResolveCompanyProcedureTaskAdapterContext = Readonly<{
+  approvalTask?: SystemTaskApprovalTarget
   c: CompanyContext
   policy: CompanyProcedureDecisionPolicy
   payload: unknown

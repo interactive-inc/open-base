@@ -45,7 +45,7 @@ export class PrepareAttachmentReadGuardAdapter {
               AND credential.status = 'active' AND credential.revoked_at IS NULL
               AND credential.created_at <= ?4 AND credential.created_at <= ?5
               AND credential.last_used_at >= ?4
-              AND (credential.expires_at IS NULL OR (credential.expires_at > ?4 AND credential.expires_at > ?5))
+              AND (credential.expires_at IS NULL OR (credential.expires_at > ?4 AND credential.expires_at > (SELECT at FROM evaluation)))
               AND (principal.kind <> 'connector' OR connector.status = 'active')))
         ) THEN 1 ELSE json_extract('{}', 'attachment_read_actor_changed') END`).bind(
         authentication.accountId,

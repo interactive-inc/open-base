@@ -5,6 +5,8 @@ export type CompanyContext = Readonly<{
   var: Readonly<{
     database: SystemDatabase
     auditContext: SystemRequestAudit
+    /** 直接発令と同じ保存境界で、入口の操作者の認可を再照合する。 */
+    directPersonnelActionAssertions?: ReadonlyArray<D1PreparedStatement>
   }>
   env: Readonly<{
     DB: D1Database

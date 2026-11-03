@@ -3,6 +3,7 @@ import { CompanySnapshotRevisionError } from "@/contexts/company/domain/errors"
 import { CompanyChangeCursorValue } from "@/contexts/company/domain/values/company-change-cursor.value"
 import { companyResourceTypes } from "@/contexts/company/domain/catalogs/company-resource-type.catalog"
 import { canReadCompanyResource } from "@/contexts/company/interface/operations/company-resource-read-permission"
+import { redactCompanyResourceReasons } from "@/contexts/company/interface/readers/redact-company-resource-reasons"
 import type { CompanyHttpEnvironment } from "@/contexts/company/interface/request-environment/company-request-environment"
 import {
   CompanyAuthenticationRequiredError,
@@ -74,8 +75,14 @@ export const GET = factory.createHandlers(
     })
     if (page instanceof CompanySnapshotRevisionError) throw new CompanyQueryInvalidError(page)
     if (page instanceof Error) throw new CompanyReadUnavailableError(page)
+    const changes = await redactCompanyResourceReasons({
+      database: context.env.DB,
+      organizationId,
+      actor,
+      changes: page.changes,
+    })
     return context.json({
-      data: page.changes,
+      data: changes,
       through_revision: page.throughRevision,
       has_more: page.hasMore,
       next_cursor: JSON.stringify(page.next),

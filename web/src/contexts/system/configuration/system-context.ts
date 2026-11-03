@@ -1,6 +1,7 @@
 import type { SystemReadAuthentication } from "@system/domain/definitions/system-read-authentication.definition"
 import { systemWorkItemSchema } from "@system/infrastructure/schema/system-work-item"
 import type { AccessTokenClaims } from "@system/domain/schemas/auth/access-token-claims.schema"
+import type { AccountId } from "@system/domain/schemas/iam/account-id.schema"
 import * as systemAttachmentSchema from "@system/infrastructure/schema/system-attachment"
 import * as systemCoreSchema from "@system/infrastructure/schema/system-core"
 import * as systemDeliverySchema from "@system/infrastructure/schema/system-delivery"
@@ -99,6 +100,13 @@ export type SystemExternalIdentityContext = Readonly<{
 
 export type SystemPasswordHashContext = Readonly<{
   env: Readonly<{ PEPPER_SECRET?: string }>
+}>
+
+/** 管理者の資格情報の復旧に、合成側が所有する認証手段の失効を同じ保存単位で加える。 */
+export type SystemPasswordCredentialResetContext = Readonly<{
+  var: Readonly<{
+    preparePasswordCredentialReset?: (accountId: AccountId) => ReadonlyArray<D1PreparedStatement>
+  }>
 }>
 
 export type SystemBootstrapContext = Readonly<{

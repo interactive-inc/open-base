@@ -211,6 +211,17 @@ export class CompanyInvariantValidationError extends CompanyHTTPException {
   }
 }
 
+export class CompanyRetirementPeriodInvalidError extends CompanyHTTPException {
+  constructor(cause: unknown) {
+    super({
+      status: 400,
+      code: "invalid_retirement_period",
+      detail: "Retirement must leave at least one employed day",
+      cause,
+    })
+  }
+}
+
 export class CompanyIdempotencyKeyRequiredError extends CompanyHTTPException {
   constructor() {
     super({

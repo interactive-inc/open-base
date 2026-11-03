@@ -17,6 +17,7 @@ import { SystemActiveAccountAdapter } from "@system/infrastructure/adapters/auth
 import { SystemNotificationRepository } from "@system/infrastructure/repositories/notifications/system-notification.repository"
 import { authenticateSystemAccessToken } from "@system/interface/middlewares/authenticate-system-access-token"
 import { systemFactory } from "@system/interface/request-environment/system-factory"
+import { selectVisibleSystemNotificationDeliveryIds } from "@system/interface/operations/select-visible-system-notification-delivery-ids"
 import { zValidator } from "@hono/zod-validator"
 import { z } from "zod"
 
@@ -37,6 +38,13 @@ export const GET = systemFactory.createHandlers(
       throw new SystemInvalidSessionError()
     }
     const query = context.req.valid("query")
+    const visibleDeliveryIds = await selectVisibleSystemNotificationDeliveryIds({
+      database: context.env.DB,
+      recipientAccountId: accountId.data,
+      visibility: context.var.systemNotificationVisibility,
+      ...(query.read === undefined ? {} : { read: query.read === "true" }),
+    })
+    if (visibleDeliveryIds instanceof Error) throw new SystemNotificationUnavailableError()
     const page = await new SystemNotificationRepository({
       context: { env: { DB: context.env.DB } },
     }).findMany({
@@ -44,6 +52,7 @@ export const GET = systemFactory.createHandlers(
       read: query.read === undefined ? null : query.read === "true",
       limit: query.limit,
       offset: query.offset,
+      visibleDeliveryIds,
     })
     if (page instanceof Error) {
       throw new SystemNotificationUnavailableError()

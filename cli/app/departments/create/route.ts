@@ -4,7 +4,7 @@ import { createClient } from "@/lib/http/hc-client"
 import { factory } from "@/factory"
 import { UsageError } from "@/lib/errors"
 
-export const help = `base departments create --code <c> --name <n> [--parent <c>]`
+export const help = `base departments create --code <c> --name <n> [--parent <c>] --idempotency-key <uuid>`
 
 export default factory.createHandlers(
   zValidator(
@@ -14,6 +14,7 @@ export default factory.createHandlers(
       code: z.string().optional(),
       name: z.string().optional(),
       parent: z.string().optional(),
+      "idempotency-key": z.string().uuid().optional(),
     }),
   ),
   async (c) => {
@@ -23,9 +24,12 @@ export default factory.createHandlers(
 
     if (!query.code || !query.name) throw new UsageError("--code, --name が必要です")
 
+    if (query["idempotency-key"] === undefined) throw new UsageError("--idempotency-key が必要です")
+
     const client = await createClient()
 
     const response = await client.company["organization-units"].$post({
+      header: { "idempotency-key": query["idempotency-key"] },
       json: {
         code: query.code,
         name: query.name,

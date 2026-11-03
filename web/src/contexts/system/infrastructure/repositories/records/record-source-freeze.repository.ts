@@ -1,9 +1,17 @@
+import {
+  SystemTaskApprovalGuardAdapter,
+  type SystemTaskApprovalTarget,
+} from "@system/infrastructure/adapters/workflow/system-task-approval-guard.adapter"
 import type { SystemD1Context } from "@system/configuration/system-context"
 import { RecordSourceFreezeEntity } from "@system/domain/entities/record-source-freeze.entity"
 import type { SystemAuditEventEntity } from "@system/domain/entities/system-audit-event.entity"
 import { SystemAuditEventRepository } from "@system/infrastructure/repositories/audit/system-audit-event.repository"
 
-type Context = SystemD1Context & Readonly<{ assertions: ReadonlyArray<D1PreparedStatement> }>
+type Context = SystemD1Context &
+  Readonly<{
+    assertions: ReadonlyArray<D1PreparedStatement>
+    approvalTask?: SystemTaskApprovalTarget
+  }>
 
 /** 停止の世代・監査を同じtransactionへ保存し、解除は読取時の全状態と照合する。 */
 export class RecordSourceFreezeRepository {
@@ -46,11 +54,11 @@ export class RecordSourceFreezeRepository {
       freeze,
       assertions: Object.freeze([
         ...this.c.assertions,
-        this.c.env.DB.prepare(`SELECT CASE WHEN EXISTS (
+        new SystemTaskApprovalGuardAdapter(this.c).prepare(
+          `SELECT CASE WHEN EXISTS (
           SELECT 1 FROM system_record_source_freezes WHERE id=?1 AND snapshot_json IS ?2 AND revision=1
-        ) THEN 1 ELSE json_extract('{}','record_source_freeze_generation_changed') END`).bind(
-          input.id,
-          JSON.stringify(freeze.snapshot),
+        ) THEN 1 ELSE json_extract('{}','record_source_freeze_generation_changed') END`,
+          [input.id, JSON.stringify(freeze.snapshot)],
         ),
       ]),
     })

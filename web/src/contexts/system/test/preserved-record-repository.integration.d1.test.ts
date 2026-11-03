@@ -822,3 +822,155 @@ test("過去のcursorで開示設定の最新版を迂回せず、将来の許�
   expect(effective.records.map((record) => record.recordId)).toEqual([later.record.snapshot.id])
   expect(effective.nextCursor).toBeNull()
 })
+
+test.each(["read", "export"] as const)(
+  "一覧の%sはアプリ時刻の後で期限切れとなった許可をDB時刻で拒否する",
+  async (action) => {
+    const f = await fixture()
+    await f.db.batch([...f.policyStatements, ...f.holdStatements, ...f.finalizeStatements])
+    const appAt = new Date(Date.now() - 5000)
+    const end = new Date(appAt.getTime() + 1000).toISOString()
+    await publishSearchGrant(f, [{ ...searchGrant, actions: [action], validUntil: end }])
+    let clockCalls = 0
+    const result = await searchService(f, () => {
+      clockCalls++
+      return appAt
+    }).execute({ ...searchInput, action })
+    expect(clockCalls).toBe(2)
+    expect(result).toBeInstanceOf(Error)
+    expect(
+      await f.db
+        .prepare(
+          "SELECT count(*) AS count FROM system_audit_events WHERE action = 'system.record.searched'",
+        )
+        .first<Record<string, unknown>>(),
+    ).toEqual({ count: 0 })
+  },
+)
+
+for (const action of ["read", "export"] as const) {
+  test.each(["account", "matching"] as const)(
+    `一覧の${action}は期限後も有効な同一許可だけを使う（%s）`,
+    async (kind) => {
+      const f = await fixture()
+      await f.db.batch([...f.policyStatements, ...f.holdStatements, ...f.finalizeStatements])
+      const appAt = new Date(Date.now() - 5000)
+      const expired = {
+        ...searchGrant,
+        actions: [action],
+        validUntil: new Date(appAt.getTime() + 1000).toISOString(),
+      }
+      const remaining = {
+        ...searchGrant,
+        actions: [action],
+        ...(kind === "account" ? { accountId: "another-reader" } : {}),
+      }
+      await publishSearchGrant(
+        f,
+        kind === "matching"
+          ? [{ ...expired, accountId: "another-reader" }, remaining]
+          : [expired, remaining],
+      )
+      const result = await searchService(f, () => appAt).execute({ ...searchInput, action })
+      if (kind === "matching") {
+        if (result instanceof Error) throw result
+        expect(result.records.map((record) => record.recordId)).toEqual([f.record.snapshot.id])
+      } else expect(result).toBeInstanceOf(Error)
+      expect(
+        await f.db
+          .prepare(
+            "SELECT count(*) AS count FROM system_audit_events WHERE action = 'system.record.searched'",
+          )
+          .first<Record<string, unknown>>(),
+      ).toEqual({ count: kind === "matching" ? 1 : 0 })
+    },
+  )
+}
+
+test.each(["read", "export"] as const)(
+  "一覧の%sの最終保存は開始時刻を含み、終了時刻を含めない",
+  async (action) => {
+    const f = await fixture()
+    await f.db.batch([...f.policyStatements, ...f.holdStatements, ...f.finalizeStatements])
+    const start = Date.now() + 60000
+    const end = start + 1000
+    await publishSearchGrant(f, [
+      {
+        ...searchGrant,
+        actions: [action],
+        validFrom: new Date(start).toISOString(),
+        validUntil: new Date(end).toISOString(),
+      },
+    ])
+    const policy = await new PreservedRecordDisclosurePolicyRepository({
+      env: { DB: f.db },
+      assertions: [],
+    }).findCurrent(f.policy.snapshot.id)
+    if (policy === null || policy instanceof Error) throw new Error("policy missing")
+    const writer = new DisclosePreservedRecordIndexPersistenceAdapter({
+      env: { DB: f.db },
+      authorizationAssertions: () => [f.db.prepare("SELECT 1")],
+    })
+    for (const at of [start, end - 1]) {
+      expect(
+        await writer.write({
+          policies: [policy],
+          accountId: "reader",
+          action,
+          purpose: searchInput.purpose,
+          at: new Date(at),
+          audit: audit(
+            { ...f.record.snapshot, auditEventId: crypto.randomUUID() },
+            "system.record.searched",
+            "system:preserved-record-search",
+          ),
+        }),
+      ).not.toBeInstanceOf(Error)
+    }
+    for (const mismatch of [
+      { accountId: "another-reader", action, purpose: searchInput.purpose },
+      {
+        accountId: "reader",
+        action: action === "read" ? ("export" as const) : ("read" as const),
+        purpose: searchInput.purpose,
+      },
+      { accountId: "reader", action, purpose: "another-purpose" },
+    ]) {
+      expect(
+        await writer.write({
+          policies: [policy],
+          ...mismatch,
+          at: new Date(start),
+          audit: audit(
+            { ...f.record.snapshot, auditEventId: crypto.randomUUID() },
+            "system.record.searched",
+            "system:preserved-record-search",
+          ),
+        }),
+      ).toBeInstanceOf(Error)
+    }
+    for (const at of [start - 1, end, end + 1]) {
+      expect(
+        await writer.write({
+          policies: [policy],
+          accountId: "reader",
+          action,
+          purpose: searchInput.purpose,
+          at: new Date(at),
+          audit: audit(
+            { ...f.record.snapshot, auditEventId: crypto.randomUUID() },
+            "system.record.searched",
+            "system:preserved-record-search",
+          ),
+        }),
+      ).toBeInstanceOf(Error)
+    }
+    expect(
+      await f.db
+        .prepare(
+          "SELECT count(*) AS count FROM system_audit_events WHERE action = 'system.record.searched'",
+        )
+        .first<Record<string, unknown>>(),
+    ).toEqual({ count: 2 })
+  },
+)

@@ -23,13 +23,13 @@ export class SystemMachineOperationAuthorizationAdapter {
   async prepare(
     input: Readonly<{
       actor: SystemMachineOperationActor
-      resource: Readonly<{ type: string; id: string }>
+      resource: Readonly<{ type: string; id: string }> | null
       permissions: ReadonlyArray<string>
       now: Date
     }>,
   ): Promise<ReadonlyArray<D1PreparedStatement> | "forbidden" | Error> {
     if (
-      !roleBindingResourceSchema.safeParse(input.resource).success ||
+      (input.resource !== null && !roleBindingResourceSchema.safeParse(input.resource).success) ||
       input.permissions.length === 0 ||
       input.permissions.length > 100 ||
       input.permissions.some((permission) => !permissionKeySchema.safeParse(permission).success)
@@ -66,7 +66,8 @@ export class SystemMachineOperationAuthorizationAdapter {
       JOIN system_iam_role_permissions permission ON permission.role_id = binding.role_id
       WHERE binding.account_id = ?1 AND binding.created_at <= ?5 AND binding.revoked_at IS NULL
         AND role.resource_type IS binding.resource_type
-        AND (binding.resource_type IS NULL OR (binding.resource_type = ?6 AND binding.resource_id = ?7))
+        AND ((binding.resource_type IS NULL AND binding.resource_id IS NULL)
+          OR (?6 IS NOT NULL AND binding.resource_type = ?6 AND binding.resource_id = ?7))
     )
     SELECT CASE WHEN EXISTS (
       SELECT 1 FROM system_accounts account
@@ -86,16 +87,30 @@ export class SystemMachineOperationAuthorizationAdapter {
         SELECT 1 FROM json_each(?8) required
         WHERE NOT EXISTS (SELECT 1 FROM actor_permissions WHERE key = required.value)
       )
-    ) THEN 1 ELSE json_extract('', '$') END AS ok`).bind(
+    ) THEN 1 ELSE json_extract('{}', 'system_machine_authorization_changed') END AS ok`).bind(
         input.actor.accountId,
         input.actor.tokenVersion,
         input.actor.credentialId,
         input.actor.issuedAtMs,
         input.now.getTime(),
-        input.resource.type,
-        input.resource.id,
+        input.resource?.type ?? null,
+        input.resource?.id ?? null,
         JSON.stringify(input.permissions),
       ),
     ]
+  }
+
+  static rejected(cause: unknown): boolean {
+    const visited = new Set<Error>()
+    for (let error = cause; error instanceof Error && !visited.has(error); error = error.cause) {
+      if (
+        /(?:bad JSON path:|JSON path error near)\s*['"]system_machine_authorization_changed['"]/i.test(
+          error.message,
+        )
+      )
+        return true
+      visited.add(error)
+    }
+    return false
   }
 }

@@ -44,7 +44,7 @@ test("人事イベントを記録順に再開でき、訂正元と訂正後の�
       ...f.creator,
       organizationIds: [COMPANY_DEFAULT_ORGANIZATION_ID],
       capabilities: ["company:read"],
-      permissions: ["employee:read"],
+      permissions: ["employee:attributes:read"],
     }),
   }
   const app = new Hono<CompanyHttpEnvironment>()

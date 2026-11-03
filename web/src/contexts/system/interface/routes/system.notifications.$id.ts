@@ -11,6 +11,7 @@ import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { SystemNotificationRepository } from "@system/infrastructure/repositories/notifications/system-notification.repository"
 import { authenticateSystemAccessToken } from "@system/interface/middlewares/authenticate-system-access-token"
 import { systemFactory } from "@system/interface/request-environment/system-factory"
+import { selectVisibleSystemNotificationDeliveryIds } from "@system/interface/operations/select-visible-system-notification-delivery-ids"
 import { zValidator } from "@hono/zod-validator"
 import { z } from "zod"
 
@@ -26,9 +27,20 @@ export const GET = systemFactory.createHandlers(
     if (!accountId.success) {
       throw new SystemInvalidSessionError()
     }
+    const deliveryId = context.req.valid("param").id
+    const visibleDeliveryIds = await selectVisibleSystemNotificationDeliveryIds({
+      database: context.env.DB,
+      recipientAccountId: accountId.data,
+      visibility: context.var.systemNotificationVisibility,
+      deliveryId,
+    })
+    if (visibleDeliveryIds instanceof Error) throw new SystemNotificationUnavailableError()
+    if (visibleDeliveryIds !== null && !visibleDeliveryIds.includes(deliveryId)) {
+      throw new SystemNotificationNotFoundError()
+    }
     const notification = await new SystemNotificationRepository({
       context: { env: { DB: context.env.DB } },
-    }).findByDeliveryIdForAccount(context.req.valid("param").id, accountId.data)
+    }).findByDeliveryIdForAccount(deliveryId, accountId.data)
     if (notification instanceof Error) {
       throw new SystemNotificationUnavailableError()
     }

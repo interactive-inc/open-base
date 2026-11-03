@@ -104,6 +104,7 @@ describe("System Identity HTTP", () => {
     })
 
     const external = await client.system.accounts[":accountId"].identities.$post({
+      header: { "x-system-step-up": stepUpToken },
       param: { accountId: targetAccountId },
       json: {
         provider: "oidc",
@@ -118,6 +119,7 @@ describe("System Identity HTTP", () => {
     if (!("id" in externalBody)) return
 
     const password = await client.system.accounts[":accountId"].identities.$post({
+      header: { "x-system-step-up": stepUpToken },
       param: { accountId: targetAccountId },
       json: {
         provider: "password",
@@ -140,6 +142,7 @@ describe("System Identity HTTP", () => {
       .first<Record<string, unknown>>()
     const passwordReset = await client.system.accounts[":accountId"]["password-credentials"].$patch(
       {
+        header: { "x-system-step-up": stepUpToken },
         param: { accountId: targetAccountId },
         json: { password: "another correct horse battery staple" },
       },
@@ -168,12 +171,14 @@ describe("System Identity HTTP", () => {
     expect(await detailed.json()).toMatchObject({ provider: "password", state: "active" })
 
     const revoked = await client.system.accounts[":accountId"].identities[":identityId"].$delete({
+      header: { "x-system-step-up": stepUpToken },
       param: { accountId: targetAccountId, identityId: externalBody.id },
     })
     expect(revoked.status).toBe(204)
 
     const lastActive = await client.system.accounts[":accountId"].identities[":identityId"].$delete(
       {
+        header: { "x-system-step-up": stepUpToken },
         param: { accountId: targetAccountId, identityId: passwordBody.id },
       },
     )
