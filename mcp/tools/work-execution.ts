@@ -4,9 +4,28 @@ import {
   definitionInput,
   definitionQuery,
   executionQuery,
+  executionInput,
 } from "../../web/src/contexts/work-execution/domain/work-execution-input"
 
 export function registerWorkExecutionTools(server: McpServer) {
+  server.tool(
+    "work_execution_record",
+    "Report a work execution through the current account. Mark AI assistance and the trigger as reported facts. Reuse the same execution ID for retries.",
+    { execution: executionInput },
+    async ({ execution }) => ({
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(
+            await apiRequest("/work-execution/runs", {
+              method: "POST",
+              json: execution,
+            }),
+          ),
+        },
+      ],
+    }),
+  )
   server.tool(
     "work_execution_definitions",
     "List registered work definitions and assigned agents.",

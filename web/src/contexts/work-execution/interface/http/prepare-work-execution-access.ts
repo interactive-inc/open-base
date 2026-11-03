@@ -10,11 +10,7 @@ export async function prepareWorkExecutionAccess(c: Context<HonoEnv>, permission
   const authentication = c.var.bearerReadAuthentication
   if (!authentication) throw new HTTPException(401)
   const machine = authentication.machineCredentialId !== null
-  if (
-    (permission === "work_execution:record" && !machine) ||
-    (permission === "work_execution:manage" && machine)
-  )
-    throw new HTTPException(403)
+  if (permission === "work_execution:manage" && machine) throw new HTTPException(403)
   const database = c.env.DB
   const now = c.var.now()
   const proof = await prepareSystemReadAuthorization({ database, authentication, at: now })
@@ -26,6 +22,7 @@ export async function prepareWorkExecutionAccess(c: Context<HonoEnv>, permission
     database,
     now,
     accountId: authentication.accountId,
+    machine,
     guards,
     audit(targetType: string, targetId: string, revision: number) {
       const event = SystemAuditEventEntity.create({

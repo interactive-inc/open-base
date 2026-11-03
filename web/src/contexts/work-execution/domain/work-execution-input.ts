@@ -12,14 +12,16 @@ export const definitionInput = z
     name: label,
     description: z.string().trim().max(500),
     tags: z.array(label).max(20).default([]),
-    agent_id: z.uuid(),
+    agent_id: z.uuid().nullable().default(null),
     owner_employee_id: z.uuid(),
     external_app_id: label.nullable().default(null),
     document_reference: z.string().trim().min(1).max(500).nullable().default(null),
+    execution_note: z.string().trim().max(500).default(""),
     status: z.enum(["active", "retired"]),
     reason: z.string().trim().min(1).max(500),
   })
   .refine((value) => value.expected_revision !== 0 || value.status === "active")
+  .refine((value) => value.external_app_id === null || value.agent_id !== null)
 
 const reference = z.strictObject({ kind: workSlug, id: label })
 export const executionInput = z
@@ -33,8 +35,12 @@ export const executionInput = z
     summary: z.string().trim().max(1000),
     references: z.array(reference).max(20).default([]),
     corrects_id: z.uuid().nullable().default(null),
+    trigger: z.enum(["manual", "scheduled", "other"]).nullable().default(null),
+    ai_assisted: z.boolean().default(false),
+    tool_label: label.nullable().default(null),
   })
   .refine((value) => value.started_at <= value.finished_at && value.corrects_id !== value.id)
+  .refine((value) => value.tool_label === null || value.ai_assisted)
 
 const page = {
   limit: z.coerce.number().int().min(1).max(100).default(50),

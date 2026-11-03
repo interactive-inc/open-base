@@ -28,7 +28,7 @@ export const GET = factory.createHandlers(
   },
 )
 
-// @authorization permission - 機械資格情報と担当agentを照合する
+// @authorization permission - 記録権限と認証済みの報告者を検査し、機械認証では担当agentを照合する
 export const POST = factory.createHandlers(
   authenticateSystemAccessToken,
   zValidator("json", executionInput),

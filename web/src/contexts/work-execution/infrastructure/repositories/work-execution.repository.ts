@@ -10,6 +10,7 @@ import { WorkExecutionConflict } from "@/contexts/work-execution/domain/errors"
 type StorageContext = Readonly<{
   database: D1Database
   accountId: string
+  machine: boolean
   now: Date
   guards: ReadonlyArray<D1PreparedStatement>
   audit: (target: string, id: string, revision: number) => ReadonlyArray<D1PreparedStatement>
@@ -40,7 +41,7 @@ export class WorkExecutionRepository {
   async executions(query: z.infer<typeof executionQuery>) {
     const statement = this.c.database
       .prepare(`
-      SELECT run.agent_id, run.definition_id, run.received_at, run.snapshot_json, definition.owner_employee_id
+      SELECT run.agent_id, run.reporter_account_id, run.definition_id, run.received_at, run.snapshot_json, definition.owner_employee_id
       FROM work_execution_runs run JOIN work_execution_definitions definition
         ON definition.id = run.definition_id AND definition.revision = run.definition_revision
       WHERE (?1 IS NULL OR definition.slug = ?1) AND (?2 IS NULL OR run.agent_id = ?2)
@@ -48,7 +49,7 @@ export class WorkExecutionRepository {
         AND (?4 IS NULL OR EXISTS (SELECT 1 FROM json_each(run.snapshot_json, '$.references') reference
           WHERE json_extract(reference.value, '$.kind') = ?4 AND json_extract(reference.value, '$.id') = ?5))
         AND (?6 IS NULL OR json_extract(run.snapshot_json, '$.started_at') >= ?6)
-      ORDER BY run.received_at DESC, run.agent_id, run.id LIMIT ?7 OFFSET ?8
+      ORDER BY run.received_at DESC, run.reporter_account_id, run.id LIMIT ?7 OFFSET ?8
     `)
       .bind(
         query.slug ?? null,
@@ -104,16 +105,19 @@ export class WorkExecutionRepository {
     const snapshot = JSON.stringify(input)
     const write = db
       .prepare(`
-      INSERT INTO work_execution_runs (agent_id, id, definition_id, definition_revision, snapshot_json, received_at)
+      INSERT INTO work_execution_runs (reporter_account_id, agent_id, id, definition_id, definition_revision, snapshot_json, received_at)
       VALUES (
-        (SELECT principal.id FROM system_principals principal WHERE principal.account_id = ?1 AND principal.kind = 'agent'),
+        ?1,
+        CASE WHEN ?8 = 1 THEN (SELECT principal.id FROM system_principals principal
+          WHERE principal.account_id = ?1 AND principal.kind = 'agent') END,
         ?2,
         (SELECT definition.id FROM work_execution_definitions definition
-         JOIN system_principals principal ON principal.id = definition.agent_id AND principal.account_id = ?1
          WHERE definition.slug = ?3 AND definition.revision = ?4 AND definition.status = 'active'
+           AND (?8 = 0 OR EXISTS (SELECT 1 FROM system_principals principal
+             WHERE principal.id = definition.agent_id AND principal.account_id = ?1 AND principal.kind = 'agent'))
            AND NOT EXISTS (SELECT 1 FROM work_execution_definitions later WHERE later.slug = ?3 AND later.revision > ?4)
            AND (?7 IS NULL OR EXISTS (SELECT 1 FROM work_execution_runs prior
-             WHERE prior.id = ?7 AND prior.agent_id = principal.id AND prior.definition_id = definition.id))),
+             WHERE prior.id = ?7 AND prior.reporter_account_id = ?1 AND prior.definition_id = definition.id))),
         ?4, ?5, ?6)
     `)
       .bind(
@@ -124,12 +128,12 @@ export class WorkExecutionRepository {
         snapshot,
         this.c.now.toISOString(),
         input.corrects_id,
+        Number(this.c.machine),
       )
     const replay = db
       .prepare(`
       SELECT run.id, run.definition_revision AS revision, run.snapshot_json FROM work_execution_runs run
-      JOIN system_principals principal ON principal.id = run.agent_id
-      WHERE principal.account_id = ? AND principal.kind = 'agent' AND run.id = ?
+      WHERE run.reporter_account_id = ? AND run.id = ?
     `)
       .bind(this.c.accountId, input.id)
     return this.write({

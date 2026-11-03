@@ -7,6 +7,7 @@ import { readJsonObjectFile } from "@/lib/input/read-json-file"
 
 const help = `base work-execution definitions list [--slug <slug> --tag <tag> --revision <n>]
 base work-execution definitions save --data <definition.json>
+base work-execution runs record --data <run.json>
 base work-execution runs list [--slug <slug> --agent-id <uuid> --tag <tag> --since <utc>]
 base work-execution runs list --reference-kind <kind> --reference-id <id>`
 
@@ -43,8 +44,8 @@ export default factory.createHandlers(
       ...rest
     } = flags
     if (
-      resource === "definitions" &&
-      operation === "save" &&
+      ((resource === "definitions" && operation === "save") ||
+        (resource === "runs" && operation === "record")) &&
       data &&
       Object.keys(flags).length === 1
     ) {

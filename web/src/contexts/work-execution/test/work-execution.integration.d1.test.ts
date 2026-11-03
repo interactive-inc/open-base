@@ -30,15 +30,16 @@ test("records only assigned agent executions and retains idempotent history afte
   }
   const assigned = await seedAgent()
   const unrelated = await seedAgent()
-  const repository = (accountId: string) =>
+  const repository = (accountId: string, machine = true) =>
     new WorkExecutionRepository({
       database,
       accountId,
+      machine,
       now: new Date(),
       guards: [],
       audit: () => [],
     })
-  const definitions = repository(owner.accountId)
+  const definitions = repository(owner.accountId, false)
   const definition = definitionInput.parse({
     slug: "example-follow-up",
     expected_revision: 0,
@@ -67,6 +68,12 @@ test("records only assigned agent executions and retains idempotent history afte
   const agent = repository(assigned.accountId)
   const [first, second] = await Promise.all([agent.record(run), agent.record(run)])
   expect(first).toEqual(second)
+  const manual = await definitions.record({
+    ...run,
+    id: crypto.randomUUID(),
+    ai_assisted: true,
+    trigger: "scheduled",
+  })
   await expect(agent.record({ ...run, summary: "Different" })).rejects.toThrow(
     "work_execution_conflict",
   )
@@ -81,7 +88,14 @@ test("records only assigned agent executions and retains idempotent history afte
   await expect(agent.record({ ...run, id: crypto.randomUUID() })).rejects.toThrow(
     "work_execution_conflict",
   )
-  expect(await definitions.executions({ tag: "customer", limit: 10, offset: 0 })).toMatchObject([
+  expect(
+    await definitions.executions({
+      tag: "customer",
+      agent_id: assigned.principalId,
+      limit: 10,
+      offset: 0,
+    }),
+  ).toMatchObject([
     {
       id: run.id,
       agent_id: assigned.principalId,
@@ -89,4 +103,14 @@ test("records only assigned agent executions and retains idempotent history afte
       definition_revision: 1,
     },
   ])
+  expect(await definitions.executions({ slug: definition.slug, limit: 10, offset: 0 })).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        id: manual.id,
+        agent_id: null,
+        reporter_account_id: owner.accountId,
+        ai_assisted: true,
+      }),
+    ]),
+  )
 }, 60_000)

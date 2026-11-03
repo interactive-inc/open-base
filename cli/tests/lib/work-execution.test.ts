@@ -30,9 +30,13 @@ test("CLI sends definition updates and execution filters to their respective API
     await writeFile(file, JSON.stringify(definition))
     expect((await run(["work-execution", "definitions", "save", "--data", file])).code).toBe(0)
     expect((await run(["work-execution", "runs", "list", "--slug", definition.slug])).code).toBe(0)
+    const report = { slug: definition.slug, ai_assisted: true, trigger: "scheduled" }
+    await writeFile(file, JSON.stringify(report))
+    expect((await run(["work-execution", "runs", "record", "--data", file])).code).toBe(0)
     expect(requests).toEqual([
       { path: "/api/work-execution/definitions", query: "", body: definition },
       { path: "/api/work-execution/runs", query: "?slug=example-follow-up", body: null },
+      { path: "/api/work-execution/runs", query: "", body: report },
     ])
   } finally {
     await server.stop(true)
