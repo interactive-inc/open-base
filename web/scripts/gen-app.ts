@@ -527,7 +527,9 @@ export function renderVoidRoutes(registrations: readonly RouteRegistration[]): M
 
 function listExistingVoidRoutes(): string[] {
   if (!existsSync(VOID_ROUTES_ROOT)) return []
-  return Array.from(new Glob("**/*.ts").scanSync(VOID_ROUTES_ROOT)).sort()
+  return Array.from(new Glob("**/*.ts").scanSync(VOID_ROUTES_ROOT), (file) =>
+    file.replaceAll("\\", "/"),
+  ).sort()
 }
 
 // import されたとき（テスト等）に app.ts を書き換えないよう、実行はエントリ時に限る。

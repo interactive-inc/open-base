@@ -163,6 +163,10 @@ const performanceReviewSheetsIdCommandsRoute: RouteModuleLoader = () =>
   import("@/contexts/performance-review/interface/routes/performance-review.sheets.$id.commands")
 const performanceReviewSheetsIdHistoryRoute: RouteModuleLoader = () =>
   import("@/contexts/performance-review/interface/routes/performance-review.sheets.$id.history")
+const workExecutionDefinitionsRoute: RouteModuleLoader = () =>
+  import("@/contexts/work-execution/interface/routes/work-execution.definitions")
+const workExecutionRunsRoute: RouteModuleLoader = () =>
+  import("@/contexts/work-execution/interface/routes/work-execution.runs")
 const systemAccountsRoute: RouteModuleLoader = () =>
   import("@system/interface/routes/system.accounts")
 const systemAccountsAccountIdRoute: RouteModuleLoader = () =>
@@ -574,6 +578,10 @@ const ROUTES: ReadonlyArray<readonly [RouteMethod, string, RouteModuleLoader]> =
   ["GET", "/system/work-items/:id/history", systemWorkItemsIdHistoryRoute],
   ["POST", "/system/work-items/:id/results", systemWorkItemsIdResultsRoute],
   ["POST", "/system/work-items/:id/return", systemWorkItemsIdReturnRoute],
+  ["GET", "/work-execution/definitions", workExecutionDefinitionsRoute],
+  ["POST", "/work-execution/definitions", workExecutionDefinitionsRoute],
+  ["GET", "/work-execution/runs", workExecutionRunsRoute],
+  ["POST", "/work-execution/runs", workExecutionRunsRoute],
 ]
 
 export function createRuntimeApp() {

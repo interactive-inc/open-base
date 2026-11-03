@@ -17,9 +17,11 @@
     "interface": ["capabilities", "operations", "ports", "request-environment", "routes"]
   },
   "businessAreaOwners": {
-    "performance-review": "performance-review"
+    "performance-review": "performance-review",
+    "work-execution": "work-execution"
   },
   "routeOwners": {
-    "performance-review": "performance-review"
+    "performance-review": "performance-review",
+    "work-execution": "work-execution"
   }
 }

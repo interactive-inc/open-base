@@ -37,6 +37,20 @@ test("MCP exposes foundation tools and rejects business paths and traversal", as
       expect(result.isError).toBe(true)
     }
     expect(requests).toEqual(["/api/system/health"])
+    const definitions = await client.callTool({
+      name: "work_execution_definitions",
+      arguments: { slug: "example-follow-up", revision: 1 },
+    })
+    expect(definitions.isError).not.toBe(true)
+    const executions = await client.callTool({
+      name: "work_execution_runs",
+      arguments: { slug: "example-follow-up", tag: "customer" },
+    })
+    expect(executions.isError).not.toBe(true)
+    expect(requests.slice(1)).toEqual([
+      "/api/work-execution/definitions",
+      "/api/work-execution/runs",
+    ])
   } finally {
     await client.close()
     server.stop(true)

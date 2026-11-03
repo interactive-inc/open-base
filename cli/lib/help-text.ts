@@ -57,6 +57,7 @@ commands:
   notifications delete <id>                   通知を削除
   work-items                                  作業の依頼・受領・成果確認・責任の引き継ぎ
   reviews                                     評価期間・目標・自己評価・承認・履歴
+  work-execution                              業務定義とAgentの実行履歴
   batch                                       バッチ状況
   roles                                       ロール一覧（iam:read）
   accounts                                    アカウント一覧（iam:read）

@@ -83,6 +83,8 @@ import * as performanceReviewSheetsRoute from "@/contexts/performance-review/int
 import * as performanceReviewSheetsIdRoute from "@/contexts/performance-review/interface/routes/performance-review.sheets.$id"
 import * as performanceReviewSheetsIdCommandsRoute from "@/contexts/performance-review/interface/routes/performance-review.sheets.$id.commands"
 import * as performanceReviewSheetsIdHistoryRoute from "@/contexts/performance-review/interface/routes/performance-review.sheets.$id.history"
+import * as workExecutionDefinitionsRoute from "@/contexts/work-execution/interface/routes/work-execution.definitions"
+import * as workExecutionRunsRoute from "@/contexts/work-execution/interface/routes/work-execution.runs"
 import * as systemAccountsRoute from "@system/interface/routes/system.accounts"
 import * as systemAccountsAccountIdRoute from "@system/interface/routes/system.accounts.$accountId"
 import * as systemAccountsAccountIdIdentitiesRoute from "@system/interface/routes/system.accounts.$accountId.identities"
@@ -533,6 +535,10 @@ const routePart30 = createRouteApp()
   .get("/system/work-items/:id/history", ...systemWorkItemsIdHistoryRoute.GET)
   .post("/system/work-items/:id/results", ...systemWorkItemsIdResultsRoute.POST)
   .post("/system/work-items/:id/return", ...systemWorkItemsIdReturnRoute.POST)
+  .get("/work-execution/definitions", ...workExecutionDefinitionsRoute.GET)
+  .post("/work-execution/definitions", ...workExecutionDefinitionsRoute.POST)
+  .get("/work-execution/runs", ...workExecutionRunsRoute.GET)
+  .post("/work-execution/runs", ...workExecutionRunsRoute.POST)
 
 export const app = createAppBase()
   .route("/", routePart0)

@@ -1,4 +1,5 @@
 import { registerPerformanceReviewTools } from "@/tools/performance-review"
+import { registerWorkExecutionTools } from "@/tools/work-execution"
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod"
@@ -161,6 +162,7 @@ server.tool(
 )
 
 registerPerformanceReviewTools(server)
+registerWorkExecutionTools(server)
 
 const transport = new StdioServerTransport()
 await server.connect(transport)
