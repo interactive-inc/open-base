@@ -12,7 +12,7 @@ Bunとportlessを用意し、次を実行します。
 vp install
 bun run --cwd web setup:dev-vars
 bun run --cwd web db:migrate:local
-make dev
+vp run dev
 ```
 
 画面とAPIは `https://base.localhost` です。APIは `/api` 配下にあります。直接の接続先は `http://127.0.0.1:18787` ですが、パスキーはIPアドレスのoriginで使えないため、ブラウザではホスト名で開きます。ホスト名は `portless.json` が正本です。
@@ -142,8 +142,11 @@ CLIの`base reviews`からも同じ操作を行えます。期間ごとに評価
 ## 検証とDB
 
 ```sh
-make ci
+vp run check
+vp run test
 ```
+
+コードを整形するには `vp run format`、lintだけを実行するには `vp run lint` を使います。
 
 新規DBにはSystem・Companyと評価contextのテーブル、view、制約、初期カタログを作成します。実データや社員の初期データは投入しません。ローカルD1の受入テストで初期化、認証、雇用、組織、判断資格、承認、通知、監査を検証します。
 
@@ -157,7 +160,7 @@ make ci
 
 Cloudflareの配備先は、管理対象外の `web/void.deploy.json` の `cloudflare` に設定します。`void.config.ts` がこの設定を読み、ビルドと移行前の検査で同じ配備先を使います。秘密値はこのファイルへ書かず、配備先の秘密値として管理します。
 
-D1の `migrations_dir` は `src/db/migrations` にします。`make ci` が通った変更で、次を実行します。
+D1の `migrations_dir` は `src/db/migrations` にします。`vp run check` と `vp run test` が通った変更で、次を実行します。
 
 ```sh
 bun run --cwd web db:migrate

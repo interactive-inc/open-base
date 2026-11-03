@@ -1,4 +1,7 @@
 import { REVIEW_PERMISSION_KEYS } from "@/contexts/performance-review/domain/catalogs/review-permission.catalog"
+import { CLIENT_PROJECT_PERMISSION_KEYS } from "@/contexts/client-project/domain/catalogs/client-project-permission.catalog"
+import { CUSTOMER_PERMISSION_KEYS } from "@/contexts/customer/domain/catalogs/customer-permission.catalog"
+import { OFFERING_PERMISSION_KEYS } from "@/contexts/offering/domain/catalogs/offering-permission.catalog"
 import { API_COMPOSITION_PERMISSION_KEYS } from "@/api/http/permissions/api-composition-permission-key.catalog"
 import { SYSTEM_FEATURE_PERMISSION_KEYS } from "@system/domain/catalogs/iam/system-feature-permission-key.catalog"
 import { SYSTEM_PERMISSION_KEYS } from "@system/domain/catalogs/iam/system-permission-key.catalog"
@@ -10,6 +13,9 @@ export const PERMISSION_KEYS = [
   ...SYSTEM_FEATURE_PERMISSION_KEYS,
   ...API_COMPOSITION_PERMISSION_KEYS,
   ...REVIEW_PERMISSION_KEYS,
+  ...CLIENT_PROJECT_PERMISSION_KEYS,
+  ...CUSTOMER_PERMISSION_KEYS,
+  ...OFFERING_PERMISSION_KEYS,
 ] as const
 
 /**
@@ -20,6 +26,9 @@ export const PERMISSION_KEYS_BY_CONTEXT = {
   system: [...SYSTEM_PERMISSION_KEYS, ...SYSTEM_FEATURE_PERMISSION_KEYS],
   "api-composition": API_COMPOSITION_PERMISSION_KEYS,
   "performance-review": REVIEW_PERMISSION_KEYS,
+  "client-project": CLIENT_PROJECT_PERMISSION_KEYS,
+  customer: CUSTOMER_PERMISSION_KEYS,
+  offering: OFFERING_PERMISSION_KEYS,
 } as const
 
 export type PermissionContext = keyof typeof PERMISSION_KEYS_BY_CONTEXT

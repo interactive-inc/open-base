@@ -57,6 +57,9 @@ commands:
   notifications delete <id>                   通知を削除
   work-items                                  作業の依頼・受領・成果確認・責任の引き継ぎ
   reviews                                     評価期間・目標・自己評価・承認・履歴
+  client-project                              受託案件・工数の記録と予実
+  customer                                    顧客台帳
+  offering                                    商品・サービス台帳
   batch                                       バッチ状況
   roles                                       ロール一覧（iam:read）
   accounts                                    アカウント一覧（iam:read）

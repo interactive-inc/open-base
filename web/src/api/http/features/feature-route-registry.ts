@@ -1,4 +1,8 @@
-export const optInAppRoutePrefixes: Readonly<Record<string, ReadonlyArray<string>>> = {}
+export const optInAppRoutePrefixes: Readonly<Record<string, ReadonlyArray<string>>> = {
+  "client-project": ["/client-project"],
+  customer: ["/customer"],
+  offering: ["/offering"],
+}
 export const defaultAppRoutePrefixes: Readonly<Record<string, ReadonlyArray<string>>> = {
   "performance-review": ["/performance-review"],
 }

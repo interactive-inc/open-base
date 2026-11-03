@@ -17,9 +17,15 @@
     "interface": ["capabilities", "operations", "ports", "request-environment", "routes"]
   },
   "businessAreaOwners": {
-    "performance-review": "performance-review"
+    "performance-review": "performance-review",
+    "client-project": "client-project",
+    "customer": "customer",
+    "offering": "offering"
   },
   "routeOwners": {
-    "performance-review": "performance-review"
+    "performance-review": "performance-review",
+    "client-project": "client-project",
+    "customer": "customer",
+    "offering": "offering"
   }
 }
