@@ -78,6 +78,13 @@
       "when": 1700000010000,
       "tag": "0011_work_execution",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1700000011000,
+      "tag": "0012_root_work_execution_permissions",
+      "breakpoints": true
     }
   ]
 }
