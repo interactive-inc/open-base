@@ -167,3 +167,23 @@ bun run --cwd web db:migrate
 ```
 
 最初にリモートの適用記録を読み取り、移行の名前や順序の不整合があれば書き込み前に停止します。検査を通るとVoidがビルド、未適用の移行、配備を進めます。認証サービス側のクライアント登録と、選択した認証方式の設定も配備前に用意してください。
+
+## リリース
+
+バージョンはリリース日の暦日で `vYYYY.MM.DD` とします。同じ日に2回目以降を出すときは `vYYYY.MM.DD.2` のように連番を付けます。
+
+`main` は開発の統合先、`release` はリリース済みの版だけを指すブランチです。`release` はタグへの早送りだけで進め、直接コミットしません。配備先の自動ビルドは `release` を対象にします。
+
+1. `CHANGELOG.md` の「未リリース」の内容を、新しいバージョンと日付の見出しへ移す
+2. `chore(release): vYYYY.MM.DD` としてコミットし、同じ名前の注釈付きタグを付ける
+3. `main` とタグを push し、`release` をそのタグへ早送りする
+4. 該当バージョンの `CHANGELOG.md` の節を本文にして GitHub Release を作る
+
+```sh
+git tag -a vYYYY.MM.DD -m vYYYY.MM.DD
+git push origin main vYYYY.MM.DD
+git push origin vYYYY.MM.DD^{commit}:refs/heads/release
+gh release create vYYYY.MM.DD --title vYYYY.MM.DD --notes-file <notes>
+```
+
+変更は `main` へ入るたびに `CHANGELOG.md` の「未リリース」へ追記します。
