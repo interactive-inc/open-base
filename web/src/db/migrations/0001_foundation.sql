@@ -3647,13 +3647,25 @@ INSERT INTO "company_organization_change_operations" VALUES ('7d64591a-4423-8a69
 INSERT INTO "company_organization_lifecycle_states" VALUES (1,1,0);
 --> statement-breakpoint
 
-INSERT INTO "company_organization_unit_period_versions" VALUES ('bb981d2a-0266-456c-8094-ff5b65eb3f14','82072674-7a3e-81a4-b640-635f0026e236',1,'282ccd01-cb30-4d0a-84b4-c675bbbe473c','COMPANY','Company','COMPANY',NULL,'1970-01-01',NULL,0,'7d64591a-4423-8a69-b90a-7ff1d89f9303',0);
---> statement-breakpoint
-
 INSERT INTO "company_organization_units" VALUES ('282ccd01-cb30-4d0a-84b4-c675bbbe473c','company:root',0);
 --> statement-breakpoint
 
 INSERT INTO "company_organizations" VALUES ('ad4f6cb1-774b-43ae-950f-80e9bc67c66d','organization:default',0,0,0,'','');
+--> statement-breakpoint
+
+INSERT INTO "system_iam_roles" VALUES ('f7aab585-0f80-4d4f-a578-7300b7f2c73e','1','company:member','managed','標準利用者','自己操作を行う標準の権限セット。組織上の役割とは独立する',0,0,NULL);
+--> statement-breakpoint
+
+INSERT INTO "system_iam_roles" VALUES ('077cb75c-8ca8-401a-98e1-320a70a0c947','2','company:manager','managed','業務管理者','管理業務の操作権限セット。対象範囲は組織関係で別に判定する',0,0,NULL);
+--> statement-breakpoint
+
+INSERT INTO "system_iam_roles" VALUES ('3c6f8da4-303e-495e-afcf-8837ee0a9403','3','company:hr','managed','人事管理者','全社の人事業務を扱う権限セット',0,0,NULL);
+--> statement-breakpoint
+
+INSERT INTO "system_iam_roles" VALUES ('2306ffb6-86e2-4299-bdfb-4dea221557c9','4','company:root','managed','システム管理者','IAM とアカウント管理を含むシステム管理権限セット',0,0,NULL);
+--> statement-breakpoint
+
+INSERT INTO "company_organization_unit_period_versions" VALUES ('bb981d2a-0266-456c-8094-ff5b65eb3f14','82072674-7a3e-81a4-b640-635f0026e236',1,'282ccd01-cb30-4d0a-84b4-c675bbbe473c','COMPANY','Company','COMPANY',NULL,'1970-01-01',NULL,0,'7d64591a-4423-8a69-b90a-7ff1d89f9303',0);
 --> statement-breakpoint
 
 INSERT INTO "system_iam_role_permissions" VALUES ('01393b19-cc57-43f7-9b1f-8662ac83f11d','2306ffb6-86e2-4299-bdfb-4dea221557c9','employee_event:manage');
@@ -4368,18 +4380,6 @@ INSERT INTO "system_iam_role_permissions" VALUES ('fe821fc8-1b33-4c15-86a4-8752d
 --> statement-breakpoint
 
 INSERT INTO "system_iam_role_permissions" VALUES ('fe96f897-1614-421a-baad-30c7b4da2b8f','2306ffb6-86e2-4299-bdfb-4dea221557c9','certificate_request:read:all');
---> statement-breakpoint
-
-INSERT INTO "system_iam_roles" VALUES ('f7aab585-0f80-4d4f-a578-7300b7f2c73e','1','company:member','managed','標準利用者','自己操作を行う標準の権限セット。組織上の役割とは独立する',0,0,NULL);
---> statement-breakpoint
-
-INSERT INTO "system_iam_roles" VALUES ('077cb75c-8ca8-401a-98e1-320a70a0c947','2','company:manager','managed','業務管理者','管理業務の操作権限セット。対象範囲は組織関係で別に判定する',0,0,NULL);
---> statement-breakpoint
-
-INSERT INTO "system_iam_roles" VALUES ('3c6f8da4-303e-495e-afcf-8837ee0a9403','3','company:hr','managed','人事管理者','全社の人事業務を扱う権限セット',0,0,NULL);
---> statement-breakpoint
-
-INSERT INTO "system_iam_roles" VALUES ('2306ffb6-86e2-4299-bdfb-4dea221557c9','4','company:root','managed','システム管理者','IAM とアカウント管理を含むシステム管理権限セット',0,0,NULL);
 --> statement-breakpoint
 
 CREATE TRIGGER company_account_employee_links_delete_guard
