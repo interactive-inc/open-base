@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { createGovernanceTaskTestContext } from "@/contexts/company/test/governance-task.test-support"
+import { createLocalD1Database } from "@system/test/local-d1/create-local-d1-database.test-support"
 import {
   definitionInput,
   executionInput,
@@ -7,7 +8,7 @@ import {
 import { WorkExecutionRepository } from "@/contexts/work-execution/infrastructure/repositories/work-execution.repository"
 
 test("records only assigned agent executions and retains idempotent history after retirement", async () => {
-  const fixture = await createGovernanceTaskTestContext()
+  const fixture = await createGovernanceTaskTestContext(await createLocalD1Database())
   const owner = fixture.people[0]
   if (!owner) throw new Error("owner fixture unavailable")
   const database = fixture.database

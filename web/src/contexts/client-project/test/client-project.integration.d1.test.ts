@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test"
 import { createGovernanceTaskTestContext } from "@/contexts/company/test/governance-task.test-support"
+import { createLocalD1Database } from "@system/test/local-d1/create-local-d1-database.test-support"
 import { ClientProjectRepository } from "@/contexts/client-project/infrastructure/repositories/client-project.repository"
 import { clientProjectCommandSchema } from "@/contexts/client-project/domain/client-project-command"
 
 test("records project effort, computes forecasts, and retains corrected revisions", async () => {
-  const fixture = await createGovernanceTaskTestContext()
+  const fixture = await createGovernanceTaskTestContext(await createLocalD1Database())
   const [actor, other] = fixture.people
   if (!actor || !other) throw new Error("employee fixtures are missing")
   const repository = (person: NonNullable<typeof actor>) =>
