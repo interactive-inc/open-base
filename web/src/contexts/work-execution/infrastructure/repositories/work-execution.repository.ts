@@ -13,7 +13,12 @@ type StorageContext = Readonly<{
   machine: boolean
   now: Date
   guards: ReadonlyArray<D1PreparedStatement>
-  audit: (target: string, id: string, revision: number) => ReadonlyArray<D1PreparedStatement>
+  audit: (
+    target: string,
+    id: string,
+    revision: number,
+    action?: string,
+  ) => ReadonlyArray<D1PreparedStatement>
 }>
 
 export class WorkExecutionRepository {
@@ -142,6 +147,50 @@ export class WorkExecutionRepository {
       snapshot,
       audit: this.c.audit("work_execution", input.id, input.definition_revision),
     })
+  }
+
+  /**
+   * 実行履歴のない業務定義を全revisionごと削除する。
+   * 最新revisionが一致しないとき、または実行履歴があるときは消さない。
+   */
+  async deleteDefinition(slug: string, expectedRevision: number) {
+    const db = this.c.database
+    const remove = db
+      .prepare(`
+      DELETE FROM work_execution_definitions
+      WHERE slug = ?1
+        AND (SELECT max(latest.revision) FROM work_execution_definitions latest WHERE latest.slug = ?1) = ?2
+        AND NOT EXISTS (SELECT 1 FROM work_execution_runs run
+          WHERE run.definition_id = work_execution_definitions.id)
+    `)
+      .bind(slug, expectedRevision)
+    const results = await db.batch([
+      ...this.c.guards,
+      remove,
+      ...this.c.audit(
+        "work_definition",
+        slug,
+        expectedRevision,
+        "work_execution.definition_deleted",
+      ),
+    ])
+    const deleted = results[this.c.guards.length]?.meta.changes ?? 0
+    if (deleted > 0) return { slug, deleted_revisions: deleted }
+    const [state] = await db.batch<{ revision: number | null; runs: number }>([
+      db
+        .prepare(`
+        SELECT (SELECT max(revision) FROM work_execution_definitions WHERE slug = ?1) AS revision,
+          (SELECT count(*) FROM work_execution_runs run WHERE run.definition_id IN
+            (SELECT id FROM work_execution_definitions WHERE slug = ?1)) AS runs
+      `)
+        .bind(slug),
+      ...this.c.guards,
+    ])
+    const current = state?.results[0]
+    if (current?.revision == null) return null
+    throw new WorkExecutionConflict(
+      current.runs > 0 ? "work_execution_definition_has_runs" : "work_execution_conflict",
+    )
   }
 
   private async write(input: {

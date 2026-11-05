@@ -115,3 +115,68 @@ test("records only assigned agent executions and retains idempotent history afte
     ]),
   )
 }, 60_000)
+
+test("実行履歴のない業務定義だけを全revisionごと削除できる", async () => {
+  const fixture = await createGovernanceTaskTestContext(await createLocalD1Database())
+  const owner = fixture.people[0]
+  if (!owner) throw new Error("owner fixture unavailable")
+  const database = fixture.database
+  const repository = new WorkExecutionRepository({
+    database,
+    accountId: owner.accountId,
+    machine: false,
+    now: new Date(),
+    guards: [],
+    audit: () => [],
+  })
+  const define = (slug: string) =>
+    definitionInput.parse({
+      slug,
+      expected_revision: 0,
+      name: "Trial",
+      description: "",
+      owner_employee_id: owner.employeeId,
+      status: "active",
+      reason: "Register work",
+    })
+  const trial = define("example-trial")
+  await repository.saveDefinition(trial)
+  await repository.saveDefinition({
+    ...trial,
+    expected_revision: 1,
+    status: "retired",
+    reason: "Retire",
+  })
+
+  await expect(repository.deleteDefinition(trial.slug, 1)).rejects.toThrow(
+    "work_execution_conflict",
+  )
+  expect(await repository.deleteDefinition(trial.slug, 2)).toEqual({
+    slug: trial.slug,
+    deleted_revisions: 2,
+  })
+  expect(await repository.definitions({ slug: trial.slug, limit: 10, offset: 0 })).toEqual([])
+  expect(await repository.deleteDefinition(trial.slug, 2)).toBeNull()
+  // 削除したslugは新しい定義として登録し直せる
+  expect(await repository.saveDefinition(trial)).toMatchObject({ revision: 1 })
+
+  const used = define("example-used")
+  await repository.saveDefinition(used)
+  await repository.record(
+    executionInput.parse({
+      id: crypto.randomUUID(),
+      slug: used.slug,
+      definition_revision: 1,
+      started_at: "2026-11-04T00:00:00.000Z",
+      finished_at: "2026-11-04T00:01:00.000Z",
+      outcome: "succeeded",
+      summary: "Completed",
+    }),
+  )
+  await expect(repository.deleteDefinition(used.slug, 1)).rejects.toThrow(
+    "work_execution_definition_has_runs",
+  )
+  await expect(
+    database.prepare("DELETE FROM work_execution_definitions WHERE slug = ?").bind(used.slug).run(),
+  ).rejects.toThrow("work_execution_definition_retained")
+}, 60_000)

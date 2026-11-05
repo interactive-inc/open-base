@@ -171,6 +171,8 @@ const performanceReviewSheetsIdHistoryRoute: RouteModuleLoader = () =>
   import("@/contexts/performance-review/interface/routes/performance-review.sheets.$id.history")
 const workExecutionDefinitionsRoute: RouteModuleLoader = () =>
   import("@/contexts/work-execution/interface/routes/work-execution.definitions")
+const workExecutionDefinitionsSlugRoute: RouteModuleLoader = () =>
+  import("@/contexts/work-execution/interface/routes/work-execution.definitions.$slug")
 const workExecutionRunsRoute: RouteModuleLoader = () =>
   import("@/contexts/work-execution/interface/routes/work-execution.runs")
 const systemAccountsRoute: RouteModuleLoader = () =>
@@ -592,6 +594,7 @@ const ROUTES: ReadonlyArray<readonly [RouteMethod, string, RouteModuleLoader]> =
   ["POST", "/system/work-items/:id/return", systemWorkItemsIdReturnRoute],
   ["GET", "/work-execution/definitions", workExecutionDefinitionsRoute],
   ["POST", "/work-execution/definitions", workExecutionDefinitionsRoute],
+  ["DELETE", "/work-execution/definitions/:slug", workExecutionDefinitionsSlugRoute],
   ["GET", "/work-execution/runs", workExecutionRunsRoute],
   ["POST", "/work-execution/runs", workExecutionRunsRoute],
 ]

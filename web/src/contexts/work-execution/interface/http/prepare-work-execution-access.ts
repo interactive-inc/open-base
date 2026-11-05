@@ -24,10 +24,15 @@ export async function prepareWorkExecutionAccess(c: Context<HonoEnv>, permission
     accountId: authentication.accountId,
     machine,
     guards,
-    audit(targetType: string, targetId: string, revision: number) {
+    audit(
+      targetType: string,
+      targetId: string,
+      revision: number,
+      action = "work_execution.recorded",
+    ) {
       const event = SystemAuditEventEntity.create({
         actorAccountId: authentication.accountId,
-        action: "work_execution.recorded",
+        action,
         targetType,
         targetId,
         outcome: "succeeded",

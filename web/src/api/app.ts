@@ -87,6 +87,7 @@ import * as performanceReviewSheetsIdRoute from "@/contexts/performance-review/i
 import * as performanceReviewSheetsIdCommandsRoute from "@/contexts/performance-review/interface/routes/performance-review.sheets.$id.commands"
 import * as performanceReviewSheetsIdHistoryRoute from "@/contexts/performance-review/interface/routes/performance-review.sheets.$id.history"
 import * as workExecutionDefinitionsRoute from "@/contexts/work-execution/interface/routes/work-execution.definitions"
+import * as workExecutionDefinitionsSlugRoute from "@/contexts/work-execution/interface/routes/work-execution.definitions.$slug"
 import * as workExecutionRunsRoute from "@/contexts/work-execution/interface/routes/work-execution.runs"
 import * as systemAccountsRoute from "@system/interface/routes/system.accounts"
 import * as systemAccountsAccountIdRoute from "@system/interface/routes/system.accounts.$accountId"
@@ -546,6 +547,7 @@ const routePart30 = createRouteApp()
   .post("/system/work-items/:id/return", ...systemWorkItemsIdReturnRoute.POST)
   .get("/work-execution/definitions", ...workExecutionDefinitionsRoute.GET)
   .post("/work-execution/definitions", ...workExecutionDefinitionsRoute.POST)
+  .delete("/work-execution/definitions/:slug", ...workExecutionDefinitionsSlugRoute.DELETE)
   .get("/work-execution/runs", ...workExecutionRunsRoute.GET)
   .post("/work-execution/runs", ...workExecutionRunsRoute.POST)
 

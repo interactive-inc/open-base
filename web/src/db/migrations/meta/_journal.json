@@ -85,6 +85,13 @@
       "when": 1700000011000,
       "tag": "0012_root_work_execution_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1700000012000,
+      "tag": "0013_work_execution_definition_delete",
+      "breakpoints": true
     }
   ]
 }

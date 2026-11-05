@@ -20,6 +20,16 @@ export const workExecutionRouteManifest = [
     },
   },
   {
+    method: "DELETE",
+    path: "/work-execution/definitions/:slug",
+    phase: "authenticated",
+    handler: {
+      kind: "module",
+      module: "@/contexts/work-execution/interface/routes/work-execution.definitions.$slug",
+      exportName: "DELETE",
+    },
+  },
+  {
     method: "GET",
     path: "/work-execution/runs",
     phase: "authenticated",
