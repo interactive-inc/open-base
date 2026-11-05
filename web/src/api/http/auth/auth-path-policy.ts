@@ -34,6 +34,8 @@ export function isEnabledAuthPath(path: string, method: SignInMethod | null): bo
   if (devicePaths.has(path)) return true
   if (path === "/sign-in/email") return method === "password"
   if (path === "/oidc/sign-in" || path === "/oidc/callback") return method === "oidc"
+  // CLIはOIDCの発行者からBase宛てのaccess tokenを得るので、OIDCの配備でだけ引き継ぎを受け付ける。
+  if (path === "/cli/browser-code" || path === "/cli/callback") return method === "oidc"
   return method === "passkey" && passkeyPaths.has(path)
 }
 

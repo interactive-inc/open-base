@@ -4,6 +4,10 @@
 
 ## 未リリース
 
+### 追加
+
+- OIDCの配備で、CLIのaccess tokenを短命のcodeに替えてブラウザのセッションへ引き継ぐ `POST /api/auth/cli/browser-code` と `GET /api/auth/cli/callback` を追加した。引き継いだセッションは委任として扱い、承認や再認証には使えない。
+
 ## v2026.11.05 - 2026-11-05
 
 ### 修正

@@ -12,6 +12,7 @@ import {
   readAuthSessionMethod,
 } from "./api/http/auth/auth-session-method.ts"
 import { ensureAuthUser } from "./api/http/auth/ensure-auth-user.ts"
+import { cliBrowserSignIn } from "./api/http/auth/cli-browser-sign-in-plugin.ts"
 import { oidcSignIn } from "./api/http/auth/oidc-sign-in-plugin.ts"
 import { readSignInMethod } from "./api/http/auth/sign-in-method.ts"
 
@@ -22,6 +23,7 @@ import { readSignInMethod } from "./api/http/auth/sign-in-method.ts"
  * - Better AuthのユーザーIDはSystem AccountのIDと同じ値にする。ユーザーはSystemが本人と
  *   確かめたとき（パスキー招待の登録か、OIDCのsubjectに結び付いたIdentity）だけ作る。
  * - CLIとMCPはデバイス認証で得たセッションtokenをBearerで送る。
+ * - 外部のCLIはOIDCで得たaccess tokenを短命のcodeへ替え、ブラウザのセッションへ引き継ぐ。
  * - セッションには発行時のAccountのtoken版と認証方式を残し、APIが毎回Accountの現在状態と照合する。
  *
  * Voidはこのfileを設定とtable定義を読むためにNodeでも読み込む。Nodeではpathの別名を解決しないため、
@@ -194,6 +196,7 @@ export default defineAuth(({ defaults, env }) => {
         validateClient: (clientId) => clientId === BASE_CLI_CLIENT_ID,
       }),
       oidcSignIn({ env, database }),
+      cliBrowserSignIn({ env, database }),
       passkey({
         rpName: "Base",
         authenticatorSelection: { residentKey: "required", userVerification: "required" },

@@ -4,11 +4,15 @@ export const BASE_CLI_CLIENT_ID = "base-cli"
 /** OIDCのサインインを受け取るBetter Authのendpoint。 */
 export const OIDC_CALLBACK_PATH = "/oidc/callback"
 
+/** CLIのサインインをブラウザへ引き継ぐBetter Authのendpoint。 */
+export const CLI_BROWSER_CODE_PATH = "/cli/browser-code"
+export const CLI_BROWSER_CALLBACK_PATH = "/cli/callback"
+
 export type AuthSessionMethod = "password" | "passkey" | "oidc" | "device"
 
 /**
  * Better Authがセッションを作ったendpointから認証方式を決める。
- * パスワード、パスキーの認証・登録、OIDCの戻り先、デバイス認証のtoken交換を受け付け、
+ * パスワード、パスキーの認証・登録、OIDCの戻り先、デバイス認証のtoken交換、CLIからの引き継ぎを受け付け、
  * それ以外のセッション作成は拒否する。
  */
 export function readAuthSessionMethod(path: string | undefined): AuthSessionMethod | null {
@@ -17,7 +21,8 @@ export function readAuthSessionMethod(path: string | undefined): AuthSessionMeth
   }
   if (path === "/sign-in/email") return "password"
   if (path === OIDC_CALLBACK_PATH) return "oidc"
-  if (path === "/device/token") return "device"
+  // CLIから引き継いだセッションは、デバイス認証と同じく委任として扱い、直前の本人確認に使わせない。
+  if (path === "/device/token" || path === CLI_BROWSER_CALLBACK_PATH) return "device"
   return null
 }
 
