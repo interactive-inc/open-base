@@ -1,3 +1,4 @@
+-- void:allow-destructive
 -- 実行履歴を持たない業務定義だけを、全revisionごと削除できるようにする。
 DROP TRIGGER work_execution_definition_no_delete;
 --> statement-breakpoint
