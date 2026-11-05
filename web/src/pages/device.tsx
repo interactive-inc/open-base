@@ -1,4 +1,10 @@
+import { CheckCircle2, KeyRound, XCircle } from "lucide-react"
 import { useState } from "react"
+import { AuthFrame } from "@/components/app/auth-frame"
+import { Button } from "@/components/ui/button"
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
+import { Spinner } from "@/components/ui/spinner"
 import { loadAuthClient } from "@/client/load-auth-client"
 import type { Props } from "./device.server"
 
@@ -51,19 +57,24 @@ export default function Device({ userCode, method, freshlySignedIn }: Props) {
 
   if (step !== "confirm") {
     return (
-      <>
-        <h1>{step === "approved" ? "承認しました" : "拒否しました"}</h1>
-        <p>ターミナルに戻ってください。</p>
-      </>
+      <AuthFrame
+        title={step === "approved" ? "承認しました" : "拒否しました"}
+        description={
+          <span className="flex items-center gap-2">
+            {step === "approved" ? <CheckCircle2 /> : <XCircle />}
+            ターミナルに戻ってください。
+          </span>
+        }
+      />
     )
   }
 
   if (method === null) {
     return (
-      <>
-        <h1>CLIのログイン</h1>
-        <p role="alert">サインインの方式が正しく設定されていません。管理者に確認してください。</p>
-      </>
+      <AuthFrame
+        title="CLIのログイン"
+        error="サインインの方式が正しく設定されていません。管理者に確認してください。"
+      />
     )
   }
 
@@ -71,50 +82,56 @@ export default function Device({ userCode, method, freshlySignedIn }: Props) {
   const needsSignIn = method !== "passkey" && !freshlySignedIn
   const returnTo = `/device?user_code=${encodeURIComponent(code.trim().toUpperCase())}`
   const oidcSignInHref = `/api/auth/oidc/sign-in?prompt=login&callbackURL=${encodeURIComponent(returnTo)}`
-  const approveLabel = method === "passkey" ? "パスキーで承認" : "承認"
+  const signInHref =
+    method === "oidc" ? oidcSignInHref : `/sign-in?next=${encodeURIComponent(returnTo)}`
+  const blank = code.trim() === ""
 
   return (
-    <>
-      <h1>CLIのログイン</h1>
-      <p>ターミナルに表示されたコードと同じか確かめてから承認してください。</p>
-      <label>
-        コード
-        <input
+    <AuthFrame
+      title="CLIのログイン"
+      description="ターミナルに表示されたコードと同じか確かめてから承認してください。"
+      error={error}
+    >
+      <Field>
+        <FieldLabel htmlFor="user-code">コード</FieldLabel>
+        <Input
+          id="user-code"
           value={code}
           onChange={(event) => setCode(event.target.value)}
           autoComplete="off"
-          style={{ display: "block", fontSize: "1.5rem", letterSpacing: "0.1em" }}
+          autoCapitalize="characters"
+          spellCheck={false}
         />
-      </label>
+        <FieldDescription>承認すると、このアカウントでCLIを使えるようになります。</FieldDescription>
+      </Field>
       {needsSignIn ? (
-        <p>
-          <a
-            href={
-              method === "oidc" ? oidcSignInHref : `/sign-in?next=${encodeURIComponent(returnTo)}`
-            }
-          >
-            サインインし直して続ける
-          </a>
-        </p>
+        <Button size="lg" className="w-full" nativeButton={false} render={<a href={signInHref} />}>
+          サインインし直して続ける
+        </Button>
       ) : (
-        <p>
-          <button
+        <div className="flex flex-col gap-2">
+          <Button
             type="button"
-            disabled={pending || code.trim() === ""}
+            size="lg"
+            className="w-full"
+            disabled={pending || blank}
             onClick={() => decide(true)}
           >
-            {approveLabel}
-          </button>{" "}
-          <button
+            {pending ? <Spinner /> : method === "passkey" && <KeyRound />}
+            {method === "passkey" ? "パスキーで承認" : "承認"}
+          </Button>
+          <Button
             type="button"
-            disabled={pending || code.trim() === ""}
+            variant="secondary"
+            size="lg"
+            className="w-full"
+            disabled={pending || blank}
             onClick={() => decide(false)}
           >
             拒否
-          </button>
-        </p>
+          </Button>
+        </div>
       )}
-      {error !== "" && <p role="alert">{error}</p>}
-    </>
+    </AuthFrame>
   )
 }

@@ -1,4 +1,5 @@
 import { z } from "zod"
+
 const name = z.string().trim().min(1).max(200)
 export const offeringCommandSchema = z.strictObject({
   id: z.uuid(),

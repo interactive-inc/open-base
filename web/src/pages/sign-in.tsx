@@ -1,42 +1,47 @@
+import { KeyRound } from "lucide-react"
 import { useState } from "react"
+import { AuthFrame } from "@/components/app/auth-frame"
+import { Button } from "@/components/ui/button"
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
+import { Spinner } from "@/components/ui/spinner"
 import { loadAuthClient } from "@/client/load-auth-client"
 import type { Props } from "./sign-in.server"
 
 export default function SignIn({ next, method, error: initialError }: Props) {
-  const [error, setError] = useState(initialError ?? "")
-  const [pending, setPending] = useState(false)
-
   if (method === null) {
     return (
-      <>
-        <h1>サインイン</h1>
-        <p role="alert">サインインの方式が正しく設定されていません。管理者に確認してください。</p>
-      </>
+      <AuthFrame
+        title="サインイン"
+        error="サインインの方式が正しく設定されていません。管理者に確認してください。"
+      />
     )
   }
 
   if (method === "password") return <PasswordSignIn next={next} initialError={initialError} />
 
-  if (method === "oidc") {
-    const href = `/api/auth/oidc/sign-in?callbackURL=${encodeURIComponent(next)}`
-    return (
-      <>
-        <h1>サインイン</h1>
-        <p>組織のアカウントでサインインします。</p>
-        <p>
-          <a href={href}>サインイン</a>
-        </p>
-        {error !== "" && <p role="alert">{error}</p>}
-      </>
-    )
-  }
+  if (method === "oidc") return <OidcSignIn next={next} initialError={initialError} />
+
+  return <PasskeySignIn next={next} initialError={initialError} />
+}
+
+type MethodProps = { next: string; initialError: string | null }
+
+function PasskeySignIn({ next, initialError }: MethodProps) {
+  const [error, setError] = useState(initialError ?? "")
+  const [pending, setPending] = useState(false)
 
   return (
-    <>
-      <h1>サインイン</h1>
-      <p>登録したパスキーでサインインします。</p>
-      <button
+    <AuthFrame
+      title="サインイン"
+      description="登録したパスキーでサインインします。"
+      error={error}
+      footer="パスキーを失くしたときは、管理者に招待の再発行を依頼してください。"
+    >
+      <Button
         type="button"
+        size="lg"
+        className="w-full"
         disabled={pending}
         onClick={async () => {
           setPending(true)
@@ -56,21 +61,40 @@ export default function SignIn({ next, method, error: initialError }: Props) {
           }
         }}
       >
+        {pending ? <Spinner /> : <KeyRound />}
         パスキーでサインイン
-      </button>
-      {error !== "" && <p role="alert">{error}</p>}
-      <p>パスキーを失くしたときは、管理者に招待の再発行を依頼してください。</p>
-    </>
+      </Button>
+    </AuthFrame>
   )
 }
 
-function PasswordSignIn({ next, initialError }: { next: string; initialError: string | null }) {
+function OidcSignIn({ next, initialError }: MethodProps) {
+  const href = `/api/auth/oidc/sign-in?callbackURL=${encodeURIComponent(next)}`
+  return (
+    <AuthFrame
+      title="サインイン"
+      description="組織のアカウントでサインインします。"
+      error={initialError ?? ""}
+    >
+      <Button size="lg" className="w-full" nativeButton={false} render={<a href={href} />}>
+        組織のアカウントでサインイン
+      </Button>
+    </AuthFrame>
+  )
+}
+
+function PasswordSignIn({ next, initialError }: MethodProps) {
   const [error, setError] = useState(initialError ?? "")
   const [pending, setPending] = useState(false)
+
   return (
-    <>
-      <h1>サインイン</h1>
+    <AuthFrame
+      title="サインイン"
+      description="メールアドレスとパスワードを入力します。"
+      error={error}
+    >
       <form
+        className="flex flex-col gap-4"
         onSubmit={async (event) => {
           event.preventDefault()
           const form = new FormData(event.currentTarget)
@@ -81,10 +105,7 @@ function PasswordSignIn({ next, initialError }: { next: string; initialError: st
           setError("")
           try {
             const { authClient, describeAuthError } = await loadAuthClient()
-            const result = await authClient.signIn.email({
-              email,
-              password,
-            })
+            const result = await authClient.signIn.email({ email, password })
             if (result.error) {
               setError(describeAuthError(result.error))
               return
@@ -97,29 +118,36 @@ function PasswordSignIn({ next, initialError }: { next: string; initialError: st
           }
         }}
       >
-        <p>
-          <label>
-            メールアドレス{" "}
-            <input name="email" type="email" autoComplete="username" required disabled={pending} />
-          </label>
-        </p>
-        <p>
-          <label>
-            パスワード{" "}
-            <input
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor="email">メールアドレス</FieldLabel>
+            <Input
+              id="email"
+              name="email"
+              type="email"
+              autoComplete="username"
+              placeholder="you@example.com"
+              required
+              disabled={pending}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="password">パスワード</FieldLabel>
+            <Input
+              id="password"
               name="password"
               type="password"
               autoComplete="current-password"
               required
               disabled={pending}
             />
-          </label>
-        </p>
-        <button type="submit" disabled={pending}>
+          </Field>
+        </FieldGroup>
+        <Button type="submit" size="lg" className="w-full" disabled={pending}>
+          {pending && <Spinner />}
           {pending ? "確認しています…" : "サインイン"}
-        </button>
+        </Button>
       </form>
-      {error !== "" && <p role="alert">{error}</p>}
-    </>
+    </AuthFrame>
   )
 }

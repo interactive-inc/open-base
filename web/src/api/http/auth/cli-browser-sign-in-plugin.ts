@@ -18,7 +18,9 @@ type Options = Readonly<{
   env: Readonly<Record<string, unknown>>
   database: () => D1Database
   /** テストで発行者のdiscoveryを差し替える。 */
-  discover?: (issuer: string) => Promise<Pick<OidcProviderMetadata, "issuer" | "algorithms" | "keys"> | Error>
+  discover?: (
+    issuer: string,
+  ) => Promise<Pick<OidcProviderMetadata, "issuer" | "algorithms" | "keys"> | Error>
 }>
 
 /**

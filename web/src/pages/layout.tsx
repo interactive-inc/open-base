@@ -1,18 +1,7 @@
 import type { ReactNode } from "react"
+import "@/components/globals.css"
 
-/** 認証まわりの最小の画面枠。業務画面の移植時にデザインと置き換える。 */
+/** 全画面に共通のstyleだけを読み込む。画面の枠は各画面が AuthFrame か AppShell で選ぶ。 */
 export default function Layout({ children }: { children: ReactNode }) {
-  return (
-    <main
-      style={{
-        maxWidth: 420,
-        margin: "15vh auto",
-        padding: "0 16px",
-        fontFamily: "system-ui, sans-serif",
-        lineHeight: 1.6,
-      }}
-    >
-      {children}
-    </main>
-  )
+  return <>{children}</>
 }

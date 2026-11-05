@@ -1,5 +1,6 @@
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
+import tailwindcss from "@tailwindcss/vite"
 import { voidReact } from "@void/react/plugin"
 import { voidPlugin } from "void"
 import { defineConfig, type Plugin } from "vite-plus"
@@ -27,7 +28,7 @@ function serviceBindingEntrypointPlugin(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [voidPlugin(), voidReact(), serviceBindingEntrypointPlugin()],
+  plugins: [voidPlugin(), voidReact(), tailwindcss(), serviceBindingEntrypointPlugin()],
   server: {
     // portless が base.localhost などの名前で中継する。
     allowedHosts: [".localhost"],

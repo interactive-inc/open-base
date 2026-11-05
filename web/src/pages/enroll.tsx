@@ -1,4 +1,8 @@
+import { CheckCircle2, KeyRound } from "lucide-react"
 import { useState } from "react"
+import { AuthFrame } from "@/components/app/auth-frame"
+import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
 import { loadAuthClient } from "@/client/load-auth-client"
 import type { Props } from "./enroll.server"
 
@@ -10,30 +14,37 @@ export default function Enroll({ token }: Props) {
 
   if (token === null) {
     return (
-      <>
-        <h1>パスキーの登録</h1>
-        <p>招待のURLを開いてください。</p>
-      </>
+      <AuthFrame
+        title="パスキーの登録"
+        description="管理者から受け取った招待のURLを開いてください。"
+      />
     )
   }
 
   if (done) {
     return (
-      <>
-        <h1>パスキーを登録しました</h1>
-        <p>
-          <a href="/">はじめる</a>
-        </p>
-      </>
+      <AuthFrame
+        title="パスキーを登録しました"
+        description="次回からこのパスキーでサインインします。"
+      >
+        <Button size="lg" className="w-full" nativeButton={false} render={<a href="/" />}>
+          <CheckCircle2 />
+          はじめる
+        </Button>
+      </AuthFrame>
     )
   }
 
   return (
-    <>
-      <h1>パスキーの登録</h1>
-      <p>この端末かパスワード管理アプリにパスキーを作り、サインインに使います。</p>
-      <button
+    <AuthFrame
+      title="パスキーの登録"
+      description="この端末かパスワード管理アプリにパスキーを作り、サインインに使います。"
+      error={error}
+    >
+      <Button
         type="button"
+        size="lg"
+        className="w-full"
         disabled={pending}
         onClick={async () => {
           setPending(true)
@@ -56,9 +67,9 @@ export default function Enroll({ token }: Props) {
           }
         }}
       >
+        {pending ? <Spinner /> : <KeyRound />}
         パスキーを登録
-      </button>
-      {error !== "" && <p role="alert">{error}</p>}
-    </>
+      </Button>
+    </AuthFrame>
   )
 }
