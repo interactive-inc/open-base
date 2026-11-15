@@ -1,4 +1,4 @@
-import { systemSessionFamilyCardinalitySql } from "@system/infrastructure/adapters/auth/system-session-family-eligibility-sql"
+import { systemSessionFamilyCardinalitySql } from "@system/infrastructure/adapters/auth/lib/system-session-family-eligibility-sql"
 import type { SessionRotationAuditEvents } from "@system/domain/definitions/auth/session-rotation-audit-events.definition"
 import type { SessionRotationValue } from "@system/domain/values/auth/session-rotation.value"
 

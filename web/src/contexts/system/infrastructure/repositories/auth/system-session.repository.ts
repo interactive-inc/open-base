@@ -1,4 +1,4 @@
-import { systemSessionFamilyEligibilitySql } from "@system/infrastructure/adapters/auth/system-session-family-eligibility-sql"
+import { systemSessionFamilyEligibilitySql } from "@system/infrastructure/adapters/auth/lib/system-session-family-eligibility-sql"
 import type { SystemAuditEventEntity } from "@system/domain/entities/system-audit-event.entity"
 import type { SystemSessionSource } from "@system/domain/definitions/auth/system-session-issuance.definition"
 import { InvalidSessionError } from "@system/domain/errors"

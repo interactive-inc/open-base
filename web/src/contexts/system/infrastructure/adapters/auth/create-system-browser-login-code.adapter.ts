@@ -1,4 +1,4 @@
-import { systemSessionFamilyEligibilitySql } from "@system/infrastructure/adapters/auth/system-session-family-eligibility-sql"
+import { systemSessionFamilyEligibilitySql } from "@system/infrastructure/adapters/auth/lib/system-session-family-eligibility-sql"
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
 import { SystemAuditEventEntity } from "@system/domain/entities/system-audit-event.entity"
 import type { SessionFamilyId } from "@system/domain/schemas/auth/session-family-id.schema"

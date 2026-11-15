@@ -1,4 +1,4 @@
-import { systemSessionFamilyEligibilitySql } from "@system/infrastructure/adapters/auth/system-session-family-eligibility-sql"
+import { systemSessionFamilyEligibilitySql } from "@system/infrastructure/adapters/auth/lib/system-session-family-eligibility-sql"
 import type { SystemDatabase } from "@system/configuration/system-context"
 import { AccountEntity } from "@system/domain/entities/account.entity"
 import { SystemMachineCredentialEntity } from "@system/domain/entities/system-machine-credential.entity"
