@@ -70,7 +70,7 @@ system:adminは現在の在籍確認を満たす場合に全評価を閲覧で�
 - `review_sheets_create`で本人の目標を作り、`review_sheets_show`でrevisionとdecision_targetを読む。
 - `review_sheets_command`のsubmit_goalsで目標を提出する。
 - 評価者は`review_sheets_list`の`scope: "inbox"`で案件を探し、showで内容を確認する。
-- commandのdecideでapprove、reject、returnを行う。否定の判断は規程のrejection_behaviorと一致させる。
+- commandのdecideでapprove、reject、returnを行う。decideは人がブラウザーでサインインした画面からの要求に限る。否定の判断は規程のrejection_behaviorと一致させる。
 - 差戻し後はrevise_goalsまたはself_evaluateで訂正して再提出する。承認済み目標の改定はreopen_goalsから開始する。
 - 目標承認後はself_evaluateとsubmit_evaluationを行い、評価者が全目標の評価を添えて承認する。
 - cancelで未確定のシートを取り消す。`review_sheets_history`で提出内容、理由、判断者・委任元と版の履歴を確認する。
@@ -81,18 +81,18 @@ system:adminは現在の在籍確認を満たす場合に全評価を閲覧で�
 
 ## APIと運用
 
-CLIはbase reviewsを入口とする。cyclesのlist・show・create、sheetsのlist・show・history・createに加え、revise-goals・reopen-goals・submit-goals・self-evaluate・submit-evaluation・approve・return・reject・cancelを提供する。任意の対応済みcommand JSONを送る場合はsheets commandを使う。
+CLIはbase reviewsを入口とする。cyclesのlist・show・create、sheetsのlist・show・history・createに加え、revise-goals・reopen-goals・submit-goals・self-evaluate・submit-evaluation・cancel・decideを提供する。decideは判断を記録せず、判断の画面のURLを示す。任意の対応済みcommand JSONを送る場合はsheets commandを使う。
 
 ```sh
 base reviews cycles create --data period.json --idempotency-key <uuid>
 base reviews sheets create --data sheet.json --idempotency-key <uuid>
 base reviews sheets list --scope inbox
 base reviews sheets show <sheet-id>
-base reviews sheets approve <sheet-id> --data decision.json --idempotency-key <uuid>
+base reviews sheets decide <sheet-id>
 base reviews sheets history <sheet-id>
 ```
 
-変更するJSONにはreason、既存シートの変更にはexpected_revisionを指定する。判断では表示したdecision_targetをtargetとして指定する。操作名とJSONのoperation・actionが矛盾する場合は送信せず拒否する。再送は同じJSONとキーを使い、409では読み直す。CLI・MCP・HTTPは同じapplication ruleを使う。
+変更するJSONにはreason、既存シートの変更にはexpected_revisionを指定する。判断は人がブラウザーの判断の画面（`/decisions/reviews/<sheet-id>`）で行う。CLI・MCPのセッションやaccess tokenで判断のcommandを送ると、APIは403と `decision_url` を返し、何も記録しない。操作名とJSONのoperation・actionが矛盾する場合は送信せず拒否する。再送は同じJSONとキーを使い、409では読み直す。CLI・MCP・HTTPは同じapplication ruleを使う。
 
 APIは`/api/performance-review/cycles`、`/api/performance-review/sheets`配下に置く。操作は`POST /api/performance-review/sheets/{id}/commands`、履歴は`GET /api/performance-review/sheets/{id}/history`を使う。
 

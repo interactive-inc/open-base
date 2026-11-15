@@ -30,12 +30,14 @@
 ## 構成と実装規約
 
 - Bun Workspaces: `web` はVoid（Vite、Cloudflare Workers、D1、Better Auth）とReactの画面、`cli` はHono/Bun、`mcp` はMCP SDK/Bun。
+- `packages/mock` は開発専用。Vite・Storybook・Node試験で架空の状態を共有し、production entryや業務contextから参照しない。
 - contextの層はdomain / application / infrastructure / interface。詳細は各階層のAGENTS.mdに従う。
 - contextのrouteは `interface/routes` のflat file。動的segmentは `$name`。HTTP methodをexportし、context の `interface/route-manifest.ts` で登録する。APIは `/api` 配下に公開する。
 - API route変更後は `bun run --cwd web gen:app`。生成されたapp、runtime-app、`src/routes/api` を手で編集しない。
 - routeにはmethodごとに `@authorization` の方針を明記する。宣言の検査は実際の認可の代わりにならない。
 - CLI route追加時は `cli/app/index.ts` に登録する。CLI名は `base`、環境変数は `BASE_` prefix、設定ディレクトリは `~/.config/base` を使う。
-- 画面はVoidの `web/src/pages` に置く。ブラウザだけで使うclientは `web/src/client` に置き、サーバーでの描画時に読み込まない。
+- 画面はVoidの `web/src/pages` に置く。画面はSPAとしてブラウザーで組み立てる。各画面の `.server.ts` で `ssr = false` をexportし、サーバーはloaderの実行と認可だけを行う。ブラウザだけで使うclientは `web/src/client` に置き、サーバーで読み込まない。
+- 部品は `web/src/components/ui` に取り込んだ部品集を使い、色は `globals.css` の役割のtokenで決める。取り込んだ部品は手で書き換えない。画面の共通の組み立ては `web/src/components/app` に置く。書き方は `web/src/components/AGENTS.md` に従う。Storybookで全ページ・部品と主要な状態を管理する。
 - cliから `web/app` を参照するときは型のみimportし、実行時は各クライアントの `hc` を使う。
 - libは利用者の最小共通祖先に置く。re-exportや互換barrelは作らない。Errorは所有単位の `errors.ts` にまとめる。
 - `.claude/rules/` の書式規約に従う。
@@ -48,10 +50,14 @@
 - 外部キー、一意制約、transaction、冪等性、同時実行の保護を持つ。
 - 重要な変更に監査、actor chain、理由、証拠、再構成可能な履歴を持つ。
 - Web、CLI、MCP、APIで同じapplication ruleを適用する。
+- 書き込み（作成、変更、取消など）はCLIとMCPで行う。Webの画面は一覧と詳細を見るためのもので、書き込みのUIを持たない。
+- 人の判断（承認、却下、差し戻し）だけは例外で、Webのサイドバーの無い専用の画面（`/decisions/...`）で行う。CLIとMCPは判断をせず、その画面のURLを示す。判断のAPIは、パスワード・パスキー・OIDCでサインインした画面からの要求だけを受け付け、それ以外の主体には判断を記録せずに画面のURLを返す。
 - 認可、失敗、競合、再試行をテストする。外部連携のtimeout、重複、順序逆転、部分失敗も安全側に扱う。
 - 人のサインインは配備ごとにパスワード・パスキー・OIDCから一つを選ぶ。パスワード資格情報の正本はSystemとし、認証基盤へ現在の検証用ハッシュを同期する。三つの方式で動くようにする。CLIとMCPはデバイス認証のセッション、他のサービスは機械credentialか外部access tokenを使う。高リスク操作の再認証は直前のサインインに限る。
 
 ## 開発と検証
+
+開発・修正は `inta:dev`、対象を絞った検証は `inta:test`、レビューは `inta:review` を使う。プラグインはプロジェクト設定で有効にし、端末固有のパスや権限設定をリポジトリへ持ち込まない。
 
 `README.md` の手順でローカル設定と新規DBを用意する。秘密値は `bun run --cwd web setup:dev-vars` で生成する。
 

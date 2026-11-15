@@ -26,5 +26,9 @@
 
 ## 開発と運用
 
+- [クライアント開発環境](features/client-development.md)で、UI所有・Storybook・モックと実バックエンドの検証境界を確認する。
+
+- [[ui-workbench]]でUIの方針とStorybookでの確認方法を確認する。
+
 - 起動・検証・配備は[README](../README.md)を参照する。
 - 実装規約と所有境界は[AGENTS.md](../AGENTS.md)を参照する。

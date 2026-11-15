@@ -12,12 +12,40 @@ Bunとportlessを用意し、次を実行します。
 vp install
 bun run --cwd web setup:dev-vars
 bun run --cwd web db:migrate:local
-vp run dev
+portless
 ```
+
+`portless` は `portless.json` の設定で開発サーバーを起動し、`https://base.localhost` へ中継します。`vp run dev` は中継なしで開発サーバーだけを起動します。
 
 画面とAPIは `https://base.localhost` です。APIは `/api` 配下にあります。直接の接続先は `http://127.0.0.1:18787` ですが、パスキーはIPアドレスのoriginで使えないため、ブラウザではホスト名で開きます。ホスト名は `portless.json` が正本です。
 
-秘密値は `web/.env` に生成されます。本番の配備設定、秘密値、DB、個人情報をコミットしないでください。
+秘密値は `web/.env` に生成されます。`web/.env` の値は `web/void.deploy.json` の同名の設定より優先されるため、配備設定で決める項目を空のまま `web/.env` に書かないでください。本番の配備設定、秘密値、DB、個人情報をコミットしないでください。
+
+## バックエンドなしの画面開発
+
+```sh
+vp run dev:mock
+vp run storybook
+```
+
+モック画面は `http://127.0.0.1:18788`、Storybookは `http://127.0.0.1:6007` です。それぞれ独立して起動します。実バックエンド、実アカウント、D1、秘密値は不要です。モックのAPIはViteへ組み込み、別サーバーを立てません。
+
+`BASE_MOCK_SCENARIO` で `admin`、`member`、`unlinked`、`empty`、`error`、`slow`、`signed-out` を選びます。標準はadminのインメモリ状態です。必要な場合だけ、OSの一時ディレクトリーに作ったフォルダーを `BASE_MOCK_SQLITE_DIR` に指定すると、架空の状態をSQLiteへ保存できます。利用後はそのフォルダーを削除してください。
+
+Storybookでは全ページ・製品コンポーネントの例、操作記録、Controls、Docs、表示幅、背景、テーマ、アクセシビリティと操作テストを確認します。パスキーはモックで成功扱いにせず、通常の開発環境で検証します。
+
+```sh
+vp run check:mock
+vp run test:mock
+vp run test:mock:e2e
+vp run check:storybook
+vp run build:storybook
+vp run test:storybook
+```
+
+ブラウザー試験にはPlaywrightの対応ブラウザーが必要です。既存のGoogle Chromeを使う場合は `PLAYWRIGHT_CHANNEL=chrome` を指定できます。
+
+モックの試験は本番の認証・認可やD1の受入試験を置き換えません。設計の理由は[クライアント開発環境](.docs/features/client-development.md)を参照してください。
 
 ## 初期化とサインイン
 
@@ -131,7 +159,7 @@ APIの配備だけではリモートMCPのツールは公開されません。�
 
 `performance-review` contextが評価期間・目標・自己評価・評価者の評価を所有し、承認はSystem、判断資格はCompanyを使います。画面は追加せずAPIとMCPを提供します。
 
-MCPの`review_cycles_create`で評価期間を作り、本人が`review_sheets_create`で目標を作ります。`review_sheets_command`から提出・訂正・自己評価・承認・差戻し・取消を行います。評価者は`review_sheets_list`の`scope: "inbox"`で自分が現在判断できる案件を確認します。
+MCPの`review_cycles_create`で評価期間を作り、本人が`review_sheets_create`で目標を作ります。`review_sheets_command`から提出・訂正・自己評価・取消を行います。承認・差戻し・却下は人がブラウザーの判断の画面で行い、MCPの`decision_url`がその画面のURLを返します。評価者は`review_sheets_list`の`scope: "inbox"`で自分が現在判断できる案件を確認します。
 
 CLIの`base reviews`からも同じ操作を行えます。期間ごとに評価尺度と区分配分を指定でき、上期・下期や「目標70％・行動30％」などの制度を固定します。省略時は5段階・目標100％です。
 
