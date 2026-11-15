@@ -3460,10 +3460,17 @@ WITH effective_versions AS (
   SELECT resource.* FROM company_resource_revisions resource
   WHERE resource.resource_type IN ('office-assignment', 'organizational-authority',
       'responsibility-assignment', 'collective-body-membership')
-    AND resource.revision = (
-      SELECT max(latest.revision) FROM company_resource_revisions latest
+    AND NOT (resource.state = 'void' AND resource.corrects_revision IS NOT NULL)
+    AND NOT EXISTS (
+      SELECT 1 FROM company_resource_revisions latest
       WHERE latest.organization_id = resource.organization_id AND latest.resource_type = resource.resource_type
         AND latest.resource_id = resource.resource_id AND latest.effective_from = resource.effective_from
+        AND latest.revision > resource.revision
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM company_resource_revisions correction
+      WHERE correction.organization_id = resource.organization_id AND correction.resource_type = resource.resource_type
+        AND correction.resource_id = resource.resource_id AND correction.corrects_revision = resource.revision
     )
 ), next_versions AS (
   SELECT *, lead(effective_from) OVER (

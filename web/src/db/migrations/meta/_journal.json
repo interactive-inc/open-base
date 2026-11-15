@@ -120,6 +120,13 @@
       "when": 1794755083112,
       "tag": "0017_audit_disclosure_legacy_retirement",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1794755083113,
+      "tag": "0018_company_employment_authority_effective_revisions",
+      "breakpoints": true
     }
   ]
 }
