@@ -4,19 +4,28 @@
   "workspaces": [
     "cli",
     "mcp",
-    "web"
+    "web",
+    "packages/mock"
   ],
   "type": "module",
   "scripts": {
-    "dev": "portless",
+    "dev": "bun run --cwd web dev",
     "build": "bun run --filter web build",
     "build:api-types": "bun run --filter web build:types",
     "typecheck": "bun run build:api-types && bun run --filter cli check",
     "test:web": "bun run --filter web test",
-    "test": "bun run --cwd web test:unit && bun run --cwd web test:d1 && bun run --cwd web test:acceptance && bun test --cwd cli && bun test --cwd mcp",
-    "check": "bun run --cwd web check && bun run --cwd cli check && bun run --cwd mcp check && vp check",
+    "test": "bun run --cwd web test:unit && bun run --cwd web test:d1 && bun run --cwd web test:acceptance && bun test --cwd cli && bun test --cwd mcp && bun run --cwd packages/mock test",
+    "check": "bun run --cwd web check && bun run --cwd cli check && bun run --cwd mcp check && vp check && bun run check:mock && bun run --cwd web check:storybook",
     "format": "vp fmt",
-    "lint": "vp lint"
+    "lint": "vp lint",
+    "dev:mock": "bun run --cwd web dev:mock",
+    "storybook": "bun run --cwd web storybook",
+    "build:storybook": "bun run --cwd web build:storybook",
+    "test:mock": "bun run --cwd packages/mock test",
+    "test:storybook": "bun run --cwd web test:storybook",
+    "check:mock": "bun run --cwd packages/mock check && bun run --cwd web check:mock",
+    "test:mock:e2e": "bun run --cwd web test:mock:e2e",
+    "check:storybook": "bun run --cwd web check:storybook"
   },
   "devDependencies": {
     "vite-plus": "^0.1.24"

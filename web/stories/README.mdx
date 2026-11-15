@@ -1,0 +1,18 @@
+import { Meta } from "@storybook/addon-docs/blocks"
+
+<Meta title="Foundations/使い方" />
+
+# 画面と部品を育てる
+
+Pages は全ページ、App は共通の画面構成です。部品はui-sdkを直接使います。
+
+- Docs と Code で使い方と実装例を確認します。
+- Controls で文言、variant、disabled などを変えます。
+- Actions と Interactions でイベントと操作テストを確認します。
+- Accessibility で問題を確認し、キーボードでも操作します。
+- Viewport、背景、明暗、Measure、Outline で表示を比較します。
+- Home の権限、空、失敗、遅延の story は同じ MSW 定義を使います。
+
+Story ごとにモック状態を作り直します。
+
+パスキーの端末操作と外部IdPへの遷移は、通常の開発環境で確認します。Storybookの認証mockは実認証を証明しません。

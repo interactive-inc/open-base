@@ -1,0 +1,14 @@
+/* 背景切り替えの装飾的なfadeを外し、配色とa11y検査を同じ状態に揃える。 */
+.sb-show-main {
+  transition: none !important;
+}
+
+/* OSの動きを抑える設定を、プレビューと自動検査の両方で尊重する。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0s !important;
+    animation-duration: 0s !important;
+  }
+}

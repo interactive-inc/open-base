@@ -50,3 +50,4 @@ void.lock.json
 
 # 旧wranglerの配備設定の退避先（本番の識別子を含む）
 .deploy/
+test-results/
