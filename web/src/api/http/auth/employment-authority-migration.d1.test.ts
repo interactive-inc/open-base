@@ -66,12 +66,13 @@ test("移行の途中で失敗した場合は以前の検査を残す", async ()
       )
       .first<string>("sql")
   const before = await definition()
-  await expect(
-    database.batch([
+  const failure = await database
+    .batch([
       ...upgrade.map((statement) => database.prepare(statement)),
       database.prepare("SELECT json_extract('{}', 'injected_failure')"),
-    ]),
-  ).rejects.toThrow()
+    ])
+    .catch((error: unknown) => error)
+  expect(failure).toBeInstanceOf(Error)
   expect(await definition()).toBe(before)
   expect(
     (await database.prepare("SELECT * FROM company_employment_authority_violations").all()).results,
