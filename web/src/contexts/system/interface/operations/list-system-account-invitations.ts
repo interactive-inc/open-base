@@ -17,7 +17,8 @@ export async function listSystemAccountInvitations(
     const rows = await database
       .prepare(
         `SELECT id, token, subject, role_id, resource_type, resource_id, related_resource_id,
-                accepted_by_account_id, expires_at, revoked_at, created_at, updated_at
+                accepted_by_account_id, issued_by_account_id, expires_at, revoked_at, created_at,
+                updated_at
          FROM system_account_invitations
          WHERE accepted_by_account_id IS NULL
          ORDER BY created_at DESC LIMIT ?1`,

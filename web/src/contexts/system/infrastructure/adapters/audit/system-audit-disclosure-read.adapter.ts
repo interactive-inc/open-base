@@ -19,7 +19,7 @@ const authorization = `WITH grants AS (
     AND (binding.revoked_at IS NULL OR binding.revoked_at > ?3)
   ORDER BY binding.id, permission.permission_key
 )
-SELECT json_object('updatedAt', account.updated_at, 'grants', (SELECT json_group_array(json_object(
+SELECT json_object('legacyAccountId', account.legacy_id, 'updatedAt', account.updated_at, 'grants', (SELECT json_group_array(json_object(
   'id', id, 'role', role_id, 'createdAt', created_at, 'revokedAt', revoked_at, 'updatedAt', updated_at, 'permission', permission_key)) FROM grants)) AS snapshot
 FROM system_accounts account WHERE account.id = ?1 AND account.status = 'active' AND account.closed_at IS NULL
   AND account.token_version = ?2 AND account.created_at <= ?3
@@ -64,15 +64,22 @@ export class SystemAuditDisclosureReadAdapter {
         snapshot?: string
         epoch?: number
         snapshot_json?: string
+        scope?: string
+        ambiguous_scope?: number
       }>([
         this.c.env.DB.prepare(authorization).bind(...args),
         this.c.env.DB.prepare(
           // 版は削除も更新もできないため、行数が増えたかどうかで変更を検知する。
           "SELECT count(*) AS epoch FROM system_audit_disclosure_policy_revisions",
         ),
-        this.c.env.DB.prepare(`SELECT audit.after_json AS snapshot_json FROM system_audit_disclosure_policy_revisions policy
-          JOIN system_audit_events audit ON audit.event_id = policy.audit_event_id
-          WHERE policy.scope IN ('*', ?1) AND policy.revision = (SELECT MAX(revision) FROM system_audit_disclosure_policy_revisions latest WHERE latest.scope = policy.scope)`).bind(
+        this.c.env.DB.prepare(`SELECT policy.scope, audit.after_json AS snapshot_json,
+          CASE WHEN policy.scope <> '*' AND (SELECT count(*) FROM system_accounts owner
+            WHERE owner.id = policy.scope OR owner.legacy_id = policy.scope) > 1 THEN 1 ELSE 0 END AS ambiguous_scope
+          FROM system_audit_disclosure_policy_revisions policy
+          LEFT JOIN system_audit_events audit ON audit.event_id = policy.audit_event_id
+          WHERE (policy.scope IN ('*', ?1, (SELECT legacy_id FROM system_accounts WHERE id = ?1))
+            OR NOT EXISTS (SELECT 1 FROM system_accounts owner WHERE owner.id = policy.scope OR owner.legacy_id = policy.scope))
+          AND policy.revision = (SELECT MAX(revision) FROM system_audit_disclosure_policy_revisions latest WHERE latest.scope = policy.scope)`).bind(
           input.accountId,
         ),
       ])
@@ -83,17 +90,23 @@ export class SystemAuditDisclosureReadAdapter {
       const epoch = batch[1]?.results.at(0)?.epoch
       if (typeof epoch !== "number" || !Number.isSafeInteger(epoch) || epoch < 0)
         return new SystemAuditDisclosureError("unavailable")
+      const legacyAccountId: unknown = JSON.parse(actor).legacyAccountId
+      if (legacyAccountId !== null && typeof legacyAccountId !== "string")
+        return new SystemAuditDisclosureError("unavailable")
       const policies: SystemAuditDisclosurePolicyEntity[] = []
       for (const row of batch[2]?.results ?? []) {
-        if (typeof row.snapshot_json !== "string")
+        if (row.ambiguous_scope !== 0 || typeof row.snapshot_json !== "string")
           return new SystemAuditDisclosureError("unavailable")
-        const policy = SystemAuditDisclosurePolicyEntity.create(JSON.parse(row.snapshot_json))
+        const policy = SystemAuditDisclosurePolicyEntity.restoreJson(row.snapshot_json)
         if (policy instanceof Error) return new SystemAuditDisclosureError("unavailable", policy)
+        if (policy.snapshot.scope !== row.scope)
+          return new SystemAuditDisclosureError("unavailable")
         policies.push(policy)
       }
       const value = SystemAuditDisclosureValue.evaluate({
         policies,
         accountId: input.accountId,
+        legacyAccountId,
         purpose: input.purpose,
         at: input.now,
       })

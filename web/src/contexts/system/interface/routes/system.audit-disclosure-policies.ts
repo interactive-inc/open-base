@@ -26,14 +26,22 @@ export const GET = systemFactory.createHandlers(
     })
     if (proof instanceof Error || proof === "forbidden")
       throw new SystemAuditDisclosureHttpError(toAuditDisclosureHttpFailure(proof))
-    const result = await new SystemAuditDisclosurePolicyRepository({
+    const repository = new SystemAuditDisclosurePolicyRepository({
       env: { DB: context.env.DB },
       assertions: proof,
-    }).findCurrent(context.req.valid("query").scope)
+    })
+    const scope = context.req.valid("query").scope
+    const result = await repository.findCurrent(scope)
     if (result instanceof Error)
       throw new SystemAuditDisclosureHttpError(toAuditDisclosureHttpFailure(result))
+    const legacy = scope === "*" ? null : await repository.findLegacyCurrent(scope)
+    if (legacy instanceof Error)
+      throw new SystemAuditDisclosureHttpError(toAuditDisclosureHttpFailure(legacy))
     return context.json(
-      auditDisclosureCurrentPolicyResponseSchema.parse({ policy: result?.snapshot ?? null }),
+      auditDisclosureCurrentPolicyResponseSchema.parse({
+        policy: result?.snapshot ?? null,
+        ...(legacy === null ? {} : { legacyPolicy: legacy.snapshot }),
+      }),
       200,
     )
   },

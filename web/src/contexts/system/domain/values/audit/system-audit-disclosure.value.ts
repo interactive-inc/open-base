@@ -21,6 +21,7 @@ export class SystemAuditDisclosureValue {
     input: Readonly<{
       policies: ReadonlyArray<SystemAuditDisclosurePolicyEntity>
       accountId: string
+      legacyAccountId?: string | null
       purpose: string | null
       at: Date
     }>,
@@ -32,7 +33,12 @@ export class SystemAuditDisclosureValue {
     const scopes = new Set<string>()
     for (const policy of input.policies) {
       const rule = policy.snapshot
-      if ((rule.scope !== "*" && rule.scope !== input.accountId) || scopes.has(rule.scope))
+      if (
+        (rule.scope !== "*" &&
+          rule.scope !== input.accountId &&
+          rule.scope !== input.legacyAccountId) ||
+        scopes.has(rule.scope)
+      )
         return new SystemAuditDisclosureError("unavailable")
       scopes.add(rule.scope)
       if (Date.parse(rule.recordedAt) > input.at.getTime())

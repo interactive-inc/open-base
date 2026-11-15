@@ -13,7 +13,12 @@ export class PublishSystemAuditDisclosurePolicy {
 
   async execute(input: unknown, now: Date) {
     const command = auditDisclosureCommandSchema.safeParse(input)
-    if (!command.success || !Number.isSafeInteger(now.getTime()) || now.getTime() < 0)
+    if (
+      !command.success ||
+      !Number.isSafeInteger(now.getTime()) ||
+      now.getTime() < 0 ||
+      (command.data.scope === "*" && command.data.supersedesLegacyRevision !== undefined)
+    )
       return new SystemAuditDisclosureError("invalid")
     const existing = await this.c.repository.findCommand(command.data.commandId)
     if (existing instanceof Error) return existing
@@ -38,13 +43,31 @@ export class PublishSystemAuditDisclosurePolicy {
       auditEventId: crypto.randomUUID(),
     })
     if (policy instanceof Error) return policy
-    const result = await this.c.repository.append(policy, before)
+    const result = await this.append(policy, before)
     if (result === undefined) return { policy, replayed: false }
-    if (result.kind !== "conflict") return result
+    if (!(result instanceof SystemAuditDisclosureError) || result.kind !== "conflict") return result
     const raced = await this.c.repository.findCommand(command.data.commandId)
     if (raced instanceof Error) return raced
     return raced !== null && raced.matches(command.data)
       ? { policy: raced, replayed: true }
       : result
+  }
+
+  private async append(
+    policy: SystemAuditDisclosurePolicyEntity,
+    before: SystemAuditDisclosurePolicyEntity | null,
+  ) {
+    const expected = policy.snapshot.supersedesLegacyRevision
+    if (expected === undefined) return this.c.repository.append(policy, before)
+    const legacy = await this.c.repository.findLegacyCurrent(policy.snapshot.scope)
+    if (legacy instanceof Error) return legacy
+    if (legacy === null || legacy.snapshot.revision !== expected)
+      return new SystemAuditDisclosureError("conflict")
+    const retirement = legacy.retireInFavorOf(policy, {
+      commandId: crypto.randomUUID(),
+      auditEventId: crypto.randomUUID(),
+    })
+    if (retirement instanceof Error) return retirement
+    return this.c.repository.appendReplacingLegacy(policy, before, retirement, legacy)
   }
 }

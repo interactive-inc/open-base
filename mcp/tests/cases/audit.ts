@@ -64,4 +64,12 @@ export const auditCases: ReadonlyArray<ToolCase> = [
     headers: { "x-system-step-up": stepUp },
     body: policy,
   },
+  {
+    tool: "audit_disclosure_policies_publish",
+    args: { ...policy, scope: ids.b, supersedesLegacyRevision: 3, step_up_token: stepUp },
+    method: "POST",
+    path: "/system/audit-disclosure-policies",
+    headers: { "x-system-step-up": stepUp },
+    body: { ...policy, scope: ids.b, supersedesLegacyRevision: 3 },
+  },
 ]

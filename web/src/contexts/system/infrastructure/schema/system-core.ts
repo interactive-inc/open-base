@@ -587,6 +587,8 @@ export const systemAccountInvitations = sqliteTable(
     usedBy: text("accepted_by_account_id").references(() => systemAccounts.id, {
       onDelete: "restrict",
     }),
+    /** 招待を出したアカウント。この列より前の招待は null。アカウントの完全な削除を止めないよう参照は張らない。 */
+    issuedBy: text("issued_by_account_id"),
     expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
     revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),

@@ -85,12 +85,13 @@ export function registerAuditTools(server: McpServer) {
   })
   registerApiTool(server, {
     name: "audit_disclosure_policies_publish",
-    description: `Publish a new revision of the audit disclosure policy: which fields, target types and purposes may be disclosed, until when. Requires system:admin. ${intentNote} ${stepUpNote}`,
+    description: `Publish a new revision of the audit disclosure policy: which fields, target types and purposes may be disclosed, until when. Requires system:admin. To explicitly replace a legacy Account policy, first read legacyPolicy and pass its revision as supersedesLegacyRevision. Omitting it keeps the legacy restriction. ${intentNote} ${stepUpNote}`,
     annotations: write,
     input: {
       scope: z.union([z.literal("*"), z.uuid()]),
       commandId: z.uuid(),
       expectedRevision: z.number().int().nonnegative(),
+      supersedesLegacyRevision: z.number().int().positive().optional(),
       enabled: z.boolean(),
       allowedFields: z
         .array(

@@ -1,3 +1,4 @@
+import { SystemAuditDisclosurePolicyEntity } from "@system/domain/entities/system-audit-disclosure-policy.entity"
 import { testDerivedId } from "@system/test/system-test-id.test-support"
 import { expect, setDefaultTimeout, spyOn, test } from "bun:test"
 import { drizzle } from "drizzle-orm/d1"
@@ -618,4 +619,499 @@ test("監査開示は別Accountと不在のfamilyを拒否し、sidのない資�
   if (proof instanceof Error) throw proof
 
   await fixtureContext.db.batch([...proof.assertions])
+})
+
+/** 移行時のコピーで残る古いscopeと監査JSONを、独立した試験DBだけに再現する。 */
+async function legacyFixture(options: Record<string, unknown> = {}, legacyScope = "legacy-reader") {
+  const f = await fixture()
+  expect((await f.publish({ ...f.command, ...options })).status).toBe(201)
+  const guards = await f.db
+    .prepare(`SELECT name, sql FROM sqlite_master WHERE type = 'trigger'
+    AND name IN ('system_audit_disclosure_revision_update', 'system_audit_events_prevent_update')`)
+    .all<{ name: string; sql: string }>()
+  // 識別子の変更を止めるtriggerの名前に依存せず、移行時にだけ可能だったコピーを作る。
+  const accountGuards = await f.db
+    .prepare(`SELECT name, sql FROM sqlite_master WHERE type = 'trigger'
+    AND tbl_name = 'system_accounts' AND sql LIKE '%BEFORE UPDATE OF id, legacy_id%'`)
+    .all<{ name: string; sql: string }>()
+  const triggers = [
+    ...new Map(
+      [...guards.results, ...accountGuards.results].map((row) => [row.name, row]),
+    ).values(),
+  ]
+  for (const trigger of triggers) await f.db.prepare(`DROP TRIGGER "${trigger.name}"`).run()
+  await f.db
+    .prepare("UPDATE system_accounts SET legacy_id = ?1 WHERE id = ?2")
+    .bind(legacyScope, f.command.scope)
+    .run()
+  await f.db
+    .prepare(`UPDATE system_audit_events SET after_json = json_set(after_json,
+    '$.scope', ?1, '$.actorAccountId', 'legacy-admin')
+    WHERE event_id IN (SELECT audit_event_id FROM system_audit_disclosure_policy_revisions WHERE scope = ?2)`)
+    .bind(legacyScope, f.command.scope)
+    .run()
+  await f.db
+    .prepare("UPDATE system_audit_disclosure_policy_revisions SET scope = ?1 WHERE scope = ?2")
+    .bind(legacyScope, f.command.scope)
+    .run()
+  for (const trigger of triggers) await f.db.prepare(trigger.sql).run()
+  return f
+}
+
+test("古い個別設定の目的・項目・対象制限を一覧と詳細で引き継ぎ、監査原本を変えない", async () => {
+  const f = await legacyFixture()
+  const before = await f.db.prepare("SELECT * FROM system_audit_disclosure_policy_revisions").all()
+  const audit = await f.db
+    .prepare(
+      "SELECT after_json FROM system_audit_events WHERE action = 'system.audit.disclosure.published'",
+    )
+    .all()
+  expect((await f.read()).status).toBe(403)
+  expect((await f.read("&purpose=other")).status).toBe(403)
+  const response = await f.read("&purpose=review")
+  expect(response.status).toBe(200)
+  const body = await response.json()
+  expect(body).toMatchObject({
+    total: 1,
+    events: [{ actor_account_id: null, target_id: null, metadata_json: null }],
+  })
+  expect(JSON.stringify(body)).not.toContain("private-")
+  expect(await (await f.read("&purpose=review&target_type=system:session")).json()).toMatchObject({
+    total: 0,
+    events: [],
+  })
+  const detail = await f.request(`/system/audit-events/${eventId}?purpose=review`, {
+    headers: f.reader,
+  })
+  expect(detail.status).toBe(200)
+  expect(await detail.json()).toMatchObject({
+    actor_account_id: null,
+    target_id: null,
+    metadata_json: null,
+  })
+  expect((await f.request(`/system/audit-events/${eventId}`, { headers: f.reader })).status).toBe(
+    403,
+  )
+  expect(
+    (await f.db.prepare("SELECT * FROM system_audit_disclosure_policy_revisions").all()).results,
+  ).toEqual(before.results)
+  expect(audit.results).toHaveLength(1)
+  expect(
+    (
+      await f.db
+        .prepare(
+          "SELECT after_json FROM system_audit_events WHERE action = 'system.audit.disclosure.published'",
+        )
+        .all()
+    ).results,
+  ).toEqual(audit.results)
+  expect((await f.read("", f.other)).status).toBe(200)
+})
+
+test("古い設定・新しい設定・全体設定の積集合で公開範囲を決める", async () => {
+  const f = await legacyFixture({
+    allowedFields: ["actor_account_id", "target_id", "metadata_json"],
+  })
+  expect(
+    (
+      await f.publish({
+        ...f.command,
+        commandId: crypto.randomUUID(),
+        allowedFields: ["actor_account_id", "reason_code", "metadata_json"],
+      })
+    ).status,
+  ).toBe(201)
+  expect(
+    (
+      await f.publish({
+        ...f.command,
+        scope: "*",
+        commandId: crypto.randomUUID(),
+        allowedFields: ["target_id", "reason_code", "metadata_json"],
+      })
+    ).status,
+  ).toBe(201)
+  const response = await f.read("&purpose=review")
+  expect(response.status).toBe(200)
+  expect(await response.json()).toMatchObject({
+    total: 1,
+    events: [
+      {
+        actor_account_id: null,
+        target_id: null,
+        reason_code: null,
+        metadata_json: '{"value":"private-metadata"}',
+      },
+    ],
+  })
+})
+
+test.each([false, true])("古い設定の無効化と期限切れを区別する（有効: %s）", async (enabled) => {
+  const f = await legacyFixture({ enabled, expiresAt: new Date(at.getTime() + 1).toISOString() })
+  f.clock.now = new Date(at.getTime() + 2)
+  const response = await f.read()
+  expect(response.status).toBe(enabled ? 403 : 200)
+  if (!enabled)
+    expect(await response.json()).toMatchObject({ events: [{ target_id: "private-target" }] })
+})
+
+test.each([false, true])(
+  "利用者の不明な設定や監査との不一致を無視して公開しない（一致: %s）",
+  async (matching) => {
+    const f = await legacyFixture()
+    await f.db.prepare("DROP TRIGGER system_audit_disclosure_revision_update").run()
+    await f.db
+      .prepare("UPDATE system_audit_disclosure_policy_revisions SET scope = 'unmapped-account'")
+      .run()
+    if (matching) {
+      await f.db.prepare("DROP TRIGGER system_audit_events_prevent_update").run()
+      await f.db
+        .prepare(`UPDATE system_audit_events SET after_json = json_set(after_json, '$.scope', 'unmapped-account')
+      WHERE event_id IN (SELECT audit_event_id FROM system_audit_disclosure_policy_revisions)`)
+        .run()
+    }
+    expect((await f.read()).status).toBe(503)
+    expect((await f.request(`/system/audit-events/${eventId}`, { headers: f.reader })).status).toBe(
+      503,
+    )
+  },
+)
+
+function repairCommand(
+  f: Awaited<ReturnType<typeof fixture>>,
+  overrides: Record<string, unknown> = {},
+) {
+  return { ...f.command, commandId: crypto.randomUUID(), supersedesLegacyRevision: 1, ...overrides }
+}
+
+async function configuredPolicy(f: Awaited<ReturnType<typeof fixture>>) {
+  const response = await f.request(`/system/audit-disclosure-policies?scope=${f.command.scope}`, {
+    headers: f.admin,
+  })
+  expect(response.status).toBe(200)
+  return auditDisclosureCurrentPolicyResponseSchema.parse(await response.json())
+}
+
+async function prettyLegacyAudit(f: Awaited<ReturnType<typeof fixture>>) {
+  const row = await f.db
+    .prepare(`SELECT audit.after_json FROM system_audit_events audit
+    JOIN system_audit_disclosure_policy_revisions policy ON policy.audit_event_id = audit.event_id
+    WHERE policy.scope = 'legacy-reader' AND policy.revision = 1`)
+    .first<string>("after_json")
+  const guard = await f.db
+    .prepare("SELECT sql FROM sqlite_master WHERE name = 'system_audit_events_prevent_update'")
+    .first<string>("sql")
+  if (row === null || guard === null) throw new Error("audit fixture missing")
+  const pretty = JSON.stringify(
+    Object.fromEntries(Object.entries(JSON.parse(row)).reverse()),
+    null,
+    2,
+  )
+  await f.db.prepare("DROP TRIGGER system_audit_events_prevent_update").run()
+  try {
+    await f.db
+      .prepare(`UPDATE system_audit_events SET after_json = ?1
+      WHERE event_id IN (SELECT audit_event_id FROM system_audit_disclosure_policy_revisions WHERE scope = 'legacy-reader')`)
+      .bind(pretty)
+      .run()
+  } finally {
+    await f.db.prepare(guard).run()
+  }
+  return pretty
+}
+
+async function policyRevisionCount(f: Awaited<ReturnType<typeof fixture>>) {
+  return f.db
+    .prepare("SELECT count(*) AS count FROM system_audit_disclosure_policy_revisions")
+    .first<number>("count")
+}
+
+test("管理者は旧版を取得し、新しい設定と旧版の解除を監査原本を保って一括保存できる", async () => {
+  const f = await legacyFixture()
+  const raw = await prettyLegacyAudit(f)
+  const original = await f.db
+    .prepare("SELECT * FROM system_audit_disclosure_policy_revisions WHERE scope = 'legacy-reader'")
+    .first()
+  expect(await configuredPolicy(f)).toMatchObject({
+    policy: null,
+    legacyPolicy: { scope: "legacy-reader", revision: 1, enabled: true },
+  })
+  const command = repairCommand(f, { allowedFields: ["target_id"], allowedPurposes: null })
+  const response = await f.publish(command)
+  expect(response.status).toBe(201)
+  const published = auditDisclosurePolicyResponseSchema.parse(await response.json())
+  expect(published.policy.supersedesLegacyRevision).toBe(1)
+  const current = await configuredPolicy(f)
+  expect(current).toMatchObject({
+    policy: { revision: 1 },
+    legacyPolicy: {
+      revision: 2,
+      enabled: false,
+      supersededByAuditEventId: published.policy.auditEventId,
+    },
+  })
+  const retirement = await f.db
+    .prepare(`SELECT audit.before_json FROM system_audit_events audit
+    JOIN system_audit_disclosure_policy_revisions policy ON policy.audit_event_id = audit.event_id
+    WHERE policy.scope = 'legacy-reader' AND policy.revision = 2`)
+    .first<string>("before_json")
+  expect(retirement).toBe(raw)
+  expect(
+    await f.db
+      .prepare(
+        "SELECT * FROM system_audit_disclosure_policy_revisions WHERE scope = 'legacy-reader' AND revision = 1",
+      )
+      .first<Record<string, unknown>>(),
+  ).toEqual(original)
+  const originalAudit = await f.db
+    .prepare(`SELECT audit.after_json FROM system_audit_events audit
+      JOIN system_audit_disclosure_policy_revisions policy ON policy.audit_event_id = audit.event_id
+      WHERE policy.scope = 'legacy-reader' AND policy.revision = 1`)
+    .first<string>("after_json")
+  expect(originalAudit).toBe(raw)
+  const read = await f.read()
+  expect(read.status).toBe(200)
+  expect(await read.json()).toMatchObject({
+    events: [{ target_id: "private-target", actor_account_id: null, metadata_json: null }],
+  })
+  expect((await f.publish(command)).status).toBe(200)
+  expect((await f.publish({ ...command, supersedesLegacyRevision: undefined })).status).toBe(409)
+  expect(await policyRevisionCount(f)).toBe(3)
+})
+
+test("旧版の解除を指定しない新設定では、旧い制限を緩めない", async () => {
+  const f = await legacyFixture()
+  expect(
+    (await f.publish(repairCommand(f, { supersedesLegacyRevision: undefined, enabled: false })))
+      .status,
+  ).toBe(201)
+  expect((await f.read()).status).toBe(403)
+  expect(await configuredPolicy(f)).toMatchObject({ legacyPolicy: { revision: 1, enabled: true } })
+})
+
+test.each([{ supersedesLegacyRevision: 2 }, { expectedRevision: 99 }])(
+  "旧版・現版の競合ではどちらも保存しない: %j",
+  async (overrides) => {
+    const f = await legacyFixture()
+    expect((await f.publish(repairCommand(f, overrides))).status).toBe(409)
+    expect(await policyRevisionCount(f)).toBe(1)
+  },
+)
+
+test("旧設定のない利用者と全体設定を、旧版解除の対象にしない", async () => {
+  const f = await fixture()
+  expect((await f.publish(repairCommand(f))).status).toBe(409)
+  expect((await f.publish(repairCommand(f, { scope: "*" }))).status).toBe(400)
+  expect((await f.publish(repairCommand(f, { supersedesLegacyRevision: 0 }))).status).toBe(400)
+  expect(await policyRevisionCount(f)).toBe(0)
+})
+
+test.each([false, true])(
+  "期限を過ぎた旧設定も、管理者が旧版を明示して解除できる（有効: %s）",
+  async (enabled) => {
+    const f = await legacyFixture({ enabled, expiresAt: new Date(at.getTime() + 1).toISOString() })
+    f.clock.now = new Date(at.getTime() + 2)
+    expect((await f.read()).status).toBe(enabled ? 403 : 200)
+    expect((await f.publish(repairCommand(f, { enabled: false }))).status).toBe(201)
+    expect((await f.read()).status).toBe(200)
+    expect(await configuredPolicy(f)).toMatchObject({
+      legacyPolicy: { revision: 2, enabled: false, expiresAt: null },
+    })
+  },
+)
+
+test("旧設定を解除しても、全体設定の目的と項目制限は残る", async () => {
+  const f = await legacyFixture()
+  expect(
+    (await f.publish({ ...f.command, scope: "*", commandId: crypto.randomUUID() })).status,
+  ).toBe(201)
+  expect((await f.publish(repairCommand(f, { enabled: false }))).status).toBe(201)
+  expect((await f.read()).status).toBe(403)
+  expect(await (await f.read("&purpose=review")).json()).toMatchObject({
+    events: [{ target_id: null, metadata_json: null }],
+  })
+})
+
+test.each([false, true])(
+  "同時の修復は一度だけ保存し、同じ依頼の再送だけ受け付ける（同じ依頼: %s）",
+  async (same) => {
+    const f = await legacyFixture()
+    const first = repairCommand(f)
+    const second = same ? first : repairCommand(f)
+    const responses = await Promise.all([f.publish(first), f.publish(second)])
+    expect(responses.map((response) => response.status).sort((a, b) => a - b)).toEqual(
+      same ? [200, 201] : [201, 409],
+    )
+    expect(await policyRevisionCount(f)).toBe(3)
+  },
+)
+
+test("旧版の保存が失敗したら新設定と成功の監査記録も取り消す", async () => {
+  const f = await legacyFixture()
+  await f.db
+    .prepare(`CREATE TRIGGER fail_legacy_retirement BEFORE INSERT ON system_audit_disclosure_policy_revisions
+    WHEN NEW.scope = 'legacy-reader' AND NEW.revision = 2 BEGIN SELECT RAISE(ABORT, 'retirement failure'); END`)
+    .run()
+  expect((await f.publish(repairCommand(f))).status).toBe(503)
+  expect(await policyRevisionCount(f)).toBe(1)
+  expect(
+    await f.db
+      .prepare(
+        "SELECT count(*) AS count FROM system_audit_events WHERE action = 'system.audit.disclosure.published' AND outcome = 'succeeded'",
+      )
+      .first<number>("count"),
+  ).toBe(1)
+})
+
+test("修復の保存直前に管理資格が失われた場合は両方の設定を保存しない", async () => {
+  const f = await legacyFixture()
+  const append = SystemAuditDisclosurePolicyRepository.prototype.appendReplacingLegacy
+  const pending = spyOn(
+    SystemAuditDisclosurePolicyRepository.prototype,
+    "appendReplacingLegacy",
+  ).mockImplementation(async function (
+    this: SystemAuditDisclosurePolicyRepository,
+    ...args: Parameters<typeof append>
+  ) {
+    await f.db
+      .prepare("UPDATE system_role_bindings SET revoked_at = ?1 WHERE id = ?2")
+      .bind(at.getTime(), bindingIdOf("282b84eb-787d-4655-a88b-c072960fc970"))
+      .run()
+    return append.apply(this, args)
+  })
+  try {
+    expect((await f.publish(repairCommand(f))).status).toBe(403)
+    expect(pending).toHaveBeenCalledTimes(1)
+    expect(await policyRevisionCount(f)).toBe(1)
+  } finally {
+    pending.mockRestore()
+  }
+})
+
+test("管理者以外や再認証のない要求は旧版を解除できない", async () => {
+  const f = await legacyFixture()
+  const command = repairCommand(f)
+  expect((await f.publish(command, f.reader)).status).toBe(403)
+  expect((await f.publish(command, { ...f.admin, "x-system-step-up": "" })).status).toBe(403)
+  expect(await policyRevisionCount(f)).toBe(1)
+})
+
+test.each([false, true])(
+  "新設定の監査に旧版の指定がなければ、DBも旧設定だけの解除を拒否する（新設定あり: %s）",
+  async (persisted) => {
+    const f = await legacyFixture()
+    const repository = new SystemAuditDisclosurePolicyRepository({
+      env: { DB: f.db },
+      assertions: [],
+    })
+    const old = await repository.findLegacyCurrent(f.command.scope)
+    if (old === null || old instanceof Error) throw new Error("legacy fixture missing")
+    const { expectedRevision, ...input } = repairCommand(f)
+    let props: Record<string, unknown> = {
+      ...input,
+      actorAccountId: "282b84eb-787d-4655-a88b-c072960fc970",
+      revision: expectedRevision + 1,
+      recordedAt: at.toISOString(),
+      auditEventId: crypto.randomUUID(),
+    }
+    if (persisted) {
+      const response = await f.publish({
+        ...input,
+        expectedRevision,
+        supersedesLegacyRevision: undefined,
+      })
+      expect(response.status).toBe(201)
+      props = {
+        ...auditDisclosurePolicyResponseSchema.parse(await response.json()).policy,
+        supersedesLegacyRevision: 1,
+      }
+    }
+    const replacement = SystemAuditDisclosurePolicyEntity.create(props)
+    if (replacement instanceof Error) throw replacement
+    const retirement = old.retireInFavorOf(replacement, {
+      commandId: crypto.randomUUID(),
+      auditEventId: crypto.randomUUID(),
+    })
+    if (retirement instanceof Error) throw retirement
+    expect(await repository.append(retirement, old)).toMatchObject({ kind: "conflict" })
+    expect(await policyRevisionCount(f)).toBe(persisted ? 2 : 1)
+  },
+)
+
+test("修復後の通常の設定変更は旧版の解除を繰り返さない", async () => {
+  const f = await legacyFixture()
+  expect((await f.publish(repairCommand(f))).status).toBe(201)
+  expect(
+    (
+      await f.publish({
+        ...f.command,
+        commandId: crypto.randomUUID(),
+        expectedRevision: 1,
+        enabled: false,
+      })
+    ).status,
+  ).toBe(201)
+  expect(await configuredPolicy(f)).toMatchObject({
+    policy: { revision: 2, enabled: false },
+    legacyPolicy: { revision: 2, enabled: false },
+  })
+  expect((await f.read()).status).toBe(200)
+  expect(await policyRevisionCount(f)).toBe(4)
+})
+
+test.each([false, true])(
+  "適用先の変わらない設定も旧操作者の監査原文を保って更新できる（全体: %s）",
+  async (global) => {
+    const f = await fixture()
+    const scope = global ? "*" : f.command.scope
+    expect((await f.publish({ ...f.command, scope })).status).toBe(201)
+    const guard = await f.db
+      .prepare("SELECT sql FROM sqlite_master WHERE name = 'system_audit_events_prevent_update'")
+      .first<string>("sql")
+    if (guard === null) throw new Error("audit guard missing")
+    await f.db.prepare("DROP TRIGGER system_audit_events_prevent_update").run()
+    try {
+      await f.db
+        .prepare(`UPDATE system_audit_events SET after_json = json_set(after_json, '$.actorAccountId', 'legacy-admin')
+      WHERE event_id IN (SELECT audit_event_id FROM system_audit_disclosure_policy_revisions WHERE scope = ?1)`)
+        .bind(scope)
+        .run()
+    } finally {
+      await f.db.prepare(guard).run()
+    }
+    const current = await f.request(`/system/audit-disclosure-policies?scope=${scope}`, {
+      headers: f.admin,
+    })
+    expect(current.status).toBe(200)
+    expect(auditDisclosureCurrentPolicyResponseSchema.parse(await current.json())).toMatchObject({
+      policy: { revision: 1, actorAccountId: "legacy-admin" },
+    })
+    expect(
+      (
+        await f.publish({
+          ...f.command,
+          scope,
+          commandId: crypto.randomUUID(),
+          expectedRevision: 1,
+          enabled: false,
+        })
+      ).status,
+    ).toBe(201)
+    expect(await policyRevisionCount(f)).toBe(2)
+  },
+)
+
+test("別人の現番号にも一致する旧番号は、閲覧にも修復にも使わない", async () => {
+  const f = await legacyFixture({}, "28689052-c77f-42e5-8f85-1b461d9f5514")
+  expect(
+    (
+      await f.request(`/system/audit-disclosure-policies?scope=${f.command.scope}`, {
+        headers: f.admin,
+      })
+    ).status,
+  ).toBe(503)
+  expect((await f.publish(repairCommand(f))).status).toBe(503)
+  expect((await f.read("&purpose=review")).status).toBe(503)
+  expect((await f.read("&purpose=review", f.other)).status).toBe(503)
+  expect(await policyRevisionCount(f)).toBe(1)
 })

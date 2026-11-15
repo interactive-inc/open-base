@@ -1,5 +1,8 @@
 import { z } from "zod"
-import { auditDisclosurePolicySchema } from "@system/domain/schemas/audit/system-audit-disclosure-policy.schema"
+import {
+  auditDisclosurePolicySchema,
+  auditDisclosureStoredPolicySchema,
+} from "@system/domain/schemas/audit/system-audit-disclosure-policy.schema"
 import { systemAuditDisclosedEventSchema } from "@system/domain/schemas/audit/system-audit-disclosed-event.schema"
 
 export const auditDisclosurePolicyResponseSchema = z.strictObject({
@@ -7,7 +10,8 @@ export const auditDisclosurePolicyResponseSchema = z.strictObject({
   replayed: z.boolean(),
 })
 export const auditDisclosureCurrentPolicyResponseSchema = z.strictObject({
-  policy: auditDisclosurePolicySchema.nullable(),
+  policy: auditDisclosureStoredPolicySchema.nullable(),
+  legacyPolicy: auditDisclosureStoredPolicySchema.optional(),
 })
 export const systemAuditEventResponseSchema = systemAuditDisclosedEventSchema.transform(
   (event) => ({

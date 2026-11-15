@@ -23,7 +23,8 @@ export async function readSystemAccountInvitationCandidates(
     const rows = await database
       .prepare(
         `SELECT id, token, subject, role_id, resource_type, resource_id, related_resource_id,
-                accepted_by_account_id, expires_at, revoked_at, created_at, updated_at
+                accepted_by_account_id, issued_by_account_id, expires_at, revoked_at, created_at,
+                updated_at
          FROM system_account_invitations WHERE token IN (${placeholders}) ORDER BY id`,
       )
       .bind(...tokens)

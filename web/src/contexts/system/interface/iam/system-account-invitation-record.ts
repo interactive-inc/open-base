@@ -7,6 +7,8 @@ export type SystemAccountInvitationRecord = Readonly<{
   resourceId: string | null
   relatedResourceId: string | null
   usedBy: string | null
+  /** 招待を出したアカウント。発行者を記録する前に作った招待は null。 */
+  issuedBy: string | null
   expiresAt: Date
   revokedAt: Date | null
   createdAt: Date
@@ -22,6 +24,7 @@ export type SystemAccountInvitationStorageRow = Readonly<{
   resource_id: string | null
   related_resource_id: string | null
   accepted_by_account_id: string | null
+  issued_by_account_id: string | null
   expires_at: number
   revoked_at: number | null
   created_at: number
@@ -50,6 +53,7 @@ export function toSystemAccountInvitationRecord(
     resourceId: row.resource_id,
     relatedResourceId: row.related_resource_id,
     usedBy: row.accepted_by_account_id,
+    issuedBy: row.issued_by_account_id,
     expiresAt: new Date(row.expires_at),
     revokedAt: row.revoked_at === null ? null : new Date(row.revoked_at),
     createdAt: new Date(row.created_at),

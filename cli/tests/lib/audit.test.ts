@@ -13,13 +13,15 @@ const policy = {
   commandId: crypto.randomUUID(),
   expectedRevision: 0,
   enabled: true,
-  allowedFields: null,
+  allowedFields: [],
   allowedTargetTypes: null,
   allowedPurposes: ["investigation"],
   expiresAt: null,
   reason: "調査のため",
 }
 const policyFile = fixtures.writeJson("policy.json", policy)
+const repairPolicy = { ...policy, scope: crypto.randomUUID(), supersedesLegacyRevision: 3 }
+const repairFile = fixtures.writeJson("repair.json", repairPolicy)
 
 describeApiCommands({
   group: "audit",
@@ -96,6 +98,18 @@ describeApiCommands({
       },
     },
   ],
+})
+
+test("旧設定を引き継ぐ指定と本人確認をそのまま送る", async () => {
+  const run = await runCliInProcess(
+    ["audit", "disclosure-policies", "publish", "--data", repairFile, "--step-up", STEP_UP_TOKEN],
+    () => Response.json({ policy: repairPolicy }),
+  )
+  expect(run.status).toBe(200)
+  expect(run.requests).toHaveLength(1)
+  const request = run.requests[0]
+  expect(request).toBeDefined()
+  expect(request?.body).toEqual(repairPolicy)
 })
 
 test("audit company export はCSVを整形せずにそのまま出す", async () => {
