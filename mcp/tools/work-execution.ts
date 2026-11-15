@@ -1,10 +1,12 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
+import { z } from "zod"
 import { apiRequest } from "@/lib/api-client"
 import {
   definitionInput,
   definitionQuery,
   executionQuery,
   executionInput,
+  workSlug,
 } from "../../web/src/contexts/work-execution/domain/work-execution-input"
 
 export function registerWorkExecutionTools(server: McpServer) {
@@ -63,6 +65,31 @@ export function registerWorkExecutionTools(server: McpServer) {
         {
           type: "text" as const,
           text: JSON.stringify(await apiRequest("/work-execution/runs", { query })),
+        },
+      ],
+    }),
+  )
+  server.registerTool(
+    "work_execution_delete_definition",
+    {
+      description:
+        "Delete a work definition with all its revisions. Only definitions without recorded runs can be deleted; retire one that has runs instead. Requires explicit user intent. Pass the revision from a fresh read as expected_revision; after a 409 read again.",
+      inputSchema: {
+        slug: workSlug,
+        expected_revision: z.number().int().positive().max(2147483647),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
+    },
+    async ({ slug, expected_revision }) => ({
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(
+            await apiRequest(`/work-execution/definitions/${encodeURIComponent(slug)}`, {
+              method: "DELETE",
+              query: { expected_revision },
+            }),
+          ),
         },
       ],
     }),

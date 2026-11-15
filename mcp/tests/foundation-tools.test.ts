@@ -126,10 +126,16 @@ test("MCP exposes foundation tools and rejects business paths and traversal", as
       },
     })
     expect(report.isError).not.toBe(true)
-    expect(requests.slice(-3)).toEqual([
+    const deleted = await client.callTool({
+      name: "work_execution_delete_definition",
+      arguments: { slug: "example-follow-up", expected_revision: 1 },
+    })
+    expect(deleted.isError).not.toBe(true)
+    expect(requests.slice(-4)).toEqual([
       "/api/work-execution/definitions",
       "/api/work-execution/runs",
       "/api/work-execution/runs",
+      "/api/work-execution/definitions/example-follow-up",
     ])
   } finally {
     await client.close()

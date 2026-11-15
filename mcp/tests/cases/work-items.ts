@@ -1,0 +1,122 @@
+import { ids } from "@/tests/cases/ids"
+import { stepUp, type ToolCase } from "@/tests/support/tool-cases"
+
+const item = `/system/work-items/${ids.a}`
+const command = { commandId: ids.b, expectedRevision: 2, reason: "Proceed" }
+const reviewed = { ...command, resultId: ids.c, resultDigest: ids.digest }
+
+export const workItemCases: ReadonlyArray<ToolCase> = [
+  {
+    tool: "work_items_list",
+    args: { limit: 10 },
+    method: "GET",
+    path: "/system/work-items",
+    query: { limit: "10" },
+  },
+  { tool: "work_items_show", args: { id: ids.a }, method: "GET", path: item },
+  {
+    tool: "work_items_history",
+    args: { id: ids.a, after: 1 },
+    method: "GET",
+    path: `${item}/history`,
+    query: { after: "1" },
+  },
+  {
+    tool: "work_items_evidence",
+    args: { id: ids.a, attachment_id: "attachment-1" },
+    method: "GET",
+    path: `${item}/evidence/attachment-1`,
+    download: true,
+  },
+  {
+    tool: "work_items_create",
+    args: {
+      id: ids.a,
+      commandId: ids.b,
+      expectedRevision: 0,
+      reason: "Request",
+      title: "Prepare the report",
+      instructions: "Write it",
+      acceptanceCriteria: "Reviewed",
+      assigneeAccountId: ids.d,
+      dueAt: null,
+      previousRevisionId: null,
+    },
+    method: "POST",
+    path: "/system/work-items",
+    body: {
+      id: ids.a,
+      commandId: ids.b,
+      expectedRevision: 0,
+      reason: "Request",
+      title: "Prepare the report",
+      instructions: "Write it",
+      acceptanceCriteria: "Reviewed",
+      assigneeAccountId: ids.d,
+      dueAt: null,
+      previousRevisionId: null,
+    },
+  },
+  {
+    tool: "work_items_accept",
+    args: { id: ids.a, ...command },
+    method: "POST",
+    path: `${item}/accept`,
+    body: command,
+  },
+  {
+    tool: "work_items_submit_result",
+    args: { id: ids.a, ...command, result: { summary: "Done", evidence: [] } },
+    method: "POST",
+    path: `${item}/results`,
+    body: { ...command, result: { summary: "Done", evidence: [] } },
+  },
+  {
+    tool: "work_items_approve",
+    args: { id: ids.a, ...reviewed, step_up_token: stepUp },
+    method: "POST",
+    path: `${item}/approve`,
+    headers: { "x-system-step-up": stepUp },
+    body: reviewed,
+  },
+  {
+    tool: "work_items_return",
+    args: { id: ids.a, ...reviewed, step_up_token: stepUp },
+    method: "POST",
+    path: `${item}/return`,
+    headers: { "x-system-step-up": stepUp },
+    body: reviewed,
+  },
+  {
+    tool: "work_items_request_handover",
+    args: { id: ids.a, ...command, toAccountId: ids.d, step_up_token: stepUp },
+    method: "POST",
+    path: `${item}/handovers`,
+    headers: { "x-system-step-up": stepUp },
+    body: { ...command, toAccountId: ids.d },
+  },
+  {
+    tool: "work_items_accept_handover",
+    args: { id: ids.a, ...command, handoverId: ids.c, step_up_token: stepUp },
+    method: "POST",
+    path: `${item}/handovers/accept`,
+    headers: { "x-system-step-up": stepUp },
+    body: { ...command, handoverId: ids.c },
+  },
+  {
+    tool: "work_items_decline_handover",
+    args: { id: ids.a, ...command, handoverId: ids.c, step_up_token: stepUp },
+    method: "POST",
+    path: `${item}/handovers/decline`,
+    headers: { "x-system-step-up": stepUp },
+    body: { ...command, handoverId: ids.c },
+  },
+  {
+    tool: "work_items_cancel",
+    args: { id: ids.a, ...command, step_up_token: stepUp },
+    method: "POST",
+    path: `${item}/cancel`,
+    headers: { "x-system-step-up": stepUp },
+    body: command,
+  },
+]

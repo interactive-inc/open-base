@@ -81,18 +81,6 @@ const command = z.discriminatedUnion("operation", [
   z.strictObject({ ...common, operation: z.literal("submit_goals") }),
   z.strictObject({ ...common, operation: z.literal("submit_evaluation") }),
   z.strictObject({ ...common, operation: z.literal("cancel") }),
-  z.strictObject({
-    ...common,
-    operation: z.literal("decide"),
-    action: z.enum(["approve", "reject", "return"]),
-    target: z.strictObject({
-      proposal_version: z.number().int().positive(),
-      proposal_digest: z.string().regex(/^[0-9a-f]{64}$/),
-      task_key: z.string().min(1).max(100),
-      task_round: z.number().int().positive(),
-    }),
-    assessments: z.array(assessment).min(1).max(20).optional(),
-  }),
 ])
 const page = {
   limit: z.number().int().min(1).max(100).optional(),
@@ -217,7 +205,7 @@ export function registerPerformanceReviewTools(server: McpServer) {
     "review_sheets_show",
     {
       description:
-        "Read a review sheet, its revision, and its current decision_target. Read this immediately before a decision. Owners, current qualified reviewers, and authorized company-wide readers can access it.",
+        "Read a review sheet, its revision, and its current decision_target. Owners, current qualified reviewers, and authorized company-wide readers can access it. Approve, return and reject are done by a person in the browser; use decision_url to get the page.",
       inputSchema: { sheet_id: uuid },
       annotations: read,
     },
@@ -238,7 +226,7 @@ export function registerPerformanceReviewTools(server: McpServer) {
     "review_sheets_command",
     {
       description:
-        "Revise goals, record self-assessment, submit goals/evaluation, decide or cancel. Requires explicit user intent. Use expected_revision from a fresh read; approval also requires its exact decision_target. Evaluation approval requires a score declared in the frozen evaluation_policy scale and a comment for every goal. A return/reject action must match the configured workflow. Approvals require current Company authority; admin permissions never substitute. Approved goals require explicit reopen_goals before amendment; this invalidates the active goal approval and clears self-assessment, so revised goals must be approved again. Finalized sheets cannot be rewritten. Reuse the same idempotency_key for retries; after a 409 read again and confirm the changed content before a new command.",
+        "Revise goals, record self-assessment, submit goals/evaluation, or cancel. Requires explicit user intent. Use expected_revision from a fresh read. This tool does not accept decisions: approve, return and reject are done by a person in the browser, and decision_url returns the page to open. Approved goals require explicit reopen_goals before amendment; this invalidates the active goal approval and clears self-assessment, so revised goals must be approved again. Finalized sheets cannot be rewritten. Reuse the same idempotency_key for retries; after a 409 read again and confirm the changed content before a new command.",
       inputSchema: { sheet_id: uuid, idempotency_key: uuid, command },
       annotations: write,
     },
