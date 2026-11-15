@@ -7,6 +7,7 @@ usage:
   base notifications count                                        未読件数
   base notifications read <id>                                    既読にする
   base notifications read-all                                     全件既読
-  base notifications send --to <employee_code> --title <t> [--body <b>] [--kind <k>]   (管理者) 手動送信`
+  base notifications send --to <employee_code> --title <t> [--body <b>] [--kind <k>]   (管理者) 手動送信
+  base notifications send-accounts --data <file.json>             任意のAccountへ配信`
 
 export default factory.createHandlers((c) => c.text(help))

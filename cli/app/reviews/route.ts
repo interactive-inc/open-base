@@ -4,6 +4,7 @@ import { factory } from "@/factory"
 import { UsageError, InputError } from "@/lib/errors"
 import { api } from "@/lib/http/client"
 import { readJsonObjectFile } from "@/lib/input/read-json-file"
+import { decisionPageGuide } from "@/lib/decision-page-url"
 
 export const help = `base reviews cycles list [--limit <n> --offset <n>]
 base reviews cycles show <id>
@@ -11,24 +12,21 @@ base reviews cycles create --data <period.json> --idempotency-key <uuid>
 base reviews sheets list [--scope mine|inbox|all --cycle-id <id> --limit <n> --offset <n>]
 base reviews sheets show|history <id> [--limit <n> --offset <n>]
 base reviews sheets create --data <sheet.json> --idempotency-key <uuid>
-base reviews sheets revise-goals|reopen-goals|submit-goals|self-evaluate|submit-evaluation|approve|return|reject|cancel <id> --data <command.json> --idempotency-key <uuid>
+base reviews sheets revise-goals|reopen-goals|submit-goals|self-evaluate|submit-evaluation|cancel <id> --data <command.json> --idempotency-key <uuid>
 base reviews sheets command <id> --data <command.json> --idempotency-key <uuid>
+base reviews sheets decide <id>
 
 変更するJSONにはreason、シートの変更にはexpected_revisionも指定します。
-承認・差戻し・却下にはshowで表示したdecision_targetをtargetとして指定してください。
-評価の承認には全目標の点数と根拠をassessmentsに指定します。
 commandではoperationもJSONに含めます。他の操作名ではoperationを自動で指定します。
+承認・差し戻し・却下はブラウザーの判断の画面で人が行い、CLIからは記録できません。decideで画面のURLを表示します。
 通信失敗時は同じJSONと冪等キーで再送し、409では読み直して内容を確認してください。`
 
-const commands: Readonly<Record<string, Readonly<{ operation: string; action?: string }>>> = {
+const commands: Readonly<Record<string, Readonly<{ operation: string }>>> = {
   "revise-goals": { operation: "revise_goals" },
   "reopen-goals": { operation: "reopen_goals" },
   "submit-goals": { operation: "submit_goals" },
   "self-evaluate": { operation: "self_evaluate" },
   "submit-evaluation": { operation: "submit_evaluation" },
-  approve: { operation: "decide", action: "approve" },
-  return: { operation: "decide", action: "return" },
-  reject: { operation: "decide", action: "reject" },
   cancel: { operation: "cancel" },
 }
 
@@ -56,6 +54,12 @@ export default factory.createHandlers(
     if (resource !== "cycles" && resource !== "sheets") throw new UsageError(help)
     if (id !== undefined && !z.string().uuid().safeParse(id).success)
       throw new UsageError("評価のUUIDを指定してください")
+    if (operation === "decide") {
+      if (resource !== "sheets" || id === undefined) throw new UsageError(help)
+      if (Object.values(flags).some((value) => value !== undefined))
+        throw new UsageError("decideには引数を指定できません")
+      return c.text(decisionPageGuide("review_sheet", id))
+    }
     const base = `/performance-review/${resource}`
     const isRead = ["list", "show", "history"].includes(operation)
     if (isRead) {
@@ -113,6 +117,11 @@ export default factory.createHandlers(
     )
       throw new UsageError("変更には参照用の引数を指定できません")
     const body = await readJsonObjectFile(flags.data)
+    // 判断は人がブラウザーで行う。CLIからはAPIへ送らず、判断の画面を案内する。
+    if (body.operation === "decide" && id !== undefined)
+      throw new UsageError(
+        `承認・差し戻し・却下はCLIから記録できません。\n${decisionPageGuide("review_sheet", id)}`,
+      )
     if (!z.string().trim().min(1).max(3000).safeParse(body.reason).success)
       throw new InputError("reasonが必要です")
     if (
@@ -122,8 +131,8 @@ export default factory.createHandlers(
       throw new InputError("expected_revisionが必要です")
     if (
       selected !== undefined &&
-      ((body.operation !== undefined && body.operation !== selected.operation) ||
-        (body.action !== undefined && body.action !== selected.action))
+      body.operation !== undefined &&
+      body.operation !== selected.operation
     )
       throw new InputError("JSONと操作名が一致しません")
     const json = selected === undefined ? body : { ...body, ...selected }

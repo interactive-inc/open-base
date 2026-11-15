@@ -33,10 +33,32 @@ test("CLI sends definition updates and execution filters to their respective API
     const report = { slug: definition.slug, ai_assisted: true, trigger: "scheduled" }
     await writeFile(file, JSON.stringify(report))
     expect((await run(["work-execution", "runs", "record", "--data", file])).code).toBe(0)
+    expect(
+      (
+        await run([
+          "work-execution",
+          "definitions",
+          "delete",
+          "--slug",
+          definition.slug,
+          "--expected-revision",
+          "2",
+        ])
+      ).code,
+    ).toBe(0)
+    // 版を渡さない削除は、APIへ送らずに断る。
+    expect(
+      (await run(["work-execution", "definitions", "delete", "--slug", definition.slug])).code,
+    ).not.toBe(0)
     expect(requests).toEqual([
       { path: "/api/work-execution/definitions", query: "", body: definition },
       { path: "/api/work-execution/runs", query: "?slug=example-follow-up", body: null },
       { path: "/api/work-execution/runs", query: "", body: report },
+      {
+        path: "/api/work-execution/definitions/example-follow-up",
+        query: "?expected_revision=2",
+        body: null,
+      },
     ])
   } finally {
     await server.stop(true)

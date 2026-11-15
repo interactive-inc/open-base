@@ -5,10 +5,11 @@ import { factory } from "@/factory"
 import { UsageError } from "@/lib/errors"
 import { readSecretStdin } from "@/lib/input/read-secret-stdin"
 
-export const help = `base employees register --company-revision <n> --code <c> --name <n> --hire-on <YYYY-MM-DD> --employment-type <FULL_TIME|PART_TIME> --email <e> --role <r> --password-stdin [--idempotency-key <uuid>] [--department-code <c>] [--position-code <c>] [--manager-employee-code <c>]
+export const help = `base employees register --company-revision <n> --code <c> --name <n> --hire-on <YYYY-MM-DD> --employment-type <FULL_TIME|PART_TIME> --email <e> --role <r> [--password-stdin] [--idempotency-key <uuid>] [--department-code <c>] [--position-code <c>] [--manager-employee-code <c>]
 
 役職は確認した会社版と入社日に有効な公開定義の code を指定してください（自由入力ではありません）。
-初期パスワードはコマンド引数に含めず、標準入力から渡してください。`
+パスワードでサインインする配備では --password-stdin を付け、初期パスワードを標準入力から渡してください。
+パスキーとOIDCの配備では付けません。`
 
 export default factory.createHandlers(
   zValidator(
@@ -44,14 +45,14 @@ export default factory.createHandlers(
       !query.email ||
       !query.role ||
       !query["hire-on"] ||
-      !query["employment-type"] ||
-      !query["password-stdin"]
+      !query["employment-type"]
     )
       throw new UsageError(
-        "--company-revision, --code, --name, --hire-on, --employment-type, --email, --role, --password-stdin が必要です",
+        "--company-revision, --code, --name, --hire-on, --employment-type, --email, --role が必要です",
       )
 
-    const password = await readSecretStdin()
+    // パスワードでサインインする配備だけが初期パスワードを受け取る。パスキーとOIDCでは渡さない。
+    const password = query["password-stdin"] ? await readSecretStdin() : undefined
 
     const payload = {
       expected_company_revision: query["company-revision"],

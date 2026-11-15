@@ -1,11 +1,11 @@
 import { zValidator } from "@hono/zod-validator"
 import { z } from "zod"
-import { writeFile } from "node:fs/promises"
 import { factory } from "@/factory"
 import { UsageError, InputError, ApiError } from "@/lib/errors"
 import { api } from "@/lib/http/client"
 import { createClient } from "@/lib/http/hc-client"
 import { readJsonObjectFile } from "@/lib/input/read-json-file"
+import { writeNewFile } from "@/lib/io/write-new-file"
 
 export const help = `base work-items list [--after <uuid> --limit <n>]
 base work-items show <id>
@@ -120,11 +120,7 @@ export default factory.createHandlers(
       })
       if (!response.ok) throw new ApiError(response.status, "証拠の取得に失敗しました")
       const bytes = new Uint8Array(await response.arrayBuffer())
-      try {
-        await writeFile(input.output, bytes, { flag: "wx", mode: 0o600 })
-      } catch {
-        throw new InputError("証拠を保存できません。未使用の出力先を指定してください")
-      }
+      await writeNewFile(input.output, bytes)
       return c.json({ path: input.output, bytes: bytes.byteLength })
     }
     if (

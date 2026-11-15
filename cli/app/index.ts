@@ -10,11 +10,10 @@ import { HTTPException } from "hono/http-exception"
 import { factory } from "@/factory"
 import { loadConfig } from "@/lib/config/load-config"
 import { toConnectionErrorMessage } from "@/lib/http/to-connection-error-message"
-import appApproveHandler from "@/app/application-requests/approve/[app_id]/route"
 import appHandler from "@/app/application-requests/route"
 import appInboxHandler from "@/app/application-requests/inbox/route"
 import appMineHandler from "@/app/application-requests/mine/route"
-import appRejectHandler from "@/app/application-requests/reject/[app_id]/route"
+import appDecideHandler from "@/app/application-requests/decide/[app_id]/route"
 import appShowHandler from "@/app/application-requests/show/[app_id]/route"
 import appSubmitHandler from "@/app/application-requests/submit/[template_code]/route"
 import appTemplateHandler from "@/app/application-requests/template/[code]/route"
@@ -84,6 +83,19 @@ import orgDeptDeleteHandler from "@/app/departments/delete/route"
 import orgDeptListHandler from "@/app/departments/list/route"
 import orgDeptShowHandler from "@/app/departments/show/route"
 import orgDeptUpdateHandler from "@/app/departments/update/route"
+import stepUpHandler from "@/app/step-up/route"
+import principalsHandler from "@/app/principals/route"
+import companyHandler from "@/app/company/route"
+import auditHandler from "@/app/audit/route"
+import connectorsHandler from "@/app/connectors/route"
+import attachmentsHandler from "@/app/attachments/route"
+import attachmentUploadHandler from "@/app/attachments/upload/route"
+import recordsHandler from "@/app/records/route"
+import appAdminHandler from "@/app/application-requests/admin/route"
+import appMeHandler from "@/app/application-requests/me/route"
+import personnelActionEventsHandler from "@/app/personnel-actions/events/route"
+import personnelActionRequestsHandler from "@/app/personnel-actions/requests/route"
+import notifySendAccountsHandler from "@/app/notifications/send-accounts/route"
 
 const base = factory.createApp()
 
@@ -128,6 +140,7 @@ const routes = base
 routes.post("/login", ...loginHandler)
 routes.post("/bootstrap", ...bootstrapHandler)
 routes.post("/whoami", ...whoamiHandler)
+routes.post("/step-up", ...stepUpHandler)
 
 routes.post("/employees", ...employeeHandler)
 routes.post("/employees/search", ...employeeSearchHandler)
@@ -138,9 +151,10 @@ routes.post("/application-requests/template/:code?", ...appTemplateHandler)
 routes.post("/application-requests/submit/:template_code?", ...appSubmitHandler)
 routes.post("/application-requests/inbox", ...appInboxHandler)
 routes.post("/application-requests/mine", ...appMineHandler)
+routes.post("/application-requests/me", ...appMeHandler)
+routes.post("/application-requests/admin", ...appAdminHandler)
 routes.post("/application-requests/show/:app_id?", ...appShowHandler)
-routes.post("/application-requests/approve/:app_id?", ...appApproveHandler)
-routes.post("/application-requests/reject/:app_id?", ...appRejectHandler)
+routes.post("/application-requests/decide/:app_id?", ...appDecideHandler)
 
 routes.post("/employee-grades", ...employeeGradesRootHandler)
 
@@ -173,6 +187,7 @@ routes.post("/notifications/count", ...notifyCountHandler)
 routes.post("/notifications/read-all", ...notifyReadAllHandler)
 routes.post("/notifications/read/:notification_id?", ...notifyReadHandler)
 routes.post("/notifications/send", ...notifySendHandler)
+routes.post("/notifications/send-accounts", ...notifySendAccountsHandler)
 
 routes.post("/departments", ...orgHandler)
 routes.post("/departments/tree", ...orgTreeHandler)
@@ -180,7 +195,22 @@ routes.post("/departments/members/:dept_code?", ...orgMembersHandler)
 routes.post("/employees/reporting-line/:employee_code?", ...orgLineHandler)
 
 routes.post("/roles", ...rolesHandler)
+routes.post("/roles/*", ...rolesHandler)
 routes.post("/accounts", ...accountsHandler)
+routes.post("/accounts/*", ...accountsHandler)
+routes.post("/principals", ...principalsHandler)
+routes.post("/principals/*", ...principalsHandler)
+routes.post("/company", ...companyHandler)
+routes.post("/company/*", ...companyHandler)
+routes.post("/audit", ...auditHandler)
+routes.post("/audit/*", ...auditHandler)
+routes.post("/connectors", ...connectorsHandler)
+routes.post("/connectors/*", ...connectorsHandler)
+routes.post("/attachments/upload", ...attachmentUploadHandler)
+routes.post("/attachments", ...attachmentsHandler)
+routes.post("/attachments/*", ...attachmentsHandler)
+routes.post("/records", ...recordsHandler)
+routes.post("/records/*", ...recordsHandler)
 
 routes.post("/batch", ...batchHandler)
 routes.post("/dashboard", ...dashboardHandler)
@@ -215,6 +245,8 @@ routes.post("/personnel-actions/list", ...personnelActionListHandler)
 routes.post("/personnel-actions/request", ...personnelActionRequestHandler)
 routes.post("/personnel-actions/apply", ...personnelActionApplyHandler)
 routes.post("/personnel-actions/correct", ...personnelActionCorrectHandler)
+routes.post("/personnel-actions/events", ...personnelActionEventsHandler)
+routes.post("/personnel-actions/requests", ...personnelActionRequestsHandler)
 routes.post("/notifications/delete", ...notifyDeleteHandler)
 routes.post("/notifications/show", ...notifyShowHandler)
 routes.post("/departments/adoption", ...organizationAdoptionHandler)

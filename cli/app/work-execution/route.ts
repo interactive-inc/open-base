@@ -7,6 +7,7 @@ import { readJsonObjectFile } from "@/lib/input/read-json-file"
 
 const help = `base work-execution definitions list [--slug <slug> --tag <tag> --revision <n>]
 base work-execution definitions save --data <definition.json>
+base work-execution definitions delete --slug <slug> --expected-revision <n>   実行履歴のない定義を全revisionごと削除
 base work-execution runs record --data <run.json>
 base work-execution runs list [--slug <slug> --agent-id <uuid> --tag <tag> --since <utc>]
 base work-execution runs list --reference-kind <kind> --reference-id <id>`
@@ -21,6 +22,7 @@ export default factory.createHandlers(
       "agent-id": z.string().uuid().optional(),
       tag: z.string().optional(),
       revision: z.coerce.number().int().positive().optional(),
+      "expected-revision": z.coerce.number().int().positive().optional(),
       since: z.string().optional(),
       "reference-kind": z.string().optional(),
       "reference-id": z.string().optional(),
@@ -41,6 +43,7 @@ export default factory.createHandlers(
       "agent-id": agent_id,
       "reference-kind": reference_kind,
       "reference-id": reference_id,
+      "expected-revision": expected_revision,
       ...rest
     } = flags
     if (
@@ -52,7 +55,29 @@ export default factory.createHandlers(
       const json = await readJsonObjectFile(data)
       return c.text(JSON.stringify(await api(path, { method: "POST", json }), null, 2))
     }
-    if (operation !== "list" || data !== undefined) throw new UsageError(help)
+    if (resource === "definitions" && operation === "delete") {
+      // 消すのは実行履歴のない定義だけ。見ていた版を渡し、その間に変わっていればAPIが断る。
+      if (
+        flags.slug === undefined ||
+        expected_revision === undefined ||
+        Object.keys(flags).length !== 2
+      ) {
+        throw new UsageError(help)
+      }
+      return c.text(
+        JSON.stringify(
+          await api(`${path}/${encodeURIComponent(flags.slug)}`, {
+            method: "DELETE",
+            query: { expected_revision },
+          }),
+          null,
+          2,
+        ),
+      )
+    }
+    if (operation !== "list" || data !== undefined || expected_revision !== undefined) {
+      throw new UsageError(help)
+    }
     return c.text(
       JSON.stringify(
         await api(path, { query: { ...rest, agent_id, reference_kind, reference_id } }),

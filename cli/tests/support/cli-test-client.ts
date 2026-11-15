@@ -1,12 +1,13 @@
-/** 実CLIを別processで起動し、標準出力と失敗を呼び出し元へ返す。 */
+/** 実CLIを別processで起動し、標準出力と失敗を呼び出し元へ返す。秘密は標準入力で渡せる。 */
 export function createCliTestClient(input: {
   entry: string
   baseUrl: string
   configDirectory: string
 }) {
-  return async (arguments_: ReadonlyArray<string>) => {
+  return async (arguments_: ReadonlyArray<string>, stdin: string | null = null) => {
     const process_ = Bun.spawn([process.execPath, input.entry, ...arguments_], {
       env: { ...process.env, BASE_API: input.baseUrl, BASE_CONFIG_DIR: input.configDirectory },
+      stdin: stdin === null ? "ignore" : new Blob([stdin]),
       stdout: "pipe",
       stderr: "pipe",
     })

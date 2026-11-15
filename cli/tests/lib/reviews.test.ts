@@ -33,18 +33,28 @@ test("実CLIで評価の経路・冪等キー・commandを送り、不正な入�
     )
     expect((await run(["reviews", "sheets", "list", "--scope", "inbox"])).code).toBe(0)
     expect(
-      (await run(["reviews", "sheets", "approve", id, "--data", file, "--idempotency-key", key]))
-        .code,
+      (
+        await run([
+          "reviews",
+          "sheets",
+          "submit-goals",
+          id,
+          "--data",
+          file,
+          "--idempotency-key",
+          key,
+        ])
+      ).code,
     ).toBe(0)
     expect(requests).toMatchObject([
       { path: "/api/performance-review/sheets", key: null },
       {
         path: `/api/performance-review/sheets/${id}/commands`,
         key,
-        body: { operation: "decide", action: "approve", expected_revision: 2 },
+        body: { operation: "submit_goals", expected_revision: 2 },
       },
     ])
-    expect((await run(["reviews", "sheets", "approve", id, "--data", file])).code).toBe(1)
+    expect((await run(["reviews", "sheets", "submit-goals", id, "--data", file])).code).toBe(1)
     expect((await run(["reviews", "sheets", "show", "bad-id"])).code).toBe(1)
     expect((await run(["reviews", "cycles", "list", "--scope", "all"])).code).toBe(1)
     await writeFile(
@@ -52,8 +62,18 @@ test("実CLIで評価の経路・冪等キー・commandを送り、不正な入�
       JSON.stringify({ expected_revision: 2, reason: "確認", operation: "cancel" }),
     )
     expect(
-      (await run(["reviews", "sheets", "approve", id, "--data", file, "--idempotency-key", key]))
-        .code,
+      (
+        await run([
+          "reviews",
+          "sheets",
+          "submit-goals",
+          id,
+          "--data",
+          file,
+          "--idempotency-key",
+          key,
+        ])
+      ).code,
     ).toBe(1)
     expect(requests).toHaveLength(2)
   } finally {
