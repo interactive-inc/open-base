@@ -11,6 +11,44 @@ const profile = Object.freeze({
 }) satisfies AccessTokenProfile
 
 describe("AccessTokenService", () => {
+  test("Sessionの期限より長く署名せず、profileの上限も延ばさない", async () => {
+    const service = new AccessTokenService({ profile })
+    const input = { accountId: "d5858208-e680-4db8-a05d-8bf4f900c24e", tokenVersion: 0 }
+    const expiresAt = new Date(now.getTime() + 5000)
+    const token = await service.create({ ...input, expiresAt }, secret, now)
+    if (token instanceof Error) throw token
+    expect(await service.verify(token, secret, now)).toMatchObject({
+      exp: expiresAt.getTime() / 1000,
+    })
+    expect(await service.verify(token, secret, expiresAt)).toBeInstanceOf(Error)
+    const longer = await service.create(
+      { ...input, expiresAt: new Date(now.getTime() + 3600000) },
+      secret,
+      now,
+    )
+    if (longer instanceof Error) throw longer
+    expect(await service.verify(longer, secret, now)).toMatchObject({
+      exp: now.getTime() / 1000 + profile.maxAgeSeconds,
+    })
+  })
+
+  test.each([new Date(NaN), now, new Date(now.getTime() - 1)])(
+    "無効・期限切れのSessionから署名しない",
+    async (expiresAt) => {
+      expect(
+        await new AccessTokenService({ profile }).create(
+          {
+            accountId: "d5858208-e680-4db8-a05d-8bf4f900c24e",
+            tokenVersion: 0,
+            expiresAt,
+          },
+          secret,
+          now,
+        ),
+      ).toBeInstanceOf(Error)
+    },
+  )
+
   test("機械credentialの来歴を署名し、web・mobile用途への混入を拒否する", async () => {
     const input = {
       accountId: "d5858208-e680-4db8-a05d-8bf4f900c24e",

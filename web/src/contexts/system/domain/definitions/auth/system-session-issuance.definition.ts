@@ -18,9 +18,16 @@ export type SystemAccessTokenIssuer = Readonly<{
       accountId: AccountId
       tokenVersion: number
       sessionFamilyId?: SessionFamilyId
+      expiresAt?: Date
       now: Date
     }>,
   ) => Promise<string | Error>
+}>
+
+/** 発行元の失効と絶対寿命を引き継ぐためのSessionの対応。保存時にもDBで照合する。 */
+export type SystemSessionSource = Readonly<{
+  familyId: SessionFamilyId
+  authenticatedAt: Date
 }>
 
 export type IssueSystemSessionCommand = Readonly<{
@@ -28,6 +35,7 @@ export type IssueSystemSessionCommand = Readonly<{
   tokenVersion: number
   now: Date
   auditContext: SystemSessionAuditContext
+  sourceSession?: SystemSessionSource
 }>
 
 export type IssueSystemSessionResult =

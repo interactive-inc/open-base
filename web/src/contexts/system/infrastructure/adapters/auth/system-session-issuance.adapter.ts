@@ -7,6 +7,8 @@ import type {
 } from "@system/domain/definitions/auth/system-session-issuance.definition"
 import { SystemAuditEventEntity } from "@system/domain/entities/system-audit-event.entity"
 import { SessionEntity } from "@system/domain/entities/session.entity"
+import { InvalidSessionError } from "@system/domain/errors"
+import { zSessionFamilyId } from "@system/domain/schemas/auth/session-family-id.schema"
 import { SystemAccountRepository } from "@system/infrastructure/repositories/auth/system-account.repository"
 import type { SystemSessionRepository } from "@system/infrastructure/repositories/auth/system-session.repository"
 
@@ -28,10 +30,24 @@ export class SystemSessionIssuanceAdapter {
 
   async issue(command: IssueSystemSessionCommand): Promise<IssueSystemSessionResult | Error> {
     const nowEpochMilliseconds = command.now.getTime()
+    const source = command.sourceSession
+    if (
+      source !== undefined &&
+      (!zSessionFamilyId.safeParse(source.familyId).success ||
+        !(source.authenticatedAt instanceof Date) ||
+        !Number.isSafeInteger(source.authenticatedAt.getTime()) ||
+        source.authenticatedAt.getTime() < 0)
+    )
+      return new InvalidSessionError("invalid_shape")
+    const authenticatedAtEpochMilliseconds =
+      source?.authenticatedAt.getTime() ?? nowEpochMilliseconds
+    if (authenticatedAtEpochMilliseconds > nowEpochMilliseconds)
+      return new InvalidSessionError("not_yet_valid")
     // 初回のexpiresAtも絶対寿命を超えないようにし、寿命の設定がTTLより短い配備でも延長しない。
-    const expiresAtEpochMilliseconds =
-      nowEpochMilliseconds +
-      Math.min(this.c.sessionTtlMilliseconds, this.c.sessionMaxLifetimeMilliseconds)
+    const expiresAtEpochMilliseconds = Math.min(
+      nowEpochMilliseconds + this.c.sessionTtlMilliseconds,
+      authenticatedAtEpochMilliseconds + this.c.sessionMaxLifetimeMilliseconds,
+    )
 
     if (
       !Number.isSafeInteger(nowEpochMilliseconds) ||
@@ -43,6 +59,13 @@ export class SystemSessionIssuanceAdapter {
     ) {
       return new Error("System SessionEntity issuance time is invalid")
     }
+    if (expiresAtEpochMilliseconds <= nowEpochMilliseconds)
+      return new InvalidSessionError("expired")
+    if (
+      source !== undefined &&
+      Math.floor(expiresAtEpochMilliseconds / 1000) <= Math.floor(nowEpochMilliseconds / 1000)
+    )
+      return new InvalidSessionError("expired")
 
     const accountSession = await SystemAccountRepository.resolveSession({
       accountRepository: this.c.accountRepository,
@@ -57,7 +80,7 @@ export class SystemSessionIssuanceAdapter {
 
     const sessionId = this.c.materialService.generateSessionId()
     if (sessionId instanceof Error) return sessionId
-    const familyId = this.c.materialService.generateFamilyId()
+    const familyId = source?.familyId ?? this.c.materialService.generateFamilyId()
     if (familyId instanceof Error) return familyId
     const rawToken = this.c.materialService.generateRawToken()
     if (rawToken instanceof Error) return rawToken
@@ -71,7 +94,7 @@ export class SystemSessionIssuanceAdapter {
       familyId,
       tokenHash,
       tokenVersion: accountSession.account.tokenVersion,
-      authenticatedAt: command.now,
+      authenticatedAt: new Date(authenticatedAtEpochMilliseconds),
       createdAt: command.now,
       expiresAt,
       rotatedAt: null,
@@ -94,11 +117,15 @@ export class SystemSessionIssuanceAdapter {
       accountId: session.accountId,
       tokenVersion: session.tokenVersion,
       sessionFamilyId: session.familyId,
+      expiresAt: session.expiresAt,
       now: command.now,
     })
     if (accessToken instanceof Error) return accessToken
 
-    const creationError = await this.c.sessionRepository.createWithAudit(session, audit)
+    const creationError =
+      source === undefined
+        ? await this.c.sessionRepository.createWithAudit(session, audit)
+        : await this.c.sessionRepository.createWithAudit(session, audit, source)
     if (creationError instanceof Error) return creationError
 
     return Object.freeze({

@@ -1,9 +1,12 @@
+import { systemSessionFamilyEligibilitySql } from "@system/infrastructure/adapters/auth/system-session-family-eligibility-sql"
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
 import { SystemAuditEventEntity } from "@system/domain/entities/system-audit-event.entity"
 import type { AccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { SystemAuditEventRepository } from "@system/infrastructure/repositories/audit/system-audit-event.repository"
 import type { SystemD1Context } from "@system/configuration/system-context"
+import type { SystemSessionSource } from "@system/domain/definitions/auth/system-session-issuance.definition"
+import { zSessionFamilyId } from "@system/domain/schemas/auth/session-family-id.schema"
 type Context = SystemD1Context
 
 /**
@@ -20,7 +23,12 @@ export class ConsumeSystemBrowserLoginCodeAdapter {
     codeHash: string,
     now: Date,
   ): Promise<
-    | Readonly<{ accountId: AccountId; tokenVersion: number; sessionFamilyActive: boolean }>
+    | Readonly<{
+        accountId: AccountId
+        tokenVersion: number
+        sessionFamilyActive: boolean
+        sourceSession: SystemSessionSource | null
+      }>
     | null
     | Error
   > {
@@ -30,14 +38,21 @@ export class ConsumeSystemBrowserLoginCodeAdapter {
         .prepare(
           `SELECT code.account_id,
                   code.token_version,
+                  code.session_family_id,
+                  (SELECT min(coalesce(origin.authenticated_at, origin.created_at))
+                    FROM system_sessions origin WHERE origin.family_id = code.session_family_id
+                      AND origin.account_id = code.account_id) AS family_authenticated_at,
                   CASE
-                    WHEN code.session_family_id IS NULL THEN 1
+                    WHEN code.session_family_id IS NULL THEN 0
                     ELSE EXISTS (
                       SELECT 1 FROM system_sessions AS session
                       WHERE session.family_id = code.session_family_id
                         AND session.account_id = code.account_id
-                        AND (session.revoked_at IS NULL OR session.revoked_at > ?2)
+                        AND session.token_version = code.token_version
+                        AND session.rotated_at IS NULL
+                        AND session.revoked_at IS NULL
                         AND session.expires_at > ?2
+                        AND ${systemSessionFamilyEligibilitySql}
                     )
                   END AS session_family_active
            FROM system_browser_login_codes AS code
@@ -45,12 +60,35 @@ export class ConsumeSystemBrowserLoginCodeAdapter {
            LIMIT 1`,
         )
         .bind(codeHash, now.getTime())
-        .first<{ account_id: string; token_version: number; session_family_active: number }>()
+        .first<{
+          account_id: string
+          token_version: number
+          session_family_active: number
+          session_family_id: string | null
+          family_authenticated_at: number | null
+        }>()
       if (row === null) return null
       const accountId = zAccountId.safeParse(row.account_id)
       if (!accountId.success) return new Error("invalid System AccountEntity ID")
       if (!Number.isSafeInteger(row.token_version) || row.token_version < 0) {
         return new Error("invalid System browser login code token version")
+      }
+      let sourceSession: SystemSessionSource | null = null
+      if (Number(row.session_family_active) === 1) {
+        const familyId = zSessionFamilyId.safeParse(row.session_family_id)
+        if (
+          !familyId.success ||
+          row.family_authenticated_at === null ||
+          !Number.isSafeInteger(row.family_authenticated_at) ||
+          row.family_authenticated_at < 0 ||
+          row.family_authenticated_at > now.getTime()
+        ) {
+          return new Error("invalid System browser login code origin")
+        }
+        sourceSession = Object.freeze({
+          familyId: familyId.data,
+          authenticatedAt: new Date(row.family_authenticated_at),
+        })
       }
 
       const audit = SystemAuditEventEntity.create({
@@ -87,6 +125,7 @@ export class ConsumeSystemBrowserLoginCodeAdapter {
             accountId: accountId.data,
             tokenVersion: row.token_version,
             sessionFamilyActive: Number(row.session_family_active) === 1,
+            sourceSession,
           })
         : new Error("System browser login code consumption did not succeed")
     } catch (caught) {

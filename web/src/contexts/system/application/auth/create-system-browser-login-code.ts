@@ -3,7 +3,7 @@ import type { SystemReadAuthentication } from "@system/domain/definitions/system
 import { zSessionFamilyId } from "@system/domain/schemas/auth/session-family-id.schema"
 import { zAccountId } from "@system/domain/schemas/iam/account-id.schema"
 import { CreateSystemBrowserLoginCodeAdapter } from "@system/infrastructure/adapters/auth/create-system-browser-login-code.adapter"
-import { systemLoginCodeHash } from "@system/lib/auth/system-login-code-hash"
+import { systemBrowserLoginCodeHash } from "@system/lib/auth/system-browser-login-code-hash"
 import { z } from "zod"
 
 type Context = SystemClockContext & SystemD1Context
@@ -25,8 +25,8 @@ export type SystemBrowserLoginCode = Readonly<{
  * 入口で受け付けた認証の世代と発行元が保存の時点で失効していれば、コードを保存せず null を返す。
  * codeは発行元credentialのtoken versionとSession familyへ束縛し、password resetやlogoutの後に
  * 失効前のcredentialから得たcodeで新しいSessionを作れないようにする。
- * machine credentialで認証した要求には発行しない。機械の主体がbrowserでloginする理由は無く、
- * 交換で作るbrowser Sessionは元のcredentialの失効に連動しないためである。
+ * 人のSessionだけを発行元とし、機械資格や外部Identityの認証を独立したbrowser Sessionへ変換しない。
+ * 交換後も同じfamilyと認証時刻を引き継ぐ。
  */
 export class CreateSystemBrowserLoginCode {
   private readonly codeTtlMilliseconds = 60_000
@@ -54,10 +54,16 @@ export class CreateSystemBrowserLoginCode {
     ) {
       return new Error("browser login code is unavailable")
     }
-    if (request.authentication.machineCredentialId !== null) return null
+    if (
+      request.authentication.machineCredentialId !== null ||
+      request.authentication.identityBindingId !== null ||
+      sessionFamilyId.data === null ||
+      sessionFamilyId.data !== request.authentication.sessionFamilyId
+    )
+      return null
 
     const rawCode = crypto.randomUUID()
-    const codeHash = await systemLoginCodeHash(rawCode)
+    const codeHash = await systemBrowserLoginCodeHash(rawCode)
     if (codeHash instanceof Error) return codeHash
 
     const creation = await new CreateSystemBrowserLoginCodeAdapter(

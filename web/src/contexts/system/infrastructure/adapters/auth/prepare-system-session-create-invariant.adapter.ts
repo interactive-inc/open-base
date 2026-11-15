@@ -23,6 +23,7 @@ export class PrepareSystemSessionCreateInvariantAdapter {
            AND expires_at = ?7
            AND rotated_at IS ?8
            AND revoked_at IS ?9
+           AND authenticated_at IS ?10
        ) THEN 1 ELSE json_extract('', '$') END AS ok`,
       )
       .bind(
@@ -35,6 +36,7 @@ export class PrepareSystemSessionCreateInvariantAdapter {
         session.expiresAt.getTime(),
         session.rotatedAt?.getTime() ?? null,
         session.revokedAt?.getTime() ?? null,
+        session.authenticatedAt.getTime(),
       )
   }
 }

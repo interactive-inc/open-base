@@ -1,3 +1,4 @@
+import { systemSessionFamilyEligibilitySql } from "@system/infrastructure/adapters/auth/system-session-family-eligibility-sql"
 import type { SystemDatabase } from "@system/configuration/system-context"
 import { AccountEntity } from "@system/domain/entities/account.entity"
 import { SystemMachineCredentialEntity } from "@system/domain/entities/system-machine-credential.entity"
@@ -77,6 +78,7 @@ export class SystemAccessTokenStateAdapter {
                   WHERE session.family_id = ${input.sessionFamilyId}
                     AND session.account_id = ${systemAccounts.id}
                     AND (session.revoked_at IS NULL OR session.revoked_at > ${input.at.getTime()})
+                    AND ${sql.raw(systemSessionFamilyEligibilitySql)}
                 )`,
         })
         .from(systemAccounts)

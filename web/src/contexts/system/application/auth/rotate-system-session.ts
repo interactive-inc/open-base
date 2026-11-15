@@ -136,6 +136,7 @@ export class RotateSystemSession {
       accountId: successor.accountId,
       tokenVersion: successor.tokenVersion,
       sessionFamilyId: successor.familyId,
+      expiresAt: successor.expiresAt,
       now: command.now,
     })
     if (accessToken instanceof Error) return accessToken

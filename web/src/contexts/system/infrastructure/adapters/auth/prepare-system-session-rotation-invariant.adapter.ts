@@ -1,3 +1,4 @@
+import { systemSessionFamilyCardinalitySql } from "@system/infrastructure/adapters/auth/system-session-family-eligibility-sql"
 import type { SessionRotationAuditEvents } from "@system/domain/definitions/auth/session-rotation-audit-events.definition"
 import type { SessionRotationValue } from "@system/domain/values/auth/session-rotation.value"
 
@@ -33,8 +34,8 @@ export class PrepareSystemSessionRotationInvariantAdapter {
                  AND token_version = ?16 AND created_at = ?17 AND expires_at = ?18
                  AND rotated_at IS NULL AND revoked_at IS NULL
              )
-             AND (SELECT COUNT(*) FROM system_sessions
-                  WHERE family_id = ?7 AND rotated_at IS NULL AND revoked_at IS NULL) = 1
+             AND EXISTS (SELECT 1 FROM system_sessions session
+                  WHERE session.id = ?12 AND ${systemSessionFamilyCardinalitySql})
            WHEN EXISTS (SELECT 1 FROM system_audit_events WHERE event_id IN (?2, ?3)) THEN
              NOT EXISTS (
                SELECT 1 FROM system_sessions WHERE family_id = ?7 AND revoked_at IS NULL

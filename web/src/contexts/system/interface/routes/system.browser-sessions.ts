@@ -1,3 +1,4 @@
+import { InvalidSessionError } from "@system/domain/errors"
 import { readSystemSessionMaxLifetimeMilliseconds } from "@system/lib/auth/read-system-session-max-lifetime"
 import {
   SystemBrowserLoginCodeUnavailableError,
@@ -8,7 +9,7 @@ import { StableSystemAuditJsonValue } from "@system/domain/values/audit/stable-s
 import { IssueSystemSession } from "@system/application/auth/issue-system-session"
 import { ConsumeSystemBrowserLoginCodeAdapter } from "@system/infrastructure/adapters/auth/consume-system-browser-login-code.adapter"
 import { SystemAccessTokenIssuer } from "@system/lib/auth/system-access-token-issuer"
-import { systemLoginCodeHash } from "@system/lib/auth/system-login-code-hash"
+import { systemBrowserLoginCodeHash } from "@system/lib/auth/system-browser-login-code-hash"
 import { SystemAccountRepository } from "@system/infrastructure/repositories/auth/system-account.repository"
 import { SystemSessionMaterialService } from "@system/lib/auth/system-session-material-service"
 import { SystemSessionRepository } from "@system/infrastructure/repositories/auth/system-session.repository"
@@ -25,7 +26,7 @@ export const POST = systemFactory.createHandlers(
       throw new SystemBrowserLoginCodeUnavailableError()
     }
 
-    const codeHash = await systemLoginCodeHash(context.req.valid("json").code)
+    const codeHash = await systemBrowserLoginCodeHash(context.req.valid("json").code)
     if (codeHash instanceof Error) {
       throw new SystemBrowserLoginCodeUnavailableError()
     }
@@ -51,7 +52,8 @@ export const POST = systemFactory.createHandlers(
       account === null ||
       account.status !== "active" ||
       account.tokenVersion !== consumed.tokenVersion ||
-      !consumed.sessionFamilyActive
+      !consumed.sessionFamilyActive ||
+      consumed.sourceSession === null
     ) {
       throw new SystemLoginCodeInvalidError()
     }
@@ -62,6 +64,7 @@ export const POST = systemFactory.createHandlers(
     )
     const metadataJson = StableSystemAuditJsonValue.create({
       transport: "system.browser-sessions",
+      sourceSessionFamilyId: consumed.sourceSession.familyId,
     })
     if (
       !Number.isSafeInteger(sessionTtlMilliseconds) ||
@@ -85,7 +88,14 @@ export const POST = systemFactory.createHandlers(
       tokenVersion: consumed.tokenVersion,
       now,
       auditContext: { authorizationJson: null, metadataJson: metadataJson?.toString() ?? null },
+      sourceSession: consumed.sourceSession,
     })
+    if (
+      issuance instanceof InvalidSessionError &&
+      ["expired", "revoked", "not_yet_valid"].includes(issuance.reason)
+    ) {
+      throw new SystemLoginCodeInvalidError()
+    }
     if (issuance instanceof Error) {
       throw new SystemBrowserLoginCodeUnavailableError()
     }

@@ -1,3 +1,4 @@
+import { systemSessionFamilyEligibilitySql } from "@system/infrastructure/adapters/auth/system-session-family-eligibility-sql"
 import { SYSTEM_AUDIT_ACTIONS } from "@system/domain/catalogs/audit/system-audit-action.catalog"
 import { SystemAuditEventEntity } from "@system/domain/entities/system-audit-event.entity"
 import type { SessionFamilyId } from "@system/domain/schemas/auth/session-family-id.schema"
@@ -22,8 +23,7 @@ export type SystemBrowserLoginCodeCreation = "created" | "rejected"
 
 /**
  * 発行要求の認証がまだ有効なときだけコードを保存する。
- * Account が有効で token version が入口で受け付けた値のまま、かつ発行元（Session family・
- * 機械credential・外部Identity）が失効していないことを INSERT の条件にする。
+ * Accountの世代と人のSession familyをINSERTで照合する。機械資格と外部Identityだけの発行元は拒否する。
  * 失効は発行処理が取った時刻ではなく保存の時点の行で判定する。時刻を取った後に完了した
  * ログアウトは、それより後の時刻を刻むため、時刻との比較では見逃す。
  */
@@ -35,29 +35,15 @@ const insertSql = `INSERT INTO system_browser_login_codes
     AND account.status = 'active'
     AND account.closed_at IS NULL
     AND account.token_version = ?5
-    AND (?6 IS NULL OR EXISTS (
+    AND ?7 IS NULL AND ?8 IS NULL
+    AND EXISTS (
       SELECT 1 FROM system_sessions session
-      WHERE session.family_id = ?6
-        AND session.account_id = account.id
-        AND session.revoked_at IS NULL
+      WHERE session.family_id = ?6 AND session.account_id = account.id
+        AND session.token_version = ?5 AND session.created_at <= ?3
+        AND session.rotated_at IS NULL AND session.revoked_at IS NULL
         AND session.expires_at > ?3
-    ))
-    AND (?7 IS NULL OR EXISTS (
-      SELECT 1 FROM system_principals principal
-      INNER JOIN system_machine_credentials credential ON credential.principal_id = principal.id
-      WHERE principal.account_id = account.id
-        AND credential.id = ?7
-        AND credential.status = 'active'
-        AND credential.revoked_at IS NULL
-        AND (credential.expires_at IS NULL OR credential.expires_at > ?3)
-    ))
-    AND (?8 IS NULL OR EXISTS (
-      SELECT 1 FROM system_identity_bindings identity
-      WHERE identity.id = ?8
-        AND identity.account_id = account.id
-        AND identity.activated_at IS NOT NULL
-        AND identity.revoked_at IS NULL
-    ))`
+        AND ${systemSessionFamilyEligibilitySql}
+    )`
 
 /** browser token交換用codeのhashとAccount、発行元credentialの束縛を短期間保存し、発行監査と同じbatchで確定する。 */
 export class CreateSystemBrowserLoginCodeAdapter {

@@ -29,6 +29,7 @@ export class AccessTokenService {
       tokenVersion: number
       sessionFamilyId?: string
       machineCredentialId?: string
+      expiresAt?: Date
     }>,
     secret: string,
     now: Date,
@@ -38,6 +39,17 @@ export class AccessTokenService {
 
     const issuedAtMilliseconds = now.getTime()
     const issuedAtSeconds = Math.floor(issuedAtMilliseconds / 1_000)
+    if (input.expiresAt !== undefined && !(input.expiresAt instanceof Date))
+      return new Error("System access token expiration is invalid")
+    const expirationSeconds =
+      input.expiresAt === undefined
+        ? issuedAtSeconds + this.props.profile.maxAgeSeconds
+        : Math.min(
+            issuedAtSeconds + this.props.profile.maxAgeSeconds,
+            Math.floor(input.expiresAt.getTime() / 1000),
+          )
+    if (!Number.isSafeInteger(expirationSeconds) || expirationSeconds <= issuedAtSeconds)
+      return new Error("System access token expiration is invalid")
     const claims = zAccessTokenClaims.safeParse({
       sub: input.accountId,
       ver: input.tokenVersion,
@@ -51,7 +63,7 @@ export class AccessTokenService {
       ...(input.machineCredentialId === undefined
         ? {}
         : { machineCredentialId: input.machineCredentialId }),
-      exp: issuedAtSeconds + this.props.profile.maxAgeSeconds,
+      exp: expirationSeconds,
     })
     if (!claims.success) return new Error("System access token claims are invalid")
 

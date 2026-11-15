@@ -1,4 +1,7 @@
+import { systemSessionFamilyEligibilitySql } from "@system/infrastructure/adapters/auth/system-session-family-eligibility-sql"
 import type { SystemAuditEventEntity } from "@system/domain/entities/system-audit-event.entity"
+import type { SystemSessionSource } from "@system/domain/definitions/auth/system-session-issuance.definition"
+import { InvalidSessionError } from "@system/domain/errors"
 import type { RefreshTokenRotationDecision } from "@system/domain/definitions/auth/refresh-token-rotation-decision.definition"
 import type { SessionFamilyId } from "@system/domain/schemas/auth/session-family-id.schema"
 import type { SessionRotationValue } from "@system/domain/values/auth/session-rotation.value"
@@ -48,26 +51,61 @@ export class SystemSessionRepository {
   async createWithAudit(
     session: SessionEntity,
     audit: SystemAuditEventEntity,
+    source?: SystemSessionSource,
   ): Promise<void | Error> {
     if (session.rotatedAt !== null || session.revokedAt !== null) {
       return new Error("new System SessionEntity must be active")
     }
+    if (
+      source !== undefined &&
+      (source.familyId !== session.familyId ||
+        !(source.authenticatedAt instanceof Date) ||
+        source.authenticatedAt.getTime() !== session.authenticatedAt.getTime())
+    )
+      return new InvalidSessionError("invalid_shape")
 
     try {
       const database = this.c.context.env.DB
       const auditStatements = new SystemAuditEventRepository(this.c.context).prepareAppend(audit)
-      const results = await database.batch([
+      const sourceAssertions =
+        source === undefined
+          ? []
+          : [
+              database
+                .prepare(`SELECT CASE WHEN EXISTS (
+          SELECT 1 FROM system_sessions session WHERE session.family_id = ?1
+            AND session.account_id = ?2 AND session.token_version = ?3
+            AND session.expires_at > ?4
+            AND session.rotated_at IS NULL AND session.revoked_at IS NULL
+            AND ${systemSessionFamilyEligibilitySql}
+        ) AND ?5 = (
+          SELECT min(coalesce(origin.authenticated_at, origin.created_at)) FROM system_sessions origin
+          WHERE origin.family_id = ?1 AND origin.account_id = ?2
+        ) THEN 1 ELSE json_extract('{}', 'system_session_source_unavailable') END AS ok`)
+                .bind(
+                  session.familyId,
+                  session.accountId,
+                  session.tokenVersion,
+                  session.createdAt.getTime(),
+                  session.authenticatedAt.getTime(),
+                ),
+            ]
+      const statements = [
+        ...sourceAssertions,
         this.prepareCreate(session),
         new PrepareSystemSessionCreateInvariantAdapter(
           database,
         ).prepareSystemSessionCreateInvariant(session),
         ...auditStatements,
-      ])
+      ]
+      const results = await database.batch(statements)
 
-      return results.length === 4 && results.every((result) => result.success)
+      return results.length === statements.length && results.every((result) => result.success)
         ? undefined
         : new Error("audited System SessionEntity creation did not succeed")
     } catch (caught) {
+      if (caught instanceof Error && caught.message.includes("system_session_source_unavailable"))
+        return new InvalidSessionError("revoked", caught)
       return caught instanceof Error ? caught : new Error("failed to create System SessionEntity")
     }
   }
@@ -87,7 +125,7 @@ export class SystemSessionRepository {
                 )) AS authenticated_at,
                 session.created_at, session.expires_at, session.rotated_at, session.revoked_at
          FROM system_sessions AS session
-         WHERE session.token_hash = ?1
+         WHERE session.token_hash = ?1 AND ${systemSessionFamilyEligibilitySql}
          LIMIT 1`,
       )
         .bind(tokenHash)
