@@ -92,6 +92,13 @@
       "when": 1700000012000,
       "tag": "0013_work_execution_definition_delete",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1700000013000,
+      "tag": "0014_root_business_ledger_permissions",
+      "breakpoints": true
     }
   ]
 }
