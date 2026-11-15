@@ -469,6 +469,7 @@
     "src/contexts/company/infrastructure/repositories/organization/responsibility-resource-adoption.repository.ts",
     "src/contexts/company/infrastructure/schema/audit.ts",
     "src/contexts/company/infrastructure/schema/company-database.ts",
+    "src/contexts/company/infrastructure/schema/company-employment-authority-corrections.d1.test.ts",
     "src/contexts/company/infrastructure/schema/company-relations.ts",
     "src/contexts/company/infrastructure/schema/company-sql.contract.test.ts",
     "src/contexts/company/infrastructure/schema/company.sql",

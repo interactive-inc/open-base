@@ -1,7 +1,7 @@
 {
   "version": 1,
   "files": {
-    "company-context.manifest.json": "a72d3e66607754aa9b9bb0b6de14324eacc1c5199431ef0d99dbd9f9e4772435",
+    "company-context.manifest.json": "ecb1ffd2ff6c723a5941ad66980a2815eab1dd95a75f6f6e8b4f4cb6cfed1e1a",
     "src/contexts/company/AGENTS.md": "b32dc6e635234f5b8720a645831eca81af4eb93148b78863b0ee144b3de80230",
     "src/contexts/company/application/account-employee-links/create-account-employee-links.ts": "c81fb1365056c64faecffe101778e5621317f37de70599960b56b624765f5af4",
     "src/contexts/company/application/account-employee-links/delete-account-employee-links.ts": "d8c13446d4fd39870e55096e298ccd99b230a75795049682731f88212439fa89",
@@ -469,9 +469,10 @@
     "src/contexts/company/infrastructure/repositories/organization/responsibility-resource-adoption.repository.ts": "547886aa0fc020bd883be21c7d84f8b3e2b198444e7cf646894b2b5ff922a5b3",
     "src/contexts/company/infrastructure/schema/audit.ts": "45e1e146196682747ccd29c4724fe04c7460f0afd5facf36ba49472f24e3f282",
     "src/contexts/company/infrastructure/schema/company-database.ts": "442b36a6c74a3f86cfab23dd83fad937d6a99c3dea18f4a815ceb7a1cf15c18d",
+    "src/contexts/company/infrastructure/schema/company-employment-authority-corrections.d1.test.ts": "c936dfe1ddba5d012a8c89edf841d4f3d60b598b99fb3b7ef6a4e981f3feae64",
     "src/contexts/company/infrastructure/schema/company-relations.ts": "5a4e53200f4e936f7143af14c4733f24a592cc6b4b35269747f3650f37217379",
     "src/contexts/company/infrastructure/schema/company-sql.contract.test.ts": "157a689380c794cd0ce29f11926ac865c9b1779e8b709b664f87cb6b33053af7",
-    "src/contexts/company/infrastructure/schema/company.sql": "dc835db3c44ebc43b8f60d5f3e0b6425cdb061661edb7346cb07404b47644b40",
+    "src/contexts/company/infrastructure/schema/company.sql": "da0b6a101221732a915251946dbae652343b35a5c2b63495b8edcfea859da5ed",
     "src/contexts/company/infrastructure/schema/company.ts": "233a4cb4f7d649612c04b2627d73accf265d3b0ff02459e4e54bc3f4850ab825",
     "src/contexts/company/infrastructure/schema/employee-lifecycle.ts": "eadd5aa4f111cf8fe201afe71cbf4bd335a3601451e0ef5da35a1b57abc70028",
     "src/contexts/company/infrastructure/schema/employee.ts": "f959defaa7132c38570fec23adb277e6e610ff44ca75a3a81fc0b26b6e0f5aa5",
