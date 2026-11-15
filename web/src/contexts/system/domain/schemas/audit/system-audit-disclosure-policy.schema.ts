@@ -39,6 +39,7 @@ export const auditDisclosureCommandSchema = z.strictObject({
     .nullable(),
   reason: z.string().trim().min(1).max(1000),
   actorAccountId: zAccountId,
+  supersedesLegacyRevision: z.number().int().positive().optional(),
 })
 
 export const auditDisclosurePolicySchema = auditDisclosureCommandSchema
@@ -48,3 +49,10 @@ export const auditDisclosurePolicySchema = auditDisclosureCommandSchema
     recordedAt: z.iso.datetime(),
     auditEventId: z.uuid(),
   })
+
+/** 保存済みの識別子は移行前の表記を保持する。新規命令の検証には使わない。 */
+export const auditDisclosureStoredPolicySchema = auditDisclosurePolicySchema.extend({
+  scope: z.string().min(1).max(255),
+  actorAccountId: z.string().min(1).max(255),
+  supersededByAuditEventId: z.uuid().optional(),
+})

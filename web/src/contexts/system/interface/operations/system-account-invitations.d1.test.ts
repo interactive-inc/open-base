@@ -16,6 +16,7 @@ const schema = `
     resource_id TEXT,
     related_resource_id TEXT,
     accepted_by_account_id TEXT,
+    issued_by_account_id TEXT,
     expires_at INTEGER NOT NULL,
     revoked_at INTEGER,
     created_at INTEGER NOT NULL,
@@ -38,6 +39,7 @@ function prepare(database: D1Database) {
     resourceType: "care:facility",
     resourceId: "facility-1",
     relatedResourceId: "assignment-1",
+    issuedByAccountId: "account-issuer",
     createdAt,
     expiresAt: new Date(createdAt.getTime() + 86_400_000),
   })
@@ -97,6 +99,7 @@ describe("System account invitations", () => {
       resourceType: null,
       resourceId: "facility-1",
       relatedResourceId: null,
+      issuedByAccountId: "account-issuer",
       createdAt,
       expiresAt: createdAt,
     })

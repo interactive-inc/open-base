@@ -8,7 +8,7 @@ setDefaultTimeout(30_000)
 const schema = `CREATE TABLE system_account_invitations (
   id TEXT PRIMARY KEY, token TEXT NOT NULL UNIQUE, subject TEXT, role_id TEXT NOT NULL,
   resource_type TEXT, resource_id TEXT, related_resource_id TEXT,
-  accepted_by_account_id TEXT, expires_at INTEGER NOT NULL, revoked_at INTEGER,
+  accepted_by_account_id TEXT, issued_by_account_id TEXT, expires_at INTEGER NOT NULL, revoked_at INTEGER,
   created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
 )`
 
@@ -37,6 +37,7 @@ test("System招待のtoken候補は業務payloadなしで読み取れる", async
       resourceId: "resource-1",
       relatedResourceId: "related-1",
       usedBy: null,
+      issuedBy: null,
       expiresAt: new Date(200),
       revokedAt: null,
       createdAt: new Date(100),

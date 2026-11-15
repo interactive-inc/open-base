@@ -51,3 +51,7 @@ runtime schema and its inferred type, while entities and policies remain transpo
 - Organization changes validate hierarchy periods, unit references, primary assignment overlap,
   management cycles, and authority scope before writing.
 - Reads at an effective date use immutable revisions rather than mutating history.
+- An organizational office has at most one holder, and an employee has at most one membership in a
+  collective body, on any date. D1 enforces this by comparing tenure periods across revision history
+  when the organization revision is committed, so an ended tenure stays `active` as history and a
+  successor or reappointment may start on its end date.

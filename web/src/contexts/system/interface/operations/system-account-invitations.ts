@@ -9,6 +9,8 @@ export function prepareSystemAccountInvitationCreation(
     resourceType: string | null
     resourceId: string | null
     relatedResourceId: string | null
+    /** 招待を出したアカウント。受諾の保存で、今もこの役割を渡せるかを確かめる。 */
+    issuedByAccountId: string
     expiresAt: Date
     createdAt: Date
   }>,
@@ -21,6 +23,8 @@ export function prepareSystemAccountInvitationCreation(
     !/^[a-f0-9]{64}$/.test(input.token) ||
     input.roleId.length < 1 ||
     input.roleId.length > 255 ||
+    input.issuedByAccountId.length < 1 ||
+    input.issuedByAccountId.length > 255 ||
     (input.subject !== null && input.subject.length > 320) ||
     (input.resourceType === null) !== (input.resourceId === null) ||
     (input.resourceType !== null &&
@@ -44,8 +48,8 @@ export function prepareSystemAccountInvitationCreation(
     .prepare(
       `INSERT INTO system_account_invitations
         (id, token, subject, role_id, resource_type, resource_id, related_resource_id,
-         accepted_by_account_id, expires_at, revoked_at, created_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, ?8, NULL, ?9, ?9)`,
+         accepted_by_account_id, issued_by_account_id, expires_at, revoked_at, created_at, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, ?10, ?8, NULL, ?9, ?9)`,
     )
     .bind(
       input.id,
@@ -57,5 +61,6 @@ export function prepareSystemAccountInvitationCreation(
       input.relatedResourceId,
       expiresAt,
       createdAt,
+      input.issuedByAccountId,
     )
 }

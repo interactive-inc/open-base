@@ -155,3 +155,115 @@ describe("System audit disclosure rules", () => {
     expect(() => policy({ expiresAt: recordedAt })).toThrow(SystemAuditDisclosureError)
   })
 })
+
+function legacyPolicy(overrides: Record<string, unknown> = {}) {
+  const result = SystemAuditDisclosurePolicyEntity.restore({
+    ...policy().snapshot,
+    scope: "legacy-reader",
+    actorAccountId: "legacy-admin",
+    ...overrides,
+  })
+  if (result instanceof Error) throw result
+  return result
+}
+
+test("保存済み識別子の復元は新規命令と新規版のUUID検証を緩めない", () => {
+  const stored = legacyPolicy()
+  expect(SystemAuditDisclosurePolicyEntity.create(stored.snapshot)).toBeInstanceOf(
+    SystemAuditDisclosureError,
+  )
+  expect(stored.matches(command)).toBe(false)
+  expect(stored.snapshot.actorAccountId).toBe("legacy-admin")
+  expect(
+    SystemAuditDisclosurePolicyEntity.restore({ ...stored.snapshot, allowedFields: ["unknown"] }),
+  ).toBeInstanceOf(SystemAuditDisclosureError)
+  expect(
+    SystemAuditDisclosurePolicyEntity.restore({ ...stored.snapshot, expiresAt: recordedAt }),
+  ).toBeInstanceOf(SystemAuditDisclosureError)
+})
+
+test("保存済みの別名は信頼できる対応を渡した場合だけ適用する", () => {
+  const rules = [legacyPolicy()]
+  expect(evaluate(rules)).toMatchObject({ kind: "unavailable" })
+  const result = SystemAuditDisclosureValue.evaluate({
+    policies: rules,
+    accountId: testAccountId("reader"),
+    legacyAccountId: "legacy-reader",
+    purpose: null,
+    at: new Date(recordedAt),
+  })
+  expect(permitted(result).fields).toEqual(["actor_account_id", "metadata_json"])
+})
+
+const retirementIds = {
+  commandId: "00000000-0000-4000-8000-000000000005",
+  auditEventId: "00000000-0000-4000-8000-000000000006",
+}
+
+function replacement(overrides: Record<string, unknown> = {}) {
+  return policy({
+    scope: testAccountId("reader"),
+    supersedesLegacyRevision: 1,
+    commandId: "00000000-0000-4000-8000-000000000003",
+    auditEventId: "00000000-0000-4000-8000-000000000004",
+    ...overrides,
+  })
+}
+
+test("旧設定の解除は新しい監査記録に結び付け、原文を変更前の記録へ保存する", () => {
+  const raw = JSON.stringify(
+    Object.fromEntries(Object.entries(legacyPolicy().snapshot).reverse()),
+    null,
+    2,
+  )
+  const old = SystemAuditDisclosurePolicyEntity.restoreJson(raw)
+  if (old instanceof Error) throw old
+  const next = replacement()
+  const retired = old.retireInFavorOf(next, retirementIds)
+  if (retired instanceof Error) throw retired
+  expect(retired.snapshot).toMatchObject({
+    scope: "legacy-reader",
+    revision: 2,
+    enabled: false,
+    expiresAt: null,
+    actorAccountId: next.snapshot.actorAccountId,
+    supersededByAuditEventId: next.snapshot.auditEventId,
+  })
+  const event = retired.audit(old)
+  if (event instanceof Error) throw event
+  expect(event.beforeJson).toBe(raw)
+  expect(old.snapshot.enabled).toBe(true)
+  expect(SystemAuditDisclosurePolicyEntity.restoreJson("{")).toBeInstanceOf(
+    SystemAuditDisclosureError,
+  )
+})
+
+test("違う旧版の指定や全体設定への付替えを拒否する", () => {
+  const old = legacyPolicy()
+  expect(
+    old.retireInFavorOf(replacement({ supersedesLegacyRevision: 2 }), retirementIds),
+  ).toBeInstanceOf(SystemAuditDisclosureError)
+  expect(old.retireInFavorOf(policy(), retirementIds)).toBeInstanceOf(SystemAuditDisclosureError)
+  expect(legacyPolicy({ scope: "*" }).retireInFavorOf(replacement(), retirementIds)).toBeInstanceOf(
+    SystemAuditDisclosureError,
+  )
+  expect(
+    old.retireInFavorOf(replacement(), { ...retirementIds, commandId: "invalid" }),
+  ).toBeInstanceOf(SystemAuditDisclosureError)
+  expect(
+    SystemAuditDisclosurePolicyEntity.create({ ...policy().snapshot, supersedesLegacyRevision: 1 }),
+  ).toBeInstanceOf(SystemAuditDisclosureError)
+})
+
+test("新しい設定の再送では旧版を解除する意思も照合する", () => {
+  const next = replacement()
+  const input = {
+    ...command,
+    scope: testAccountId("reader"),
+    commandId: next.snapshot.commandId,
+    supersedesLegacyRevision: 1,
+  }
+  expect(next.matches(input)).toBe(true)
+  expect(next.matches({ ...input, supersedesLegacyRevision: undefined })).toBe(false)
+  expect(next.matches({ ...input, supersedesLegacyRevision: 2 })).toBe(false)
+})

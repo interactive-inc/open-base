@@ -25,7 +25,19 @@ BEGIN
   WHERE NEW.revision <> 1 + COALESCE((SELECT MAX(revision) FROM system_audit_disclosure_policy_revisions WHERE scope = NEW.scope), 0)
     OR NEW.recorded_at < COALESCE((SELECT MAX(recorded_at) FROM system_audit_disclosure_policy_revisions WHERE scope = NEW.scope), 0);
   SELECT RAISE(ABORT, 'audit_disclosure_scope_unavailable')
-  WHERE NEW.scope <> '*' AND NOT EXISTS (SELECT 1 FROM system_accounts WHERE id = NEW.scope);
+  WHERE NEW.scope <> '*' AND NOT EXISTS (SELECT 1 FROM system_accounts WHERE id = NEW.scope)
+    AND NOT EXISTS (
+      SELECT 1 FROM system_accounts owner
+      JOIN system_audit_disclosure_policy_revisions replacement ON replacement.scope = owner.id
+      JOIN system_audit_events replacement_audit ON replacement_audit.event_id = replacement.audit_event_id
+      JOIN system_audit_events retirement_audit ON retirement_audit.event_id = NEW.audit_event_id
+      WHERE owner.legacy_id = NEW.scope AND owner.id <> NEW.scope AND NEW.enabled = 0
+        AND replacement.audit_event_id = json_extract(retirement_audit.after_json, '$.supersededByAuditEventId')
+        AND json_extract(replacement_audit.after_json, '$.supersedesLegacyRevision') = NEW.revision - 1
+        AND replacement.actor_account_id = NEW.actor_account_id AND replacement.recorded_at = NEW.recorded_at
+        AND replacement.revision = (SELECT MAX(latest.revision)
+          FROM system_audit_disclosure_policy_revisions latest WHERE latest.scope = owner.id)
+    );
   SELECT RAISE(ABORT, 'audit_disclosure_fields_invalid')
   WHERE json_array_length(NEW.allowed_fields_json) > 7
     OR EXISTS (SELECT 1 FROM json_each(NEW.allowed_fields_json) WHERE type <> 'text' OR value NOT IN ('actor_account_id', 'target_id', 'reason_code', 'authorization_json', 'before_json', 'after_json', 'metadata_json'))

@@ -8,7 +8,7 @@ const group: ApiCommandGroup = {
   defaultCommand: null,
   notes: `company export のJSONには from と to（必須）と、絞り込む actor_account_id、action、target_type、target_id、outcome を指定します。CSVを標準出力へ出します。
 system list の続きのページは、最初の応答の boundary を --boundary に渡すと位置がずれません。
-disclosure-policies publish のJSONは scope、commandId、expectedRevision、enabled、allowedFields、allowedTargetTypes、allowedPurposes、expiresAt、reason です。`,
+disclosure-policies publish のJSONは scope、commandId、expectedRevision、enabled、allowedFields、allowedTargetTypes、allowedPurposes、expiresAt、reason です。旧番号の設定を明示して引き継ぐ場合は、show で得た legacyPolicy の revision を supersedesLegacyRevision に指定します。省略すると旧設定の制限も残ります。`,
   commands: {
     "company list": {
       summary: "Companyの監査イベント",
