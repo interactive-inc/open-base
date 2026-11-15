@@ -51,7 +51,7 @@ test("HTTP入口は認証とfeature gateを強制し、固定した規程と判�
   })
 })
 
-test("実MCPからローカルD1のHTTPへ期間・目標を作り、本人の提出と二人の承認を通す", async () => {
+test("実MCPからローカルD1のHTTPへ期間・目標を作り、本人の提出を通す。承認はMCPで受け付けずHTTPで行う", async () => {
   const f = await httpFixture(),
     directory = await mkdtemp(join(tmpdir(), "review-mcp-"))
   const tokens = ["review-owner", "review-first", "review-second"]
@@ -140,20 +140,52 @@ test("実MCPからローカルD1のHTTPへ期間・目標を作り、本人の�
       const read = payload(
         await client.callTool({ name: "review_sheets_show", arguments: { sheet_id: sheetId } }),
       )
-      const input = {
-        sheet_id: sheetId,
-        idempotency_key: crypto.randomUUID(),
-        command: {
-          operation: "decide",
-          action: "approve",
-          expected_revision: read.revision,
-          target: read.decision_target,
-          reason: "目標を確認",
-        },
+      const command = {
+        operation: "decide",
+        action: "approve",
+        expected_revision: read.revision,
+        target: read.decision_target,
+        reason: "目標を確認",
       }
-      const approved = await client.callTool({ name: "review_sheets_command", arguments: input })
-      expect(approved.isError, JSON.stringify(approved)).not.toBe(true)
-      expect(payload(approved).status).toBe(index === 0 ? "goals_pending" : "goals_approved")
+      // 判断はMCPでは受け付けない。人がブラウザーの専用画面で行う。
+      const refused = await client.callTool({
+        name: "review_sheets_command",
+        arguments: { sheet_id: sheetId, idempotency_key: crypto.randomUUID(), command },
+      })
+      expect(refused.isError, JSON.stringify(refused)).toBe(true)
+      // CLIとMCPのセッション、画面の外からの要求は、判断を記録せずに判断の画面のURLを受け取る。
+      const path = `/performance-review/sheets/${sheetId}/commands`
+      const post = () => ({
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify(command),
+      })
+      const fromDevice = await f.call(index + 1, path, post(), {}, "device")
+      expect(fromDevice.status).toBe(403)
+      expect(await fromDevice.json()).toEqual({
+        error: "decisions are made on the decision page in a browser",
+        code: "decision_requires_browser",
+        decision_url: `http://localhost/decisions/reviews/${sheetId}`,
+      })
+      const crossSite = post()
+      const fromOtherSite = await f.call(index + 1, path, {
+        ...crossSite,
+        headers: { ...crossSite.headers, "sec-fetch-site": "cross-site" },
+      })
+      expect(fromOtherSite.status).toBe(403)
+      expect(((await fromOtherSite.json()) as { code: string }).code).toBe(
+        "decision_requires_browser",
+      )
+      // 画面と同じHTTPの経路で承認する。
+      const approved = await f.call(index + 1, `/performance-review/sheets/${sheetId}/commands`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify(command),
+      })
+      expect(approved.status).toBe(200)
+      expect(((await approved.json()) as { status: string }).status).toBe(
+        index === 0 ? "goals_pending" : "goals_approved",
+      )
     }
     const history = payload(
       await owner.callTool({ name: "review_sheets_history", arguments: { sheet_id: sheetId } }),

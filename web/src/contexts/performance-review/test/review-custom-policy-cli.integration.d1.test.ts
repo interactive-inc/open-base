@@ -19,7 +19,7 @@ const decision = z.object({
   }),
 })
 
-test("独自の尺度と区分配分をCLIとMCPで作成・提出・承認し、制度と集計結果を履歴に保つ", async () => {
+test("独自の尺度と区分配分をCLIとMCPで作成・提出し、HTTPで承認して、制度と集計結果を履歴に保つ", async () => {
   const fixture = await reviewHttpFixture()
   const directory = await mkdtemp(join(tmpdir(), "review-policy-"))
   const tokens = ["review-owner", "review-first", "review-second"]
@@ -59,6 +59,22 @@ test("独自の尺度と区分配分をCLIとMCPで作成・提出・承認し�
         }),
       )
     }
+    /**
+     * 承認を、画面と同じHTTPの経路で記録する。
+     * 判断は人がブラウザーの専用画面で行うもので、CLIとMCPは受け付けない。
+     */
+    const approveOverHttp = async (
+      actor: number,
+      sheet: string,
+      command: Record<string, unknown>,
+    ) =>
+      (
+        await fixture.call(actor, `/performance-review/sheets/${sheet}/commands`, {
+          method: "POST",
+          headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+          body: JSON.stringify({ operation: "decide", action: "approve", ...command }),
+        })
+      ).status
     const owner = createCliTestClient({
       entry: resolve(import.meta.dir, "../../../../../cli/index.ts"),
       baseUrl: server.url.toString(),
@@ -173,46 +189,23 @@ test("独自の尺度と区分配分をCLIとMCPで作成・提出・承認し�
     const firstTarget = decision.parse(
       JSON.parse((await reviewer(["reviews", "sheets", "show", sheetId])).stdout),
     )
-    const approval = await file("approval", {
-      expected_revision: firstTarget.revision,
-      target: firstTarget.decision_target,
-      reason: "目標を確認",
-    })
     expect(
-      (
-        await reviewer([
-          "reviews",
-          "sheets",
-          "approve",
-          sheetId,
-          "--data",
-          approval,
-          "--idempotency-key",
-          crypto.randomUUID(),
-        ])
-      ).code,
-    ).toBe(0)
+      await approveOverHttp(1, sheetId, {
+        expected_revision: firstTarget.revision,
+        target: firstTarget.decision_target,
+        reason: "目標を確認",
+      }),
+    ).toBe(200)
     const finalTarget = decision.parse(
       JSON.parse((await owner(["reviews", "sheets", "show", sheetId])).stdout),
     )
     expect(
-      (
-        await finalReviewer.callTool({
-          name: "review_sheets_command",
-          arguments: {
-            sheet_id: sheetId,
-            idempotency_key: crypto.randomUUID(),
-            command: {
-              operation: "decide",
-              action: "approve",
-              expected_revision: finalTarget.revision,
-              target: finalTarget.decision_target,
-              reason: "目標を確認",
-            },
-          },
-        })
-      ).isError,
-    ).not.toBe(true)
+      await approveOverHttp(2, sheetId, {
+        expected_revision: finalTarget.revision,
+        target: finalTarget.decision_target,
+        reason: "目標を確認",
+      }),
+    ).toBe(200)
     const assessments = [
       { goal_id: fixture.goal.id, score: 7, actual: "実績", comment: "根拠" },
       { goal_id: behavior.id, score: 3, actual: "行動の実績", comment: "根拠" },
@@ -277,48 +270,25 @@ test("独自の尺度と区分配分をCLIとMCPで作成・提出・承認し�
     const target = decision.parse(
       JSON.parse((await reviewer(["reviews", "sheets", "show", sheetId])).stdout),
     )
-    const rating = await file("rating", {
-      expected_revision: target.revision,
-      target: target.decision_target,
-      reason: "評価を確認",
-      assessments: rated,
-    })
     expect(
-      (
-        await reviewer([
-          "reviews",
-          "sheets",
-          "approve",
-          sheetId,
-          "--data",
-          rating,
-          "--idempotency-key",
-          crypto.randomUUID(),
-        ])
-      ).code,
-    ).toBe(0)
+      await approveOverHttp(1, sheetId, {
+        expected_revision: target.revision,
+        target: target.decision_target,
+        reason: "評価を確認",
+        assessments: rated,
+      }),
+    ).toBe(200)
     const last = decision.parse(
       JSON.parse((await owner(["reviews", "sheets", "show", sheetId])).stdout),
     )
     expect(
-      (
-        await finalReviewer.callTool({
-          name: "review_sheets_command",
-          arguments: {
-            sheet_id: sheetId,
-            idempotency_key: crypto.randomUUID(),
-            command: {
-              operation: "decide",
-              action: "approve",
-              expected_revision: last.revision,
-              target: last.decision_target,
-              reason: "評価を確定",
-              assessments: rated,
-            },
-          },
-        })
-      ).isError,
-    ).not.toBe(true)
+      await approveOverHttp(2, sheetId, {
+        expected_revision: last.revision,
+        target: last.decision_target,
+        reason: "評価を確定",
+        assessments: rated,
+      }),
+    ).toBe(200)
     const history = JSON.parse((await owner(["reviews", "sheets", "history", sheetId])).stdout)
     expect(history.data).toHaveLength(8)
     expect(history.data.at(-1)).toMatchObject({

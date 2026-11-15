@@ -2,7 +2,10 @@ import { app } from "@/api/app"
 import { SystemSignedInSessionChannel } from "@system/interface/request-environment/system-signed-in-session-channel"
 import { reviewFixture } from "@/contexts/performance-review/test/review-fixture.test-support"
 
-/** 実際の認証middlewareと評価routeへ、検証済みの人のサインインを渡す。 */
+/**
+ * 実際の認証middlewareと評価routeへ、検証済みの人のサインインを渡す。
+ * 既定は、OIDCでサインインした人が同じoriginの画面から送った要求にする。
+ */
 export async function reviewHttpFixture() {
   const fixture = await reviewFixture()
   const env = {
@@ -14,7 +17,13 @@ export async function reviewHttpFixture() {
     OIDC_CLIENT_ID: "review-test",
     CORS_ORIGIN: undefined,
   }
-  const call = (index: number | null, path: string, init?: RequestInit, overrides = {}) => {
+  const call = (
+    index: number | null,
+    path: string,
+    init?: RequestInit,
+    overrides = {},
+    method: "password" | "passkey" | "oidc" | "device" = "oidc",
+  ) => {
     const person = index === null ? undefined : fixture.people[index]
     const bindings =
       person === undefined
@@ -25,10 +34,12 @@ export async function reviewHttpFixture() {
             authenticatedAt: fixture.at,
             createdAt: fixture.at,
             expiresAt: new Date(Date.now() + 86400000),
-            method: "oidc",
+            method,
             accountTokenVersion: 0,
           })
-    return app.request(path, init, bindings)
+    const headers = new Request("http://localhost", init).headers
+    if (!headers.has("sec-fetch-site")) headers.set("sec-fetch-site", "same-origin")
+    return app.request(path, { ...init, headers }, bindings)
   }
   return { ...fixture, env, call }
 }

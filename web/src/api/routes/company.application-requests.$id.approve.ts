@@ -1,5 +1,6 @@
 import { decideSystemApplication } from "@/api/http/application-requests/lib/system-application-operation"
 import { factory } from "@/api/http/factory"
+import { requireBrowserDecision } from "@/api/http/decisions/require-browser-decision"
 import { verifyBearer } from "@/api/http/verify-bearer"
 import { validateIntParam } from "@/lib/http/validate-int-param"
 import { zValidator } from "@hono/zod-validator"
@@ -9,7 +10,7 @@ import { UnauthorizedError } from "@/lib/http/errors"
 import { zAppApplicationDecision } from "@/api/http/company/response-schemas"
 import { z } from "zod"
 
-// @authorization service - session を application service に渡して判定する
+// @authorization service - 人がブラウザーでサインインした要求に限り、session を application service に渡して判定する
 export const POST = factory.createHandlers(
   verifyBearer,
   zValidator(
@@ -28,6 +29,7 @@ export const POST = factory.createHandlers(
   ),
   async (c) => {
     const applicationId = validateIntParam(c.req.param("id"), "application")
+    requireBrowserDecision(c, "application", String(applicationId))
 
     const body = c.req.valid("json")
 
