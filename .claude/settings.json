@@ -1,0 +1,5 @@
+{
+  "enabledPlugins": {
+    "inta@inta-agent-plugins": true
+  }
+}
