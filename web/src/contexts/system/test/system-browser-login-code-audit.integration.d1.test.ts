@@ -14,10 +14,11 @@ const accountId = zAccountId.parse("fcd3b186-db56-4b04-8df7-acf9afd0c292")
 const codeHash = "a".repeat(64)
 const createdAt = new Date(1_000)
 const expiresAt = new Date(61_000)
+const defaultFamilyId = zSessionFamilyId.parse("75f8976a-3210-4cba-98ef-123456789abc")
 const origin = {
   accountId,
   tokenVersion: 0,
-  sessionFamilyId: null,
+  sessionFamilyId: defaultFamilyId,
   machineCredentialId: null,
   identityBindingId: null,
 }
@@ -26,7 +27,9 @@ async function createDatabase(): Promise<D1Database> {
   const database = await createSystemAttachmentTestDatabase()
   await execSql(
     database,
-    `INSERT INTO system_accounts (id, status, token_version, closed_at, created_at, updated_at) VALUES ('fcd3b186-db56-4b04-8df7-acf9afd0c292', 'active', 0, NULL, 1, 1);`,
+    `INSERT INTO system_accounts (id, status, token_version, closed_at, created_at, updated_at) VALUES ('fcd3b186-db56-4b04-8df7-acf9afd0c292', 'active', 0, NULL, 1, 1);
+     INSERT INTO system_sessions (id, account_id, family_id, token_hash, token_version, created_at, expires_at)
+       VALUES ('a0b1c2d3-4e5f-4678-9abc-123456789abc', '${accountId}', '${defaultFamilyId}', '${"e".repeat(64)}', 0, 1, 61000);`,
   )
   return database
 }
@@ -60,6 +63,7 @@ describe("System browser login code audit", () => {
       accountId,
       tokenVersion: 0,
       sessionFamilyActive: true,
+      sourceSession: { familyId: defaultFamilyId, authenticatedAt: new Date(1) },
     })
     expect(await consumer.consumeSystemBrowserLoginCode(codeHash, new Date(3_000))).toBeNull()
 
@@ -200,7 +204,7 @@ describe("System browser login code audit", () => {
           codeHash,
           new Date(2_000),
         ),
-      ).toEqual({ accountId, tokenVersion: 0, sessionFamilyActive: false })
+      ).toEqual({ accountId, tokenVersion: 0, sessionFamilyActive: false, sourceSession: null })
     })
   })
 
@@ -226,9 +230,9 @@ describe("System browser login code audit", () => {
         expiresAtMs: expiresAt.getTime(),
         machineCredentialId: "8a7b6c5d-4e3f-4a2b-9c1d-0e9f8a7b6c5d",
         identityBindingId: null,
-        sessionFamilyId: null,
+        sessionFamilyId: defaultFamilyId,
       },
-      sessionFamilyId: null,
+      sessionFamilyId: defaultFamilyId,
     })
 
     expect(creation).toBeNull()
@@ -237,4 +241,37 @@ describe("System browser login code audit", () => {
     ).toMatchObject({ results: [] })
     expect(await readAudits(database)).toEqual([])
   })
+})
+
+test("有効なfamilyがあっても外部Identityや機械資格をbrowser認証へ変換しない", async () => {
+  const database = await createDatabase()
+  const context = { env: { DB: database }, var: { now: () => createdAt } }
+  for (const credential of [
+    { machineCredentialId: null, identityBindingId: "8a7b6c5d-4e3f-4a2b-9c1d-0e9f8a7b6c5d" },
+    { machineCredentialId: "8a7b6c5d-4e3f-4a2b-9c1d-0e9f8a7b6c5d", identityBindingId: null },
+  ]) {
+    expect(
+      await new CreateSystemBrowserLoginCode(context).execute({
+        authentication: {
+          ...origin,
+          ...credential,
+          issuedAtMs: createdAt.getTime(),
+          expiresAtMs: expiresAt.getTime(),
+        },
+        sessionFamilyId: defaultFamilyId,
+      }),
+    ).toBeNull()
+    expect(
+      await new CreateSystemBrowserLoginCodeAdapter(context).createSystemBrowserLoginCode({
+        codeHash,
+        origin: { ...origin, ...credential },
+        createdAt,
+        expiresAt,
+      }),
+    ).toBe("rejected")
+  }
+  expect(
+    await database.prepare("SELECT code_hash FROM system_browser_login_codes").all(),
+  ).toMatchObject({ results: [] })
+  expect(await readAudits(database)).toEqual([])
 })

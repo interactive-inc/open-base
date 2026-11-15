@@ -8,6 +8,7 @@ type Props = Readonly<{
   tokenVersion: number
   sessionFamilyId?: string
   machineCredentialId?: string
+  expiresAt?: Date
   now: Date
 }>
 
@@ -27,6 +28,7 @@ export class SystemAccessTokenIssuer {
         tokenVersion: input.tokenVersion,
         sessionFamilyId: input.sessionFamilyId,
         machineCredentialId: input.machineCredentialId,
+        expiresAt: input.expiresAt,
       },
       accessTokenSecret.toString(),
       input.now,

@@ -1,3 +1,7 @@
+import {
+  systemSessionFamilyCardinalitySql,
+  systemSessionFamilyEligibilitySql,
+} from "@system/infrastructure/adapters/auth/system-session-family-eligibility-sql"
 import type { SessionRotationAuditEvents } from "@system/domain/definitions/auth/session-rotation-audit-events.definition"
 import type { SessionRotationValue } from "@system/domain/values/auth/session-rotation.value"
 
@@ -27,13 +31,8 @@ export class PrepareSystemSessionRotationAuditAdapter {
                OR account.status <> 'active'
                OR account.token_version <> session.token_version
              THEN 'invalid'
-             WHEN (
-               SELECT COUNT(*)
-               FROM system_sessions AS active_session
-               WHERE active_session.family_id = session.family_id
-                 AND active_session.rotated_at IS NULL
-                 AND active_session.revoked_at IS NULL
-             ) <> 1
+             WHEN NOT (${systemSessionFamilyCardinalitySql})
+               OR NOT (${systemSessionFamilyEligibilitySql})
              THEN 'invalid'
              ELSE 'rotated'
            END

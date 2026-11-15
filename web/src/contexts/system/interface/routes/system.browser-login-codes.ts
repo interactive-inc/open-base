@@ -14,7 +14,7 @@ export const POST = systemFactory.createHandlers(authenticateSystemAccessToken, 
 
   const creation = await new CreateSystemBrowserLoginCode(context).execute({
     authentication,
-    sessionFamilyId: context.var.systemAccessToken?.sid ?? null,
+    sessionFamilyId: authentication.sessionFamilyId,
   })
   if (creation instanceof Error) throw new SystemBrowserLoginCodeUnavailableError()
 
