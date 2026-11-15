@@ -56,6 +56,7 @@ export const GET = factory.createHandlers(verifyBearer, async (c) => {
     return {
       id: proposal.number,
       template_id: proposal.procedureNumber,
+      template_name: proposal.title,
       status: toApplicationStatus(proposal.status),
       current_step: toApplicationCurrentStep(proposal),
       payload: payload.value,

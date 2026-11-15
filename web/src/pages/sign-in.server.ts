@@ -2,6 +2,9 @@ import { defineHandler, type InferProps } from "void"
 import { readSignInMethod } from "@/api/http/auth/sign-in-method"
 import { sameOriginPath } from "@/api/http/auth/same-origin-path"
 
+/** サーバーではコンポーネントを描かず、ブラウザーで組み立てる。loaderは最初の要求でも実行される。 */
+export const ssr = false
+
 export type Props = InferProps<typeof loader>
 
 const ERROR_MESSAGES: Readonly<Record<string, string>> = {

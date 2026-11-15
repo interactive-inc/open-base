@@ -1,16 +1,33 @@
+/*
+ * 部品の見た目はTailwindのclassで決まる。ui-sdkが実行時に足す既定のCSSは最も弱いlayerに置く。
+ * 色は役割ごとのtoken（sidebar、page、card、muted、secondary、primaryなど）で指定し、値はここだけに書く。
+ */
+@layer ui-sdk;
+
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@source ".";
+@source "../pages";
 
-/* 配色はOSの設定に合わせる。 */
-@custom-variant dark (@media (prefers-color-scheme: dark));
+/* `dark:` のclassは、OSが暗い配色のとき（明るい配色に固定していなければ）と、暗い配色に固定したときに効く。 */
+@custom-variant dark {
+  @media (prefers-color-scheme: dark) {
+    &:not([data-theme="light"], [data-theme="light"] *) {
+      @slot;
+    }
+  }
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+}
 
 @theme inline {
   --color-background: var(--background);
+  --color-page: var(--page);
   --color-foreground: var(--foreground);
   --font-sans: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
-  --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -40,150 +57,82 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --color-content: var(--content);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
+/*
+ * 色の値。明るい配色と暗い配色を一か所に並べて書く。どちらを使うかは color-scheme で決まる。
+ * 通常はOSの配色に従い、data-themeで明暗を固定できる（サイドバーの切り替えとStorybookが使う）。
+ * 控えめな文字と注意の色は、薄い面の上の小さい文字でもコントラスト比4.5を満たす濃さにしている。
+ */
 :root {
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.147 0.004 49.3);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.147 0.004 49.3);
-  --primary: oklch(0.214 0.009 43.1);
-  --primary-foreground: oklch(0.986 0.002 67.8);
-  /*
-   * コンテンツ領域はサイドバーより一段暗くして境界を作る。カード・入力欄は
-   * --card（白）のままなので、面が浮いて見える。
-   */
-  --content: oklch(0.978 0 0);
-  /*
-   * secondary / muted / accent はコンテンツ背景の上に置かれる。--content との
-   * 差が足りないと面が消えるので、白背景時代より一段濃くしている。
-   */
-  --secondary: oklch(0.93 0.003 17.2);
-  --secondary-foreground: oklch(0.214 0.009 43.1);
-  --muted: oklch(0.93 0.003 17.2);
-  --muted-foreground: oklch(0.547 0.021 43.1);
-  --accent: oklch(0.93 0.003 17.2);
-  --accent-foreground: oklch(0.214 0.009 43.1);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0.005 34.3);
-  --input: oklch(0.922 0.005 34.3);
-  --ring: oklch(0.714 0.014 41.2);
-  --chart-1: oklch(0.868 0.007 39.5);
-  --chart-2: oklch(0.547 0.021 43.1);
-  --chart-3: oklch(0.438 0.017 39.3);
-  --chart-4: oklch(0.367 0.016 35.7);
-  --chart-5: oklch(0.268 0.011 36.5);
+  color-scheme: light dark;
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.147 0.004 49.3);
-  --sidebar: var(--background);
-  --sidebar-foreground: var(--foreground);
-  --sidebar-primary: oklch(0.214 0.009 43.1);
-  --sidebar-primary-foreground: oklch(0.986 0.002 67.8);
-  --sidebar-accent: oklch(0.92 0.004 17.2);
-  --sidebar-accent-foreground: oklch(0.214 0.009 43.1);
-  --sidebar-border: transparent;
-  --sidebar-ring: oklch(0.714 0.014 41.2);
+  --background: light-dark(oklch(1 0 0), oklch(0.145 0 0));
+  --page: light-dark(oklch(0.94 0 0), oklch(0.175 0 0));
+  --foreground: light-dark(oklch(0.145 0 0), oklch(0.985 0 0));
+  --card: light-dark(oklch(1 0 0), oklch(0.205 0 0));
+  --card-foreground: light-dark(oklch(0.145 0 0), oklch(0.985 0 0));
+  --popover: light-dark(oklch(1 0 0), oklch(0.205 0 0));
+  --popover-foreground: light-dark(oklch(0.145 0 0), oklch(0.985 0 0));
+  --primary: light-dark(oklch(0.205 0 0), oklch(0.922 0 0));
+  --primary-foreground: light-dark(oklch(0.985 0 0), oklch(0.205 0 0));
+  --secondary: light-dark(oklch(0.9 0 0), oklch(0.269 0 0));
+  --secondary-foreground: light-dark(oklch(0.205 0 0), oklch(0.985 0 0));
+  --muted: light-dark(oklch(0.97 0 0), oklch(0.269 0 0));
+  --muted-foreground: light-dark(oklch(0.5 0 0), oklch(0.708 0 0));
+  --accent: light-dark(oklch(0.97 0 0), oklch(0.269 0 0));
+  --accent-foreground: light-dark(oklch(0.205 0 0), oklch(0.985 0 0));
+  --destructive: light-dark(oklch(0.48 0.2 27.5), oklch(0.704 0.191 22.216));
+  --border: light-dark(oklch(0.922 0 0), oklch(1 0 0 / 10%));
+  --input: light-dark(oklch(0.922 0 0), oklch(1 0 0 / 15%));
+  --ring: light-dark(oklch(0.708 0 0), oklch(0.556 0 0));
+  --chart-1: light-dark(oklch(0.646 0.222 41.116), oklch(0.488 0.243 264.376));
+  --chart-2: light-dark(oklch(0.6 0.118 184.704), oklch(0.696 0.17 162.48));
+  --chart-3: light-dark(oklch(0.398 0.07 227.392), oklch(0.769 0.188 70.08));
+  --chart-4: light-dark(oklch(0.828 0.189 84.429), oklch(0.627 0.265 303.9));
+  --chart-5: light-dark(oklch(0.769 0.188 70.08), oklch(0.645 0.246 16.439));
+  /* ページの地に直接のせるsecondaryの部品の色。明るい配色ではカードの色にして、地と区別する。 */
+  --secondary-on-page: light-dark(var(--card), var(--secondary));
+  --sidebar: light-dark(oklch(0.985 0 0), oklch(0.205 0 0));
+  --sidebar-foreground: light-dark(oklch(0.145 0 0), oklch(0.985 0 0));
+  --sidebar-primary: light-dark(oklch(0.205 0 0), oklch(0.488 0.243 264.376));
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: light-dark(oklch(0.9 0 0), oklch(0.269 0 0));
+  --sidebar-accent-foreground: light-dark(oklch(0.205 0 0), oklch(0.985 0 0));
+  --sidebar-border: light-dark(oklch(0.922 0 0), oklch(1 0 0 / 10%));
+  --sidebar-ring: light-dark(oklch(0.708 0 0), oklch(0.556 0 0));
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: oklch(0.147 0.004 49.3);
-    --foreground: oklch(0.986 0.002 67.8);
-    /* ライトと逆に、暗い側ではコンテンツを一段明るくして境界を作る。 */
-    --content: oklch(0.19 0.004 49.3);
-    --card: oklch(0.214 0.009 43.1);
-    --card-foreground: oklch(0.986 0.002 67.8);
-    --popover: oklch(0.214 0.009 43.1);
-    --popover-foreground: oklch(0.986 0.002 67.8);
-    --primary: oklch(0.922 0.005 34.3);
-    --primary-foreground: oklch(0.214 0.009 43.1);
-    --secondary: oklch(0.268 0.011 36.5);
-    --secondary-foreground: oklch(0.986 0.002 67.8);
-    --muted: oklch(0.268 0.011 36.5);
-    --muted-foreground: oklch(0.714 0.014 41.2);
-    --accent: oklch(0.268 0.011 36.5);
-    --accent-foreground: oklch(0.986 0.002 67.8);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.547 0.021 43.1);
-    --chart-1: oklch(0.868 0.007 39.5);
-    --chart-2: oklch(0.547 0.021 43.1);
-    --chart-3: oklch(0.438 0.017 39.3);
-    --chart-4: oklch(0.367 0.016 35.7);
-    --chart-5: oklch(0.268 0.011 36.5);
-    --sidebar: var(--background);
-    --sidebar-foreground: var(--foreground);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.986 0.002 67.8);
-    --sidebar-accent: oklch(0.3 0.013 36.5);
-    --sidebar-accent-foreground: oklch(0.986 0.002 67.8);
-    --sidebar-border: transparent;
-    --sidebar-ring: oklch(0.547 0.021 43.1);
-  }
+[data-theme="light"] {
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+  html,
+  body {
+    overscroll-behavior: none;
+  }
   body {
     @apply bg-background text-foreground;
   }
-  html {
-    @apply font-sans;
-  }
-  /*
-   * 押せる・選べる要素は必ず pointer にする。Tailwind v4 で button の既定が
-   * default に変わったことへの対処に加え、role で表現されるメニュー項目や、
-   * a として描画されるボタンも取りこぼさないよう列挙する。
-   * disabled は各コンポーネント側で not-allowed / pointer-events-none を当てる。
-   */
-  button,
-  select,
-  label:has(input:not([disabled])),
-  [type="checkbox"],
-  [type="radio"],
-  /* 日付・時刻は枠のどこを押してもピッカーが開く（ui/input.tsx）。 */
-  [type="date"],
-  [type="datetime-local"],
-  [type="month"],
-  [type="time"],
-  [type="week"],
-  [role="checkbox"],
-  [role="switch"],
-  [role="tab"],
-  [role="combobox"],
-  [role="menuitem"],
-  [role="menuitemcheckbox"],
-  [role="menuitemradio"],
-  [role="option"],
-  [role="radio"],
-  [role="slider"],
-  [role="treeitem"],
-  a[href],
-  summary {
-    cursor: pointer;
-  }
 }
 
-/* Collapsible accordion transition */
-[data-slot="collapsible-content"] {
-  overflow: hidden;
-  height: var(--collapsible-panel-height);
-  transition: height 0.3s ease;
-}
-
-[data-slot="collapsible-content"][data-starting-style],
-[data-slot="collapsible-content"][data-ending-style] {
-  height: 0;
+/*
+ * 画面はブラウザーで組み立てるので、スクリプトが動くまで #app は空になる。
+ * その間、何も無い白い画面にならないよう、地の色だけをCSSで描く。中身が入ると :empty が外れて消える。
+ */
+#app:empty {
+  min-height: 100svh;
+  background-color: var(--sidebar);
 }

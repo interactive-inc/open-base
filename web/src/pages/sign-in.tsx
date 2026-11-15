@@ -1,12 +1,21 @@
-import { KeyRound } from "lucide-react"
+import { KeyRoundIcon } from "lucide-react"
+import { Link } from "@void/react"
 import { useState } from "react"
 import { AuthFrame } from "@/components/app/auth-frame"
 import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import {
+  PasswordInput,
+  PasswordInputControl,
+  PasswordInputToggle,
+} from "@/components/ui/password-input"
 import { Spinner } from "@/components/ui/spinner"
 import { loadAuthClient } from "@/client/load-auth-client"
 import type { Props } from "./sign-in.server"
+
+/** サイドバーを出さないレイアウトを使う。 */
+export const layout = "bare"
 
 export default function SignIn({ next, method, error: initialError }: Props) {
   if (method === null) {
@@ -40,7 +49,6 @@ function PasskeySignIn({ next, initialError }: MethodProps) {
     >
       <Button
         type="button"
-        size="lg"
         className="w-full"
         disabled={pending}
         onClick={async () => {
@@ -61,7 +69,11 @@ function PasskeySignIn({ next, initialError }: MethodProps) {
           }
         }}
       >
-        {pending ? <Spinner /> : <KeyRound />}
+        {pending ? (
+          <Spinner data-icon="inline-start" aria-hidden="true" />
+        ) : (
+          <KeyRoundIcon data-icon="inline-start" aria-hidden="true" />
+        )}
         パスキーでサインイン
       </Button>
     </AuthFrame>
@@ -76,7 +88,7 @@ function OidcSignIn({ next, initialError }: MethodProps) {
       description="組織のアカウントでサインインします。"
       error={initialError ?? ""}
     >
-      <Button size="lg" className="w-full" nativeButton={false} render={<a href={href} />}>
+      <Button className="w-full" render={<Link href={href} reloadDocument />}>
         組織のアカウントでサインイン
       </Button>
     </AuthFrame>
@@ -119,32 +131,20 @@ function PasswordSignIn({ next, initialError }: MethodProps) {
         }}
       >
         <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor="email">メールアドレス</FieldLabel>
-            <Input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="username"
-              placeholder="you@example.com"
-              required
-              disabled={pending}
-            />
+          <Field name="email" disabled={pending}>
+            <FieldLabel>メールアドレス</FieldLabel>
+            <Input type="email" autoComplete="username" placeholder="you@example.com" required />
           </Field>
-          <Field>
-            <FieldLabel htmlFor="password">パスワード</FieldLabel>
-            <Input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              required
-              disabled={pending}
-            />
+          <Field name="password" disabled={pending}>
+            <FieldLabel>パスワード</FieldLabel>
+            <PasswordInput autoComplete="current-password" required>
+              <PasswordInputControl />
+              <PasswordInputToggle />
+            </PasswordInput>
           </Field>
         </FieldGroup>
-        <Button type="submit" size="lg" className="w-full" disabled={pending}>
-          {pending && <Spinner />}
+        <Button type="submit" className="w-full" disabled={pending}>
+          {pending && <Spinner data-icon="inline-start" aria-hidden="true" />}
           {pending ? "確認しています…" : "サインイン"}
         </Button>
       </form>

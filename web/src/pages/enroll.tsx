@@ -1,10 +1,14 @@
-import { CheckCircle2, KeyRound } from "lucide-react"
+import { CheckCircle2Icon, KeyRoundIcon } from "lucide-react"
+import { Link } from "@void/react"
 import { useState } from "react"
 import { AuthFrame } from "@/components/app/auth-frame"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { loadAuthClient } from "@/client/load-auth-client"
 import type { Props } from "./enroll.server"
+
+/** サイドバーを出さないレイアウトを使う。 */
+export const layout = "bare"
 
 /** 管理者が発行した招待で、最初のパスキーを登録してそのままサインインする。 */
 export default function Enroll({ token }: Props) {
@@ -27,8 +31,8 @@ export default function Enroll({ token }: Props) {
         title="パスキーを登録しました"
         description="次回からこのパスキーでサインインします。"
       >
-        <Button size="lg" className="w-full" nativeButton={false} render={<a href="/" />}>
-          <CheckCircle2 />
+        <Button className="w-full" render={<Link href="/" />}>
+          <CheckCircle2Icon data-icon="inline-start" aria-hidden="true" />
           はじめる
         </Button>
       </AuthFrame>
@@ -43,7 +47,6 @@ export default function Enroll({ token }: Props) {
     >
       <Button
         type="button"
-        size="lg"
         className="w-full"
         disabled={pending}
         onClick={async () => {
@@ -67,7 +70,11 @@ export default function Enroll({ token }: Props) {
           }
         }}
       >
-        {pending ? <Spinner /> : <KeyRound />}
+        {pending ? (
+          <Spinner data-icon="inline-start" aria-hidden="true" />
+        ) : (
+          <KeyRoundIcon data-icon="inline-start" aria-hidden="true" />
+        )}
         パスキーを登録
       </Button>
     </AuthFrame>

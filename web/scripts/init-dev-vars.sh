@@ -29,7 +29,6 @@ AUDIT_HMAC_SECRET="$(generate_secret)"
 ATTACHMENT_KEKS='{"1": "$(generate_secret)"}'
 COMPANY_TIME_ZONE="Asia/Tokyo"
 IDENTITY_JWKS=
-IDENTITY_ISSUER=
 IDENTITY_AUDIENCE="https://app.base.localhost"
 API_ORIGIN="https://base.localhost"
 BOOTSTRAP_TOKEN="$(generate_secret)"

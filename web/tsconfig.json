@@ -23,5 +23,18 @@
     "noEmit": true,
     "allowImportingTsExtensions": true
   },
-  "exclude": ["dist", "node_modules", "src/pages", "src/client", "src/components"]
+  "exclude": [
+    "dist",
+    "node_modules",
+    "src/pages",
+    "src/client",
+    "src/components",
+    "stories",
+    ".storybook",
+    "mock",
+    "client-tests",
+    "playwright.mock.config.ts",
+    "playwright.storybook.config.ts",
+    "vite.mock.config.ts"
+  ]
 }

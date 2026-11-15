@@ -1,4 +1,5 @@
-import { CheckCircle2, KeyRound, XCircle } from "lucide-react"
+import { CheckCircle2Icon, KeyRoundIcon, XCircleIcon } from "lucide-react"
+import { Link } from "@void/react"
 import { useState } from "react"
 import { AuthFrame } from "@/components/app/auth-frame"
 import { Button } from "@/components/ui/button"
@@ -15,6 +16,9 @@ type Step = "confirm" | "approved" | "denied"
  * 承認の直前に必ずサインインし直す。パスキーはその場で、OIDCはIdPで認証し直してこの画面へ戻る。
  * サーバーも直前のサインインでなければ承認を拒否する。
  */
+/** サイドバーを出さないレイアウトを使う。 */
+export const layout = "bare"
+
 export default function Device({ userCode, method, freshlySignedIn }: Props) {
   const [code, setCode] = useState(userCode ?? "")
   const [step, setStep] = useState<Step>("confirm")
@@ -61,7 +65,11 @@ export default function Device({ userCode, method, freshlySignedIn }: Props) {
         title={step === "approved" ? "承認しました" : "拒否しました"}
         description={
           <span className="flex items-center gap-2">
-            {step === "approved" ? <CheckCircle2 /> : <XCircle />}
+            {step === "approved" ? (
+              <CheckCircle2Icon aria-hidden="true" className="size-4" />
+            ) : (
+              <XCircleIcon aria-hidden="true" className="size-4" />
+            )}
             ターミナルに戻ってください。
           </span>
         }
@@ -93,11 +101,10 @@ export default function Device({ userCode, method, freshlySignedIn }: Props) {
       error={error}
     >
       <Field>
-        <FieldLabel htmlFor="user-code">コード</FieldLabel>
+        <FieldLabel>コード</FieldLabel>
         <Input
-          id="user-code"
           value={code}
-          onChange={(event) => setCode(event.target.value)}
+          onValueChange={(value) => setCode(value)}
           autoComplete="off"
           autoCapitalize="characters"
           spellCheck={false}
@@ -105,25 +112,28 @@ export default function Device({ userCode, method, freshlySignedIn }: Props) {
         <FieldDescription>承認すると、このアカウントでCLIを使えるようになります。</FieldDescription>
       </Field>
       {needsSignIn ? (
-        <Button size="lg" className="w-full" nativeButton={false} render={<a href={signInHref} />}>
+        <Button className="w-full" render={<Link href={signInHref} />}>
           サインインし直して続ける
         </Button>
       ) : (
         <div className="flex flex-col gap-2">
           <Button
             type="button"
-            size="lg"
             className="w-full"
             disabled={pending || blank}
             onClick={() => decide(true)}
+            data-agent-confirm="このアカウントでCLIを使えるようにします"
           >
-            {pending ? <Spinner /> : method === "passkey" && <KeyRound />}
+            {pending ? (
+              <Spinner data-icon="inline-start" aria-hidden="true" />
+            ) : (
+              method === "passkey" && <KeyRoundIcon data-icon="inline-start" aria-hidden="true" />
+            )}
             {method === "passkey" ? "パスキーで承認" : "承認"}
           </Button>
           <Button
             type="button"
             variant="secondary"
-            size="lg"
             className="w-full"
             disabled={pending || blank}
             onClick={() => decide(false)}

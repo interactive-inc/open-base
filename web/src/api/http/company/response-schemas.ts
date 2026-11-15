@@ -111,6 +111,7 @@ export const zAppApplicationAdminList = z.object({
 export const zAppApplicationMineItem = z.object({
   id: z.number().nullable(),
   template_id: z.number(),
+  template_name: z.string(),
   status: z.enum(["pending", "approved", "rejected"]),
   current_step: z.string().nullable(),
   payload: z.unknown(),

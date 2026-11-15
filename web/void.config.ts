@@ -10,6 +10,10 @@ const deployCloudflare: Record<string, unknown> = existsSync(deployConfigPath)
 
 export default defineConfig({
   sourceDir: "src",
+  routing: {
+    // 業務システムなので、画面、API、静的ファイルのすべてを検索エンジンに載せない。
+    headers: { "/*": ["X-Robots-Tag: noindex, nofollow"] },
+  },
   worker: {
     compatibility_date: "2026-05-24",
     compatibility_flags: ["nodejs_compat"],
