@@ -786,11 +786,16 @@ export function inspectLibPath(file: string): ContextBoundaryViolation[] {
       ]
 }
 
+/** 外から取り込んだUI部品の置き場所（`src` からの相対）。 */
+const VENDORED_UI_DIRECTORY = "components/ui/"
+
 /** 移行済みのcontext-first sourceと中立libを自動検査する。 */
 export async function collectContextBoundaryViolations(): Promise<ContextBoundaryViolation[]> {
   const violations: ContextBoundaryViolation[] = [...inspectOwnershipManifest()]
 
   for await (const file of new Glob("**/*.{ts,tsx}").scan(SOURCE_ROOT)) {
+    // 取り込んだ部品集は配布された形のまま置き、手で書き換えない。このリポジトリの書き方の規約は当てない。
+    if (file.replaceAll("\\", "/").startsWith(VENDORED_UI_DIRECTORY)) continue
     const path = resolve(SOURCE_ROOT, file)
     violations.push(
       ...inspectSourceOrganization(relative(PROJECT_ROOT, path), readFileSync(path, "utf8")),

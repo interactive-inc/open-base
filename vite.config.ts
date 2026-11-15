@@ -6,7 +6,8 @@ export default defineConfig({
     ignorePatterns: [".agents/**", ".claude/**"],
   },
   lint: {
-    ignorePatterns: [".agents/**", ".claude/**"],
+    // 取り込んだUI部品は配布された形のまま置くので、このリポジトリのlintの規約は当てない。
+    ignorePatterns: [".agents/**", ".claude/**", "web/src/components/ui/**"],
     options: {
       typeAware: true,
     },

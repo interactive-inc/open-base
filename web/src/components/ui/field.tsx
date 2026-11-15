@@ -1,19 +1,28 @@
-"use client"
-
-import { useMemo } from "react"
+import {
+  FieldControl,
+  FieldDescription as FieldDescriptionPrimitive,
+  FieldError as FieldErrorPrimitive,
+  FieldGroup as FieldGroupPrimitive,
+  FieldLabel as FieldLabelPrimitive,
+  FieldLegend as FieldLegendPrimitive,
+  Field as FieldPrimitive,
+  FieldSet as FieldSetPrimitive,
+} from "@ui-sdk/react/field"
 import { cva, type VariantProps } from "class-variance-authority"
-import { cn } from "@/components/lib/utils"
-import { Label } from "@/components/ui/label"
+import { cn } from "cn"
+import type * as React from "react"
+import { useMemo } from "react"
 import { Separator } from "@/components/ui/separator"
 
-function FieldSet({ className, ...props }: React.ComponentProps<"fieldset">) {
+function FieldSet({ className, ...props }: React.ComponentProps<typeof FieldSetPrimitive>) {
   return (
-    <fieldset
-      data-slot="field-set"
-      className={cn(
-        "flex flex-col gap-6 has-[>[data-slot=checkbox-group]]:gap-3 has-[>[data-slot=radio-group]]:gap-3",
-        className,
-      )}
+    <FieldSetPrimitive
+      className={(state) =>
+        cn(
+          "flex flex-col gap-6 has-[>[data-slot=checkbox-group]]:gap-3 has-[>[data-slot=radio-group]]:gap-3",
+          typeof className === "function" ? className(state) : className,
+        )
+      }
       {...props}
     />
   )
@@ -23,34 +32,38 @@ function FieldLegend({
   className,
   variant = "legend",
   ...props
-}: React.ComponentProps<"legend"> & { variant?: "legend" | "label" }) {
+}: React.ComponentProps<typeof FieldLegendPrimitive> & {
+  variant?: "legend" | "label"
+}) {
   return (
-    <legend
-      data-slot="field-legend"
+    <FieldLegendPrimitive
       data-variant={variant}
-      className={cn(
-        "mb-3 font-medium data-[variant=label]:text-sm data-[variant=legend]:text-base",
-        className,
-      )}
+      className={(state) =>
+        cn(
+          "mb-3 font-medium data-[variant=label]:text-sm data-[variant=legend]:text-base",
+          typeof className === "function" ? className(state) : className,
+        )
+      }
       {...props}
     />
   )
 }
 
-function FieldGroup({ className, ...props }: React.ComponentProps<"div">) {
+function FieldGroup({ className, ...props }: React.ComponentProps<typeof FieldGroupPrimitive>) {
   return (
-    <div
-      data-slot="field-group"
-      className={cn(
-        "group/field-group @container/field-group flex w-full flex-col gap-7 data-[slot=checkbox-group]:gap-3 *:data-[slot=field-group]:gap-4",
-        className,
-      )}
+    <FieldGroupPrimitive
+      className={(state) =>
+        cn(
+          "group/field-group @container/field-group flex w-full flex-col gap-7 data-[slot=checkbox-group]:gap-3 *:data-[slot=field-group]:gap-4",
+          typeof className === "function" ? className(state) : className,
+        )
+      }
       {...props}
     />
   )
 }
 
-const fieldVariants = cva("group/field flex w-full gap-3 data-[invalid=true]:text-destructive", {
+const fieldVariants = cva("group/field flex w-full data-invalid:text-destructive gap-3", {
   variants: {
     orientation: {
       vertical: "flex-col *:w-full [&>.sr-only]:w-auto",
@@ -68,14 +81,26 @@ const fieldVariants = cva("group/field flex w-full gap-3 data-[invalid=true]:tex
 function Field({
   className,
   orientation = "vertical",
+  "data-disabled": dataDisabled,
+  "data-invalid": dataInvalid,
   ...props
-}: React.ComponentProps<"div"> & VariantProps<typeof fieldVariants>) {
+}: React.ComponentProps<typeof FieldPrimitive> &
+  VariantProps<typeof fieldVariants> & {
+    "data-disabled"?: boolean
+    "data-invalid"?: boolean
+  }) {
   return (
-    <div
-      role="group"
-      data-slot="field"
+    <FieldPrimitive
+      // false のときは属性を出さない（data-disabled: / data-invalid: は属性の有無で当たる）
+      data-disabled={dataDisabled || undefined}
+      data-invalid={dataInvalid || undefined}
       data-orientation={orientation}
-      className={cn(fieldVariants({ orientation }), className)}
+      className={(state) =>
+        cn(
+          fieldVariants({ orientation }),
+          typeof className === "function" ? className(state) : className,
+        )
+      }
       {...props}
     />
   )
@@ -91,15 +116,17 @@ function FieldContent({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-function FieldLabel({ className, ...props }: React.ComponentProps<typeof Label>) {
+function FieldLabel({ className, ...props }: React.ComponentProps<typeof FieldLabelPrimitive>) {
   return (
-    <Label
-      data-slot="field-label"
-      className={cn(
-        "group/field-label peer/field-label flex w-fit gap-2 leading-snug group-data-[disabled=true]/field:opacity-50 has-data-checked:border-primary/30 has-data-checked:bg-primary/5 has-[>[data-slot=field]]:rounded-xl has-[>[data-slot=field]]:border has-[>[data-slot=field]]:not-has-[:disabled,[data-disabled]]:hover:bg-input/40 has-[>[data-slot=field]]:has-[:focus-visible]:border-ring has-[>[data-slot=field]]:has-[:focus-visible]:ring-[3px] has-[>[data-slot=field]]:has-[:focus-visible]:ring-ring/50 *:data-[slot=field]:p-4 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10",
-        "has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col",
-        className,
-      )}
+    <FieldLabelPrimitive
+      className={(state) =>
+        cn(
+          "flex select-none items-center gap-2 font-medium text-sm leading-none peer-data-disabled:cursor-not-allowed peer-data-disabled:opacity-50",
+          "group/field-label peer/field-label flex w-fit gap-2 leading-snug has-[>[data-slot=field]]:has-[:focus-visible]:border-ring has-[>[data-slot=field]]:has-[:focus-visible]:ring-[3px] has-[>[data-slot=field]]:has-[:focus-visible]:ring-ring/50 has-[>[data-slot=field]]:rounded-xl has-[>[data-slot=field]]:border has-data-checked:border-primary/30 has-data-checked:bg-primary/5 has-[>[data-slot=field]]:not-has-[:disabled,[data-disabled]]:hover:bg-input/40 *:data-[slot=field]:p-4 group-data-disabled/field:opacity-50 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10",
+          "has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col",
+          typeof className === "function" ? className(state) : className,
+        )
+      }
       {...props}
     />
   )
@@ -110,7 +137,7 @@ function FieldTitle({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="field-label"
       className={cn(
-        "flex w-fit items-center gap-2 text-sm font-medium group-data-[disabled=true]/field:opacity-50",
+        "flex w-fit items-center gap-2 font-medium text-sm group-data-disabled/field:opacity-50",
         className,
       )}
       {...props}
@@ -118,16 +145,20 @@ function FieldTitle({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-function FieldDescription({ className, ...props }: React.ComponentProps<"p">) {
+function FieldDescription({
+  className,
+  ...props
+}: React.ComponentProps<typeof FieldDescriptionPrimitive>) {
   return (
-    <p
-      data-slot="field-description"
-      className={cn(
-        "text-left text-sm leading-normal font-normal text-muted-foreground group-has-data-horizontal/field:text-balance [[data-variant=legend]+&]:-mt-1.5",
-        "last:mt-0 nth-last-2:-mt-1",
-        "[&>a]:underline [&>a]:underline-offset-4 [&>a:hover]:text-primary",
-        className,
-      )}
+    <FieldDescriptionPrimitive
+      className={(state) =>
+        cn(
+          "text-left font-normal text-muted-foreground text-sm leading-normal group-has-[[data-orientation=horizontal]]/field:text-balance [[data-variant=legend]+&]:-mt-1.5",
+          "nth-last-2:-mt-1 last:mt-0",
+          "[&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4",
+          typeof className === "function" ? className(state) : className,
+        )
+      }
       {...props}
     />
   )
@@ -143,7 +174,7 @@ function FieldSeparator({
   return (
     <div
       data-slot="field-separator"
-      data-content={!!children}
+      data-content={children ? true : undefined}
       className={cn(
         "relative -my-2 h-5 text-sm group-data-[variant=outline]/field-group:-mb-2",
         className,
@@ -167,8 +198,9 @@ function FieldError({
   className,
   children,
   errors,
+  match,
   ...props
-}: React.ComponentProps<"div"> & {
+}: React.ComponentProps<typeof FieldErrorPrimitive> & {
   errors?: Array<{ message?: string } | undefined>
 }) {
   const content = useMemo(() => {
@@ -182,42 +214,51 @@ function FieldError({
 
     const uniqueErrors = [...new Map(errors.map((error) => [error?.message, error])).values()]
 
-    if (uniqueErrors?.length == 1) {
+    if (uniqueErrors?.length === 1) {
       return uniqueErrors[0]?.message
     }
 
     return (
       <ul className="ml-4 flex list-disc flex-col gap-1">
-        {uniqueErrors.map((error, index) => error?.message && <li key={index}>{error.message}</li>)}
+        {uniqueErrors.map(
+          (error) => error?.message && <li key={error.message}>{error.message}</li>,
+        )}
       </ul>
     )
   }, [children, errors])
 
-  if (!content) {
+  if (!content && match === undefined) {
     return null
   }
 
   return (
-    <div
+    <FieldErrorPrimitive
+      match={match ?? true}
       role="alert"
-      data-slot="field-error"
-      className={cn("text-sm font-normal text-destructive", className)}
+      className={(state) =>
+        cn(
+          "font-normal text-destructive text-sm",
+          typeof className === "function" ? className(state) : className,
+        )
+      }
       {...props}
     >
-      {content}
-    </div>
+      {content || undefined}
+    </FieldErrorPrimitive>
   )
 }
 
+export { useFieldControl } from "@ui-sdk/react/field"
 export {
   Field,
-  FieldLabel,
+  FieldContent,
+  FieldControl,
   FieldDescription,
   FieldError,
   FieldGroup,
+  FieldLabel,
   FieldLegend,
   FieldSeparator,
   FieldSet,
-  FieldContent,
   FieldTitle,
 }

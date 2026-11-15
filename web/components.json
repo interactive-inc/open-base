@@ -6,7 +6,7 @@
   "tailwind": {
     "config": "",
     "css": "src/components/globals.css",
-    "baseColor": "taupe",
+    "baseColor": "neutral",
     "cssVariables": true,
     "prefix": ""
   },
@@ -19,7 +19,5 @@
     "lib": "@/components/lib",
     "hooks": "@/components/hooks"
   },
-  "menuColor": "default",
-  "menuAccent": "subtle",
   "registries": {}
 }
