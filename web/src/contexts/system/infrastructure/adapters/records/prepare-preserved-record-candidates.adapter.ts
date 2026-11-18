@@ -27,15 +27,15 @@ const snapshotSchema = z
   })
   .strict()
 const snapshotSql = `SELECT json_object(
-  'candidates', (SELECT json_group_array(json_object(
+  'candidates', json((SELECT json_group_array(json_object(
     'taskKey',task_key,'round',round,'candidate',json_object(
       'accountId',candidate_account_id,'source',source,'evidenceContext',evidence_context,
       'evidenceKind',evidence_kind,'evidenceId',evidence_id,'evidenceVersion',evidence_version,
       'eligibilityDigest',eligibility_digest,'eligibleFrom',eligible_from,'resolvedAt',resolved_at)))
-    FROM (SELECT * FROM system_decision_task_candidates WHERE case_id=?1 ORDER BY task_key,round,candidate_account_id,source)),
-  'exclusions', (SELECT json_group_array(json_object(
+    FROM (SELECT * FROM system_decision_task_candidates WHERE case_id=?1 ORDER BY task_key,round,candidate_account_id,source))),
+  'exclusions', json((SELECT json_group_array(json_object(
     'taskKey',task_key,'round',round,'accountId',excluded_account_id,'reason',reason))
-    FROM (SELECT * FROM system_decision_task_exclusions WHERE case_id=?1 ORDER BY task_key,round,excluded_account_id))
+    FROM (SELECT * FROM system_decision_task_exclusions WHERE case_id=?1 ORDER BY task_key,round,excluded_account_id)))
 ) AS snapshot`
 
 /** 全判断回の候補資格と除外理由を、資格所有元の意味を解釈せず復元する。 */
